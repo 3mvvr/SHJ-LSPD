@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSPD — Los Santos Police Department</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #0a0c10;
+  --bg2: #0f1219;
+  --bg3: #141820;
+  --surface: #1a1f2e;
+  --surface2: #212838;
+  --border: #2a3347;
+  --border2: #3a4a6a;
+  --blue: #1e90ff;
+  --blue2: #4fb3ff;
+  --gold: #ffd700;
+  --gold2: #ffaa00;
+  --red: #ff3b3b;
+  --green: #00d68f;
+  --cyan: #00c8f0;
+  --text: #e8eaf0;
+  --text2: #9aa3b8;
+  --text3: #5a6480;
+  --accent: #1e3a6e;
+  --discord: #5865F2;
+  --discord-hover: #4752c4;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Rajdhani', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+/* ═══ LOGIN PAGE ═══ */
+#login-page {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 20% 50%, rgba(30,144,255,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 20%, rgba(255,215,0,0.05) 0%, transparent 50%),
+              var(--bg);
+  position: relative; overflow: hidden;
+}
+#login-page::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(30,144,255,0.03) 40px),
+                    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(30,144,255,0.03) 40px);
+}
+.login-card {
+  background: linear-gradient(135deg, rgba(26,31,46,0.95) 0%, rgba(15,18,25,0.98) 100%);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  padding: 3rem 2.5rem;
+  width: 420px;
+  max-width: 95vw;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 0 60px rgba(30,144,255,0.1), 0 0 120px rgba(0,0,0,0.5);
+}
+.login-card::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 80%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+.login-badge {
+  width: 90px; height: 90px;
+  background: radial-gradient(circle, #2a4080 0%, #0d1a3a 100%);
+  border: 3px solid var(--gold);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; margin: 0 auto 1.5rem;
+  box-shadow: 0 0 30px rgba(255,215,0,0.2);
+}
+.login-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 24px; font-weight: 900;
+  color: var(--gold); letter-spacing: 4px;
+  margin-bottom: 4px;
+}
+.login-sub {
+  font-size: 12px; color: var(--text3); letter-spacing: 2px;
+  margin-bottom: 2rem;
+}
+.login-divider {
+  border: none; border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+.login-info {
+  font-size: 13px; color: var(--text2); line-height: 1.7;
+  margin-bottom: 1.5rem;
+}
+.login-info strong { color: var(--blue2); }
+.btn-discord {
+  width: 100%; padding: 14px 20px;
+  background: var(--discord);
+  color: white; border: none; border-radius: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px; font-weight: 700;
+  letter-spacing: 1px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-discord:hover { background: var(--discord-hover); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(88,101,242,0.4); }
+.btn-discord svg { width: 24px; height: 24px; }
+.login-warning {
+  margin-top: 1rem; padding: 10px 14px;
+  background: rgba(255,59,59,0.1); border: 1px solid rgba(255,59,59,0.3);
+  border-radius: 6px; font-size: 12px; color: #ff6b6b;
+  display: none;
+}
+.login-warning.show { display: block; }
+.login-checking {
+  margin-top: 1rem; padding: 10px 14px;
+  background: rgba(30,144,255,0.1); border: 1px solid rgba(30,144,255,0.3);
+  border-radius: 6px; font-size: 12px; color: var(--blue2);
+  display: none;
+}
+.login-checking.show { display: block; }
+
+/* ═══ MAIN APP (hidden until login) ═══ */
+#app { display: none; }
+#app.visible { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ═══ TOP BAR ═══ */
+.topbar {
+  background: linear-gradient(180deg, #0d1520 0%, var(--bg2) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; position: sticky; top: 0; z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: 14px; }
+.badge-icon {
+  width: 44px; height: 44px;
+  background: radial-gradient(circle, #2a4080 0%, #0d1a3a 100%);
+  border: 2px solid var(--gold); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+.logo-text h1 { font-family: 'Orbitron', monospace; font-size: 15px; font-weight: 700; color: var(--gold); letter-spacing: 2px; line-height: 1; }
+.logo-text p { font-size: 11px; color: var(--text3); letter-spacing: 1px; margin-top: 2px; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.user-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; font-size: 13px;
+}
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid var(--discord);
+}
+.user-name { color: var(--text); font-weight: 600; }
+.btn-logout {
+  padding: 6px 12px; background: transparent;
+  border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text3); font-size: 12px; cursor: pointer;
+  font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;
+  transition: all 0.15s;
+}
+.btn-logout:hover { border-color: var(--red); color: var(--red); }
+
+/* ═══ LAYOUT ═══ */
+.main { display: flex; flex: 1; min-height: calc(100vh - 64px); }
+.sidebar { width: 220px; background: var(--bg2); border-right: 1px solid var(--border); padding: 1rem 0; flex-shrink: 0; }
+.sidebar-section { padding: 8px 16px 4px; font-size: 10px; letter-spacing: 2px; color: var(--text3); text-transform: uppercase; font-weight: 600; margin-top: 8px; }
+.sidebar-item { padding: 9px 16px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s; border-left: 3px solid transparent; }
+.sidebar-item:hover { background: var(--surface); color: var(--text); border-left-color: var(--border2); }
+.sidebar-item.active { background: rgba(30,144,255,0.12); color: var(--blue2); border-left-color: var(--blue); }
+.sidebar-item i { font-size: 16px; }
+.content { flex: 1; padding: 1.5rem; overflow-y: auto; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* ═══ STAT CARDS ═══ */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; position: relative; overflow: hidden; }
+.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blue); }
+.stat-card.gold::before { background: var(--gold); }
+.stat-card.red::before { background: var(--red); }
+.stat-card.green::before { background: var(--green); }
+.stat-label { font-size: 11px; letter-spacing: 1px; color: var(--text3); text-transform: uppercase; margin-bottom: 6px; }
+.stat-value { font-family: 'Orbitron', monospace; font-size: 26px; font-weight: 700; color: var(--text); }
+
+/* ═══ SECTION HEADER ═══ */
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+.section-title { font-family: 'Orbitron', monospace; font-size: 14px; font-weight: 700; color: var(--blue2); letter-spacing: 2px; text-transform: uppercase; }
+
+/* ═══ FILTER BAR ═══ */
+.filter-bar { display: flex; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
+.filter-bar input, .filter-bar select { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 12px; font-family: 'Rajdhani', sans-serif; font-size: 14px; }
+.filter-bar input:focus, .filter-bar select:focus { outline: none; border-color: var(--blue); }
+.filter-bar input { flex: 1; min-width: 200px; }
+
+/* ═══ TABLE ═══ */
+.table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: var(--surface); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border); white-space: nowrap; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--surface); }
+tbody td { padding: 9px 14px; color: var(--text); vertical-align: middle; }
+
+/* ═══ RANK BADGE ═══ */
+.rank-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
+.rank-command { background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.3); }
+.rank-highcmd { background: rgba(30,144,255,0.15); color: var(--blue2); border: 1px solid rgba(30,144,255,0.3); }
+.rank-supervisor { background: rgba(0,198,240,0.12); color: var(--cyan); border: 1px solid rgba(0,198,240,0.25); }
+.rank-officer { background: rgba(148,163,184,0.12); color: #94a3b8; border: 1px solid rgba(148,163,184,0.25); }
+.rank-cadet { background: rgba(90,100,128,0.15); color: var(--text3); border: 1px solid var(--border); }
+.rank-special { background: rgba(0,214,143,0.12); color: var(--green); border: 1px solid rgba(0,214,143,0.25); }
+
+/* ═══ RANK INSIGNIA SVG BADGE ═══ */
+.rank-insignia-wrap { display: flex; align-items: center; gap: 10px; }
+.rank-insignia { display: inline-flex; align-items: center; }
+.rank-star { display: inline-block; width: 18px; height: 18px; position: relative; }
+
+/* ═══ BUTTONS ═══ */
+.btn { padding: 6px 14px; border-radius: 5px; font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 5px; }
+.btn-primary { background: var(--blue); color: white; }
+.btn-primary:hover { background: #1a7ae0; }
+.btn-success { background: rgba(0,214,143,0.2); color: var(--green); border: 1px solid rgba(0,214,143,0.4); }
+.btn-success:hover { background: rgba(0,214,143,0.3); }
+.btn-danger { background: rgba(255,59,59,0.2); color: var(--red); border: 1px solid rgba(255,59,59,0.4); }
+.btn-danger:hover { background: rgba(255,59,59,0.3); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-ghost { background: var(--surface); color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+.btn-gold { background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.3); }
+.btn-gold:hover { background: rgba(255,215,0,0.25); }
+
+/* ═══ MODAL ═══ */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 10px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.modal-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-family: 'Orbitron', monospace; font-size: 14px; color: var(--blue2); letter-spacing: 1px; }
+.modal-close { background: none; border: none; color: var(--text3); font-size: 20px; cursor: pointer; line-height: 1; }
+.modal-close:hover { color: var(--red); }
+.modal-body { padding: 1.5rem; }
+.form-group { margin-bottom: 1rem; }
+.form-label { font-size: 12px; letter-spacing: 1px; color: var(--text3); text-transform: uppercase; margin-bottom: 5px; display: block; }
+.form-control { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; font-family: 'Rajdhani', sans-serif; font-size: 14px; }
+.form-control:focus { outline: none; border-color: var(--blue); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ═══ LAWS PAGE ═══ */
+.law-tier { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem; overflow: hidden; }
+.law-tier-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface2); cursor: pointer; user-select: none; }
+.law-tier-title { font-family: 'Orbitron', monospace; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+.tier-1 { color: #ff6b6b; } .tier-2 { color: #ffa94d; } .tier-3 { color: #ffd43b; }
+.tier-4 { color: #69db7c; } .tier-5 { color: #74c0fc; } .tier-6 { color: #cc5de8; }
+.law-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+.law-list { padding: 0; }
+.law-item { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; font-size: 13px; }
+.law-item:last-child { border-bottom: none; }
+.law-num { font-family: 'Share Tech Mono', monospace; font-size: 12px; color: var(--text3); min-width: 36px; }
+.law-text { color: var(--text2); line-height: 1.5; flex: 1; }
+.law-penalty { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.penalty-warn { background: rgba(255,170,0,0.15); color: var(--gold2); border: 1px solid rgba(255,170,0,0.3); }
+.penalty-suspend { background: rgba(255,107,107,0.15); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
+.penalty-fire { background: rgba(255,59,59,0.2); color: var(--red); border: 1px solid rgba(255,59,59,0.4); }
+.penalty-strike { background: rgba(204,93,232,0.15); color: #cc5de8; border: 1px solid rgba(204,93,232,0.3); }
+.penalty-demotion { background: rgba(116,192,252,0.15); color: #74c0fc; border: 1px solid rgba(116,192,252,0.3); }
+
+/* ═══ RANKS PAGE — improved with insignia ═══ */
+.rank-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.rank-card-header { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: var(--surface2); cursor: pointer; }
+.rank-insignia-box {
+  width: 56px; height: 56px; background: var(--accent);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 10px; overflow: hidden;
+  border: 1px solid var(--border2);
+}
+.rank-card-title { font-size: 15px; font-weight: 700; }
+.rank-card-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.rank-details { padding: 14px 16px; display: none; }
+.rank-details.open { display: block; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.detail-item { background: var(--bg3); border-radius: 6px; padding: 8px 12px; }
+.dl { font-size: 11px; letter-spacing: 1px; color: var(--text3); text-transform: uppercase; margin-bottom: 3px; }
+.dv { font-size: 13px; font-weight: 600; color: var(--text); }
+.perm-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; }
+.perm-list li { font-size: 13px; color: var(--text2); padding: 4px 8px; background: var(--bg3); border-radius: 4px; border-left: 2px solid var(--blue); }
+.perm-list li::before { content: '→ '; color: var(--blue2); }
+
+/* promotion reason badge */
+.promotion-reason-box { background: rgba(255,215,0,0.06); border: 1px solid rgba(255,215,0,0.2); border-radius: 6px; padding: 10px 12px; margin-top: 10px; }
+.promotion-reason-label { font-size: 10px; letter-spacing: 1.5px; color: var(--gold2); text-transform: uppercase; margin-bottom: 4px; }
+.promotion-reason-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
+
+/* ═══ MISC ═══ */
+.points-cell { font-family: 'Share Tech Mono', monospace; font-size: 13px; }
+.points-pos { color: var(--green); }
+.points-zero { color: var(--text3); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot-active { background: var(--green); }
+.dot-vacation { background: var(--cyan); }
+.dot-suspended { background: var(--red); }
+.dot-warning { background: var(--gold2); }
+.divider { text-align: center; font-size: 10px; letter-spacing: 3px; color: var(--text3); text-transform: uppercase; padding: 0.5rem 0; margin: 0.5rem 0; border-top: 1px solid var(--border); }
+.chevron { transition: transform 0.2s; }
+.chevron.open { transform: rotate(180deg); }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.pill-blue { background: rgba(30,144,255,0.15); color: var(--blue2); }
+.pill-gold { background: rgba(255,215,0,0.12); color: var(--gold); }
+.pill-green { background: rgba(0,214,143,0.12); color: var(--green); }
+.pill-red { background: rgba(255,59,59,0.12); color: var(--red); }
+.pill-gray { background: rgba(90,100,128,0.2); color: var(--text3); }
+
+/* ═══ NOTIFICATION ═══ */
+.notification { position: fixed; top: 80px; right: 24px; background: var(--surface2); border: 1px solid var(--green); border-radius: 8px; padding: 12px 18px; font-size: 14px; color: var(--green); z-index: 300; opacity: 0; transform: translateX(30px); transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
+.notification.show { opacity: 1; transform: translateX(0); }
+
+/* ═══ WEBHOOK LOG ═══ */
+.webhook-log-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+.webhook-status-ok { color: var(--green); }
+.webhook-status-fail { color: var(--red); }
+
+/* ═══ OUTFIT / EQUIP ═══ */
+.outfit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.outfit-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.outfit-title { font-size: 14px; font-weight: 700; color: var(--cyan); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.outfit-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 12px; border-bottom: 1px solid rgba(42,51,71,0.5); }
+.outfit-row:last-child { border-bottom: none; }
+.outfit-item-name { color: var(--text3); }
+.outfit-item-val { font-family: 'Share Tech Mono', monospace; color: var(--cyan); font-size: 11px; }
+.equip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.equip-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+.equip-icon { font-size: 28px; margin-bottom: 8px; }
+.equip-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.equip-qty { font-family: 'Share Tech Mono', monospace; font-size: 16px; color: var(--cyan); }
+.radio-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 10px; }
+.radio-code { font-family: 'Orbitron', monospace; font-size: 13px; color: var(--gold); letter-spacing: 1px; margin-bottom: 4px; }
+.radio-desc { font-size: 13px; color: var(--text2); }
+.radio-example { font-size: 12px; color: var(--text3); margin-top: 6px; font-style: italic; }
+
+/* ═══ DISCORD EMBED PREVIEW ═══ */
+.embed-preview {
+  background: #2f3136; border-radius: 4px; border-left: 4px solid var(--blue);
+  padding: 12px 16px; max-width: 440px; font-family: 'Rajdhani', sans-serif;
+}
+.embed-author { font-size: 12px; color: #dcddde; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.embed-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.embed-desc { font-size: 13px; color: #dcddde; margin-bottom: 8px; line-height: 1.5; }
+.embed-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.embed-field-name { font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+.embed-field-val { font-size: 12px; color: #dcddde; }
+.embed-footer { font-size: 11px; color: #72767d; margin-top: 10px; border-top: 1px solid #40444b; padding-top: 8px; }
+
+/* ═══ WEBHOOK CONFIG ═══ */
+.webhook-setup-box { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+.webhook-setup-title { font-family: 'Orbitron', monospace; font-size: 13px; color: var(--gold); letter-spacing: 1px; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- LOGIN PAGE -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="login-page">
+  <div class="login-card">
+    <div class="login-badge">⭐</div>
+    <div class="login-title">LSPD</div>
+    <div class="login-sub">LOS SANTOS POLICE DEPARTMENT</div>
+    <hr class="login-divider">
+    <div class="login-info">
+      هذا النظام مخصص لأفراد الشرطة المعتمدين فقط.<br>
+      تسجيل الدخول عبر <strong>Discord</strong> مطلوب.<br>
+      يجب أن تكون عضواً في السيرفر وعندك رتبة صلاحية الوصول.
+    </div>
+    <button class="btn-discord" onclick="startDiscordLogin()">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.11 18.104.127 18.12c2.01 1.487 3.956 2.388 5.865 2.989a.077.077 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028c1.92-.601 3.865-1.502 5.878-2.99a.077.077 0 0 0 .029-.04c.504-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+      </svg>
+      تسجيل الدخول عبر Discord
+    </button>
+    <div class="login-checking" id="login-checking">
+      <i class="ti ti-loader" style="animation:spin 1s linear infinite"></i>
+      جاري التحقق من صلاحياتك...
+    </div>
+    <div class="login-warning" id="login-warning">
+      <i class="ti ti-lock"></i>
+      ليس لديك صلاحية الوصول. تأكد من أنك في السيرفر وعندك الرتبة المطلوبة.
+    </div>
+    <div id="login-demo-note" style="margin-top:1.2rem; font-size:11px; color:var(--text3); line-height:1.6;">
+      <strong style="color:var(--gold2);">ملاحظة للمطور:</strong> لتفعيل OAuth2 الحقيقي، تحتاج Cloudflare Worker.<br>
+      اضغط الزر أدناه لدخول وضع التجربة الآن.
+    </div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:12px;" onclick="enterDemo()">
+      <i class="ti ti-eye"></i> دخول وضع التجربة (Preview Mode)
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- MAIN APP -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="app">
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="badge-icon">⭐</div>
+    <div class="logo-text">
+      <h1>LSPD</h1>
+      <p>Los Santos Police Department</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span style="font-size:12px;color:var(--text3);font-family:'Share Tech Mono',monospace;" id="clock"></span>
+    <div style="width:1px;height:30px;background:var(--border);"></div>
+    <div class="user-badge">
+      <span style="font-size:16px;">👮</span>
+      <span class="user-name" id="topbar-username">Admin</span>
+      <span class="pill pill-blue" style="font-size:10px;">VERIFIED</span>
+    </div>
+    <button class="btn-logout" onclick="doLogout()"><i class="ti ti-logout"></i> Logout</button>
+  </div>
+</div>
+
+<div class="main">
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-section">Overview</div>
+  <div class="sidebar-item active" onclick="showPage('dashboard',this)"><i class="ti ti-dashboard"></i> Dashboard</div>
+
+  <div class="sidebar-section">Personnel</div>
+  <div class="sidebar-item" onclick="showPage('officers',this)"><i class="ti ti-users"></i> Officers Roster</div>
+  <div class="sidebar-item" onclick="showPage('ranks',this)"><i class="ti ti-award"></i> Ranks & Permissions</div>
+  <div class="sidebar-item" onclick="showPage('points',this)"><i class="ti ti-chart-bar"></i> Points Management</div>
+  <div class="sidebar-item" onclick="showPage('promotions',this)"><i class="ti ti-trending-up"></i> Promotions</div>
+
+  <div class="sidebar-section">Operations</div>
+  <div class="sidebar-item" onclick="showPage('laws',this)"><i class="ti ti-file-description"></i> Laws & Penalties</div>
+  <div class="sidebar-item" onclick="showPage('outfits',this)"><i class="ti ti-shirt"></i> Uniform Codes</div>
+  <div class="sidebar-item" onclick="showPage('equipment',this)"><i class="ti ti-tool"></i> Equipment Loadout</div>
+  <div class="sidebar-item" onclick="showPage('radio',this)"><i class="ti ti-radio"></i> Radio Protocols</div>
+
+  <div class="sidebar-section">Admin</div>
+  <div class="sidebar-item" onclick="showPage('discipline',this)"><i class="ti ti-gavel"></i> Discipline Log</div>
+  <div class="sidebar-item" onclick="showPage('webhooks',this)"><i class="ti ti-webhook"></i> Discord Webhooks</div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="page active" id="page-dashboard">
+  <div class="stat-grid">
+    <div class="stat-card gold"><div class="stat-label">Total Officers</div><div class="stat-value" id="stat-total">0</div></div>
+    <div class="stat-card"><div class="stat-label">Command Staff</div><div class="stat-value" id="stat-cmd">0</div></div>
+    <div class="stat-card green"><div class="stat-label">Field Officers</div><div class="stat-value" id="stat-field">0</div></div>
+    <div class="stat-card red"><div class="stat-label">Cadets</div><div class="stat-value" id="stat-cadet">0</div></div>
+  </div>
+  <div class="section-header"><div class="section-title">Recent Activity</div></div>
+  <div id="activity-feed">
+    <div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px;"><i class="ti ti-activity" style="font-size:32px;display:block;margin-bottom:8px;"></i>No recent activity.</div>
+  </div>
+  <div style="margin-top:1.5rem;" class="section-header"><div class="section-title">Rank Distribution</div></div>
+  <div id="rank-distribution" style="display:grid;gap:6px;"></div>
+</div>
+
+<!-- ═══ OFFICERS ROSTER ═══ -->
+<div class="page" id="page-officers">
+  <div class="section-header">
+    <div class="section-title">Officers Roster</div>
+    <button class="btn btn-primary" onclick="openAddOfficer()"><i class="ti ti-plus"></i> Add Officer</button>
+  </div>
+  <div class="filter-bar">
+    <input type="text" id="search-officers" placeholder="Search by name or badge..." oninput="filterOfficers()">
+    <select id="filter-rank" onchange="filterOfficers()"><option value="">All Ranks</option></select>
+    <select id="filter-dept" onchange="filterOfficers()">
+      <option value="">All Departments</option>
+      <option value="LSPD">LSPD</option><option value="BCSO">BCSO</option><option value="SASP">SASP</option>
+    </select>
+    <select id="filter-status" onchange="filterOfficers()">
+      <option value="">All Status</option>
+      <option value="active">Active</option><option value="vacation">Vacation</option><option value="suspended">Suspended</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Badge</th><th>Name</th><th>Rank</th><th>Dept</th><th>Section</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="officers-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ RANKS & PERMISSIONS ═══ -->
+<div class="page" id="page-ranks">
+  <div class="section-header"><div class="section-title">Rank Structure & Insignia</div></div>
+  <div id="ranks-list"></div>
+</div>
+
+<!-- ═══ POINTS MANAGEMENT ═══ -->
+<div class="page" id="page-points">
+  <div class="section-header"><div class="section-title">Points Management</div></div>
+  <div class="filter-bar">
+    <input type="text" id="search-pts" placeholder="Search officer..." oninput="filterPoints()">
+    <select id="filter-pts-rank" onchange="filterPoints()"><option value="">All Ranks</option></select>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Badge</th><th>Name</th><th>Rank</th><th>Current Points</th><th>Required</th><th>Progress</th><th>Actions</th></tr></thead>
+      <tbody id="points-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ PROMOTIONS ═══ -->
+<div class="page" id="page-promotions">
+  <div class="section-header">
+    <div class="section-title">Promotion Records</div>
+    <button class="btn btn-gold" onclick="openPromotionModal()"><i class="ti ti-trending-up"></i> New Promotion</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Officer</th><th>From Rank</th><th>To Rank</th><th>Reason</th><th>Promoted By</th></tr></thead>
+      <tbody id="promotions-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ LAWS ═══ -->
+<div class="page" id="page-laws">
+  <div class="section-header">
+    <div class="section-title">Laws & Regulations</div>
+    <div style="display:flex;gap:8px;">
+      <span class="pill pill-red">6 Tiers</span>
+      <span class="pill pill-gray" id="laws-total-count">0 Laws</span>
+    </div>
+  </div>
+  <div id="laws-content"></div>
+</div>
+
+<!-- ═══ OUTFITS ═══ -->
+<div class="page" id="page-outfits">
+  <div class="section-header"><div class="section-title">Uniform Codes</div></div>
+  <div id="outfits-content"></div>
+</div>
+
+<!-- ═══ EQUIPMENT ═══ -->
+<div class="page" id="page-equipment">
+  <div class="section-header"><div class="section-title">Standard Equipment / Loadout</div></div>
+  <div id="equipment-content"></div>
+</div>
+
+<!-- ═══ RADIO PROTOCOLS ═══ -->
+<div class="page" id="page-radio">
+  <div class="section-header"><div class="section-title">Radio Protocols</div></div>
+  <div id="radio-content"></div>
+</div>
+
+<!-- ═══ DISCIPLINE ═══ -->
+<div class="page" id="page-discipline">
+  <div class="section-header">
+    <div class="section-title">Discipline Log</div>
+    <button class="btn btn-danger" onclick="openDisciplineModal()"><i class="ti ti-plus"></i> Add Record</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Officer</th><th>Rank</th><th>Violation</th><th>Action</th><th>By</th></tr></thead>
+      <tbody id="discipline-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ WEBHOOKS CONFIG ═══ -->
+<div class="page" id="page-webhooks">
+  <div class="section-header"><div class="section-title">Discord Webhooks Configuration</div></div>
+  
+  <div class="webhook-setup-box">
+    <div class="webhook-setup-title">⚙️ WEBHOOK URL SETUP</div>
+    <div class="form-group">
+      <label class="form-label">Discord Webhook URL</label>
+      <div style="display:flex;gap:8px;">
+        <input class="form-control" id="webhook-url-input" placeholder="https://discord.com/api/webhooks/..." type="password">
+        <button class="btn btn-primary" onclick="saveWebhookUrl()"><i class="ti ti-check"></i> Save</button>
+        <button class="btn btn-ghost" onclick="testWebhook()"><i class="ti ti-send"></i> Test</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);line-height:1.7;">
+      <strong style="color:var(--text2);">كيفية الحصول على الـ Webhook URL:</strong><br>
+      1. في ديسكورد → السيرفر → إعدادات → Integrations → Webhooks<br>
+      2. New Webhook → اختر القناة → Copy Webhook URL<br>
+      3. الصق الرابط هنا واضغط Save
+    </div>
+  </div>
+
+  <div class="section-header" style="margin-top:1.5rem;">
+    <div class="section-title">Webhook Events</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:1.5rem;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:13px;color:var(--text2);">Officer Added</span><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px;"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:13px;color:var(--text2);">Officer Removed</span><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px;"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:13px;color:var(--text2);">Promotion</span><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px;"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:13px;color:var(--text2);">Points Update</span><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px;"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:13px;color:var(--text2);">Discipline Record</span><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px;"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:13px;color:var(--text2);">Status Change</span><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px;"></div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">Embed Preview</div>
+    <span style="font-size:12px;color:var(--text3);">مثال على شكل الإشعار في ديسكورد</span>
+  </div>
+  <div class="embed-preview">
+    <div class="embed-author">
+      <span>⭐</span>
+      <span>LSPD Admin System</span>
+    </div>
+    <div class="embed-title">👮 Officer Promoted</div>
+    <div class="embed-desc">A promotion has been recorded in the LSPD Management System.</div>
+    <div class="embed-fields">
+      <div><div class="embed-field-name">Officer</div><div class="embed-field-val">John Smith (#401)</div></div>
+      <div><div class="embed-field-name">Department</div><div class="embed-field-val">LSPD</div></div>
+      <div><div class="embed-field-name">From Rank</div><div class="embed-field-val">Officer I</div></div>
+      <div><div class="embed-field-name">To Rank</div><div class="embed-field-val">Officer II</div></div>
+      <div style="grid-column:1/-1;"><div class="embed-field-name">Reason</div><div class="embed-field-val">Excellent performance during Operation Nighthawk. Consistently exceeded patrol metrics for 3 months.</div></div>
+      <div><div class="embed-field-name">Promoted By</div><div class="embed-field-val">Cpt. Williams</div></div>
+    </div>
+    <div class="embed-footer">🏛️ Los Santos Police Department • Today at 14:35</div>
+  </div>
+
+  <div class="section-header" style="margin-top:1.5rem;">
+    <div class="section-title">Webhook Log</div>
+  </div>
+  <div id="webhook-log-feed">
+    <div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px;">No webhooks sent yet.</div>
+  </div>
+</div>
+
+</div><!-- end content -->
+</div><!-- end main -->
+</div><!-- end app -->
+
+<!-- ═══════════════════════ MODALS ═══════════════════════ -->
+
+<!-- Add Officer -->
+<div class="modal-overlay" id="modal-add-officer">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add New Officer</span>
+      <button class="modal-close" onclick="closeModal('modal-add-officer')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="add-name" placeholder="Officer Name"></div>
+        <div class="form-group"><label class="form-label">Badge #</label><input class="form-control" id="add-badge" type="number" placeholder="e.g. 401"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Rank</label><select class="form-control" id="add-rank"></select></div>
+        <div class="form-group"><label class="form-label">Department</label>
+          <select class="form-control" id="add-dept"><option>LSPD</option><option>BCSO</option><option>SASP</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Section</label><input class="form-control" id="add-section" placeholder="Detective, IA, FTO..."></div>
+        <div class="form-group"><label class="form-label">Discord ID</label><input class="form-control" id="add-discord" placeholder="Discord ID"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-control" id="add-status">
+          <option value="active">Active</option><option value="vacation">Vacation</option><option value="suspended">Suspended</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-officer')">Cancel</button>
+      <button class="btn btn-primary" onclick="addOfficer()"><i class="ti ti-check"></i> Add Officer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Officer -->
+<div class="modal-overlay" id="modal-edit-officer">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Edit Officer</span>
+      <button class="modal-close" onclick="closeModal('modal-edit-officer')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="edit-name"></div>
+        <div class="form-group"><label class="form-label">Badge #</label><input class="form-control" id="edit-badge" type="number"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Rank</label><select class="form-control" id="edit-rank"></select></div>
+        <div class="form-group"><label class="form-label">Department</label>
+          <select class="form-control" id="edit-dept"><option>LSPD</option><option>BCSO</option><option>SASP</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Section</label><input class="form-control" id="edit-section"></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select class="form-control" id="edit-status">
+            <option value="active">Active</option><option value="vacation">Vacation</option><option value="suspended">Suspended</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-officer')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditOfficer()"><i class="ti ti-check"></i> Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Points Modal -->
+<div class="modal-overlay" id="modal-points">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="pts-modal-title">Adjust Points</span>
+      <button class="modal-close" onclick="closeModal('modal-points')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="pts-officer-id">
+      <div style="margin-bottom:1rem;padding:12px;background:var(--surface);border-radius:6px;font-size:13px;">
+        Officer: <strong id="pts-officer-name" style="color:var(--blue2)"></strong><br>
+        Current Points: <span id="pts-current" style="font-family:'Share Tech Mono',monospace;color:var(--cyan);font-size:16px;"></span>
+      </div>
+      <div class="form-group"><label class="form-label">Operation</label>
+        <select class="form-control" id="pts-op">
+          <option value="add">+ Add Points</option><option value="sub">− Remove Points</option><option value="set">= Set Points</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Amount</label>
+        <input class="form-control" id="pts-amount" type="number" min="0" value="10">
+      </div>
+      <div class="form-group"><label class="form-label">Reason</label>
+        <input class="form-control" id="pts-reason" placeholder="Patrol duty, Training completed...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-points')">Cancel</button>
+      <button class="btn btn-primary" onclick="applyPoints()"><i class="ti ti-check"></i> Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Promotion Modal -->
+<div class="modal-overlay" id="modal-promotion">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🏅 New Promotion</span>
+      <button class="modal-close" onclick="closeModal('modal-promotion')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Officer</label>
+        <select class="form-control" id="promo-officer"></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Current Rank</label>
+          <input class="form-control" id="promo-from-rank" readonly style="color:var(--text3);">
+        </div>
+        <div class="form-group"><label class="form-label">Promote To</label>
+          <select class="form-control" id="promo-to-rank"></select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Reason for Promotion <span style="color:var(--red);">*</span></label>
+        <textarea class="form-control" id="promo-reason" rows="4" placeholder="Describe the reason for this promotion in detail... (achievements, performance, time served, special merit, etc.)" style="resize:vertical;"></textarea>
+      </div>
+      <div class="form-group"><label class="form-label">Promoted By</label>
+        <input class="form-control" id="promo-by" placeholder="Issuing commander name...">
+      </div>
+      <div style="background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--text3);">
+        <i class="ti ti-info-circle" style="color:var(--gold2);"></i>
+        سيتم إرسال إشعار تلقائي عبر Discord Webhook مع تفاصيل الترقية.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-promotion')">Cancel</button>
+      <button class="btn btn-gold" onclick="applyPromotion()"><i class="ti ti-trending-up"></i> Confirm Promotion</button>
+    </div>
+  </div>
+</div>
+
+<!-- Discipline Modal -->
+<div class="modal-overlay" id="modal-discipline">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add Discipline Record</span>
+      <button class="modal-close" onclick="closeModal('modal-discipline')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Officer</label><select class="form-control" id="disc-officer"></select></div>
+      <div class="form-group"><label class="form-label">Violation</label><input class="form-control" id="disc-violation" placeholder="Describe the violation..."></div>
+      <div class="form-group"><label class="form-label">Action Taken</label>
+        <select class="form-control" id="disc-action">
+          <option>Verbal Warning</option><option>Written Warning</option><option>Strike Point</option>
+          <option>Demotion</option><option>Suspension</option><option>Termination</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Issued By</label><input class="form-control" id="disc-by" placeholder="Issuing officer/commander..."></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-discipline')">Cancel</button>
+      <button class="btn btn-danger" onclick="addDiscipline()"><i class="ti ti-check"></i> Record</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification -->
+<div class="notification" id="notification">
+  <i class="ti ti-check"></i>
+  <span id="notification-text"></span>
+</div>
+
+<style>
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+</style>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DISCORD OAUTH2 CONFIG
+// ═══════════════════════════════════════════════════════
+const DISCORD_CONFIG = {
+  CLIENT_ID: 'YOUR_CLIENT_ID_HERE',
+  REDIRECT_URI: window.location.origin + window.location.pathname,
+  REQUIRED_GUILD: '1154498662286770179',
+  REQUIRED_ROLE: '1504907535113654518',
+  SCOPES: 'identify guilds guilds.members.read',
+  // WORKER_URL: 'https://lspd-auth.YOUR_SUBDOMAIN.workers.dev'  // Cloudflare Worker URL
+};
+
+// ═══════════════════════════════════════════════════════
+// AUTH FLOW
+// ═══════════════════════════════════════════════════════
+function startDiscordLogin() {
+  if (DISCORD_CONFIG.CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
+    document.getElementById('login-warning').classList.add('show');
+    document.getElementById('login-warning').innerHTML = 
+      '<i class="ti ti-settings"></i> يجب ضبط CLIENT_ID في الكود أولاً. راجع الـ Developer Portal.';
+    return;
+  }
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem('discord_state', state);
+  const params = new URLSearchParams({
+    client_id: DISCORD_CONFIG.CLIENT_ID,
+    redirect_uri: DISCORD_CONFIG.REDIRECT_URI,
+    response_type: 'code',
+    scope: DISCORD_CONFIG.SCOPES,
+    state
+  });
+  window.location.href = `https://discord.com/oauth2/authorize?${params}`;
+}
+
+function enterDemo() {
+  // Demo mode — bypass OAuth2
+  sessionStorage.setItem('lspd_auth', JSON.stringify({
+    username: 'Demo#0000',
+    avatar: null,
+    demo: true
+  }));
+  bootApp({ username: 'Demo Admin', demo: true });
+}
+
+function doLogout() {
+  sessionStorage.removeItem('lspd_auth');
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-page').style.display = 'flex';
+}
+
+async function checkOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const state = params.get('state');
+  if (!code) return false;
+  // Clear URL params
+  window.history.replaceState({}, '', window.location.pathname);
+  document.getElementById('login-checking').classList.add('show');
+  document.getElementById('login-page').querySelector('.btn-discord').style.opacity = '0.5';
+  try {
+    // In production: send code to Cloudflare Worker
+    // const res = await fetch(DISCORD_CONFIG.WORKER_URL + '/auth?code=' + code);
+    // const data = await res.json();
+    // if (data.hasRole) bootApp(data.user); else showDenied();
+    
+    // Demo: simulate verification
+    await new Promise(r => setTimeout(r, 1500));
+    bootApp({ username: 'Discord User', demo: false });
+    return true;
+  } catch(e) {
+    showLoginError('حدث خطأ في التحقق. حاول مجدداً.');
+    return false;
+  }
+}
+
+function showLoginError(msg) {
+  document.getElementById('login-checking').classList.remove('show');
+  const w = document.getElementById('login-warning');
+  w.innerHTML = `<i class="ti ti-lock"></i> ${msg}`;
+  w.classList.add('show');
+  document.getElementById('login-page').querySelector('.btn-discord').style.opacity = '1';
+}
+
+function bootApp(user) {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('topbar-username').textContent = user.username || 'Officer';
+  init();
+}
+
+// Check for OAuth callback on load
+window.addEventListener('DOMContentLoaded', async () => {
+  const stored = sessionStorage.getItem('lspd_auth');
+  if (stored) {
+    try { bootApp(JSON.parse(stored)); return; } catch(e) {}
+  }
+  const hadCallback = await checkOAuthCallback();
+});
+
+// ═══════════════════════════════════════════════════════
+// WEBHOOK SYSTEM
+// ═══════════════════════════════════════════════════════
+let webhookUrl = localStorage.getItem('lspd_webhook') || '';
+let webhookLog = [];
+
+function saveWebhookUrl() {
+  webhookUrl = document.getElementById('webhook-url-input').value.trim();
+  localStorage.setItem('lspd_webhook', webhookUrl);
+  showNotification('Webhook URL saved!');
+}
+
+function testWebhook() {
+  sendWebhook({
+    type: 'test',
+    title: '🔧 Test Webhook',
+    description: 'LSPD System webhook is working correctly!',
+    color: 0x1e90ff,
+    fields: [{ name: 'Status', value: '✅ Online', inline: true }, { name: 'System', value: 'LSPD Admin', inline: true }]
+  });
+}
+
+async function sendWebhook(payload) {
+  const url = webhookUrl || localStorage.getItem('lspd_webhook');
+  const ts = new Date().toLocaleTimeString();
+  
+  if (!url) {
+    addWebhookLog(`${payload.title}`, ts, false, 'No webhook URL configured');
+    return;
+  }
+
+  const embed = {
+    title: payload.title,
+    description: payload.description,
+    color: payload.color || 0x1e90ff,
+    fields: payload.fields || [],
+    footer: { text: `🏛️ Los Santos Police Department • ${new Date().toLocaleString()}` },
+    thumbnail: { url: 'https://i.imgur.com/placeholder.png' }
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'LSPD System',
+        avatar_url: '',
+        embeds: [embed]
+      })
+    });
+    const ok = res.status === 204 || res.ok;
+    addWebhookLog(payload.title, ts, ok, ok ? 'Sent successfully' : `HTTP ${res.status}`);
+    if (ok) showNotification('Discord notification sent ✓');
+  } catch(e) {
+    addWebhookLog(payload.title, ts, false, 'Network error');
+  }
+}
+
+function addWebhookLog(event, time, ok, detail) {
+  webhookLog.unshift({ event, time, ok, detail });
+  if (webhookLog.length > 20) webhookLog.pop();
+  const feed = document.getElementById('webhook-log-feed');
+  if (!feed) return;
+  feed.innerHTML = webhookLog.map(l => `
+    <div class="webhook-log-item">
+      <i class="ti ${l.ok ? 'ti-circle-check webhook-status-ok' : 'ti-circle-x webhook-status-fail'}"></i>
+      <div style="flex:1;">
+        <span style="font-weight:600;color:var(--text);">${l.event}</span>
+        <span style="color:var(--text3);margin-left:8px;">${l.detail}</span>
+      </div>
+      <span style="font-family:'Share Tech Mono',monospace;color:var(--text3);">${l.time}</span>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════
+const RANKS = [
+  { name:"Chief of Police", tier:"command", color:"rank-command", insignia:"⭐⭐⭐⭐", svgStars:4, pLevel:null,
+    perms:["Full authority over all departments","Final decisions on all personnel matters","Can access all police sections","Authorized for all equipment","Can issue medals and commendations"],
+    responsibilities:"Head of Police Sections - Maintains all departments", adminRank:"Head of Police Sections" },
+  { name:"Assistant Chief", tier:"command", color:"rank-command", insignia:"⭐⭐⭐", svgStars:3, pLevel:null,
+    perms:["Assists Chief in all functions","Commands in Chief's absence","Oversees all sections"],
+    responsibilities:"Head Of Police - Maintains Department" },
+  { name:"Deputy Chief", tier:"command", color:"rank-command", insignia:"⭐⭐", svgStars:2, pLevel:null,
+    perms:["Deputy command authority","Section oversight"],
+    responsibilities:"D.Head Of Police - Maintains Department" },
+  { name:"Commander", tier:"command", color:"rank-command", insignia:"⭐", svgStars:1, pLevel:null,
+    perms:["Head of Law Enforcement","Commands assigned sections","Handles O.O.A.A duties"],
+    responsibilities:"Head of Police Sections", adminRank:"Head of Police Sections" },
+  { name:"Captain", tier:"highcmd", color:"rank-highcmd", insignia:"▌▌", pLevel:null,
+    perms:["Head of LSPD Units","Responsible for Police Section","Oversees Operations and Activities","Can promote up to Sergeant"],
+    responsibilities:"Overseeing Operations and Activities", adminRank:"Responsible Of Police Section" },
+  { name:"First Lieutenant", tier:"highcmd", color:"rank-highcmd", insignia:"▌", pLevel:null,
+    perms:["Responsible of PD Troops","Support/Patrol Operations","Can hold Police Academy Commander position"],
+    responsibilities:"Overseeing Shift Schedules and Operations", adminRank:"Responsible Of PD Troops" },
+  { name:"Lieutenant", tier:"highcmd", color:"rank-highcmd", insignia:"▌", pLevel:null,
+    perms:["Responsible Of All Officers","Support Operations","Can hold Head of Internal Affairs"],
+    responsibilities:"Supervising Sergeants and Officers", adminRank:"Responsible Of All Officers" },
+  { name:"Staff Sergeant", tier:"supervisor", color:"rank-supervisor", insignia:"▲▲▲", pLevel:null, dispatchPts:125,
+    perms:["Watch Commander duties","All Field Wings authorized","Supervisor of PD Troops","Can hold Police Academy Deputy"],
+    responsibilities:"Watch Commander", adminRank:"Supervisor Of PD Troops" },
+  { name:"First Sergeant", tier:"supervisor", color:"rank-supervisor", insignia:"▲▲", pLevel:null, dispatchPts:95,
+    perms:["All Field Wings","Investigating Unit Supervisor","Assistant Supervisor of PD Troops"],
+    responsibilities:"Investigating Unit Supervisor", adminRank:"Assist Supervisor Of PD Troops" },
+  { name:"Sergeant", tier:"supervisor", color:"rank-supervisor", insignia:"▲", pLevel:null, dispatchPts:75,
+    perms:["All Field Wings","Patrol Unit Supervisor","Supervisor of All Officers","Can use all patrol vehicles"],
+    responsibilities:"Patrol Unit Supervisor", adminRank:"Supervisor Of All Officers" },
+  { name:"Corporal", tier:"supervisor", color:"rank-supervisor", insignia:"◇", pLevel:860, dispatchPts:65,
+    perms:["All Field Wings","Assist Supervisor Of All Officers","Patrol Operations"],
+    responsibilities:"Supervisor", adminRank:"Assist Supervisor Of All Officers" },
+  { name:"Senior Officer", tier:"officer", color:"rank-officer", insignia:"◇", pLevel:650, dispatchPts:65,
+    perms:["Patrol Operations","Ass.Supervisor duties","Can hold FTO position"],
+    responsibilities:"Supervisor" },
+  { name:"Officer III", tier:"officer", color:"rank-officer", insignia:"^^", pLevel:500, dispatchPts:55,
+    perms:["Interceptor certificate required","Patrol Operations","Can carry full equipment"],
+    responsibilities:"Officer", adminRank:"N/A" },
+  { name:"Officer II", tier:"officer", color:"rank-officer", insignia:"^", pLevel:350, dispatchPts:45,
+    perms:["Airunit certificate eligible","Patrol with partner","Eligible for Carts +1"],
+    responsibilities:"Officer", adminRank:"N/A" },
+  { name:"Officer I", tier:"officer", color:"rank-officer", insignia:"—", pLevel:200, dispatchPts:35,
+    perms:["Motorcycle certificate required","Expected to Patrol Alone","Full equipment issued"],
+    responsibilities:"Patrol Unit", adminRank:"N/A" },
+  { name:"Solo Cadet", tier:"cadet", color:"rank-cadet", insignia:"—", pLevel:100, dispatchPts:20,
+    perms:["Assist Patrol Unit","Expected to Patrol Alone","Limited equipment"],
+    responsibilities:"Assist Patrol Unit", adminRank:"N/A" },
+  { name:"Cadet", tier:"cadet", color:"rank-cadet", insignia:"—", pLevel:null, dispatchPts:5,
+    perms:["Academic Student","Must be supervised by FTO","Basic equipment only","Complete all Academy missions"],
+    responsibilities:"Academic Student", adminRank:"N/A" },
+  { name:"Head Of Internal Affairs", tier:"special", color:"rank-special", insignia:"⚖", pLevel:null,
+    perms:["Investigate all officers","Access all personnel files","Report directly to Chief"],
+    responsibilities:"Head of IA Division" },
+  { name:"Internal Affairs", tier:"special", color:"rank-special", insignia:"⚖", pLevel:null,
+    perms:["Investigate officer complaints","File reports to management"],
+    responsibilities:"IA Investigator" },
+  { name:"FTO", tier:"special", color:"rank-special", insignia:"🎓", pLevel:null,
+    perms:["Train Cadet & Solo Cadet officers","Evaluate performance","Recommend promotion"],
+    responsibilities:"Field Training Officer" },
+  { name:"Detective", tier:"special", color:"rank-special", insignia:"🔍", pLevel:null,
+    perms:["Investigate crimes","Access case files","Plain clothes authorized"],
+    responsibilities:"Criminal Investigator" },
+  { name:"AirShip", tier:"special", color:"rank-special", insignia:"✈", pLevel:null,
+    perms:["Authorized to fly Air-1 when needed"],
+    responsibilities:"AirShip Pilot" },
+  { name:"Interceptor", tier:"special", color:"rank-special", insignia:"🚗", pLevel:null,
+    perms:["Allowed to use Sport/Interceptor cars"],
+    responsibilities:"Interceptor Unit" },
+  { name:"MotorCycle", tier:"special", color:"rank-special", insignia:"🏍", pLevel:null,
+    perms:["Allowed to use motorcycles on patrol"],
+    responsibilities:"MC Unit" },
+  { name:"SWAT", tier:"special", color:"rank-special", insignia:"🛡", pLevel:null,
+    perms:["Authorized to use S.W.A.T gear","Deploy in high-risk situations"],
+    responsibilities:"SWAT Operator" },
+];
+
+const POINT_REQUIREMENTS = {
+  "Cadet":null,"Solo Cadet":100,"Officer I":200,"Officer II":350,"Officer III":500,
+  "Senior Officer":650,"Corporal":860,"Sergeant":"Merit Based","First Sergeant":"Merit Based",
+  "Staff Sergeant":"Merit Based","Lieutenant":"Merit Based","First Lieutenant":"Merit Based",
+  "Captain":"Merit Based","Commander":"Merit Based",
+};
+
+const LAWS = [
+  { tier:1, title:"Tier 1 — Minor Violations", color:"tier-1", badgeClass:"penalty-warn",
+    laws:[
+      {id:"1-1", text:"Violating general Arabic and professional ethics", penalty:"Warning"},
+      {id:"1-2", text:"Insulting a colleague outside the role-play context", penalty:"Warning"},
+      {id:"1-3", text:"Violating radio protocols (informal communication)", penalty:"Warning"},
+      {id:"1-4", text:"Failure to write a proper report", penalty:"Warning"},
+      {id:"1-5", text:"Disclosing in-team information in public channels", penalty:"Warning"},
+      {id:"1-6", text:"Failure to attend training sessions without excuse", penalty:"Warning"},
+    ]},
+  { tier:2, title:"Tier 2 — Operational Violations", color:"tier-2", badgeClass:"penalty-strike",
+    laws:[
+      {id:"2-1", text:"Violating regulations and failing to comply with direct orders", penalty:"Strike"},
+      {id:"2-2", text:"Unauthorized use of department vehicles or equipment", penalty:"Strike"},
+      {id:"2-3", text:"Leaving patrol area without proper authorization", penalty:"Strike"},
+      {id:"2-4", text:"Failure to assist a fellow officer in need", penalty:"Strike"},
+      {id:"2-5", text:"Repeated violation of radio protocols", penalty:"Strike"},
+      {id:"2-6", text:"Unauthorized vehicle pursuit initiation", penalty:"Strike"},
+      {id:"2-7", text:"Unauthorized or excessive use of force", penalty:"Strike"},
+      {id:"2-8", text:"Interfering in another unit's operation without authorization", penalty:"Strike"},
+      {id:"2-9", text:"Conducting unauthorized interrogation or dealing with suspects", penalty:"Strike"},
+      {id:"2-10", text:"Issuing unauthorized citations, court orders, or warrants", penalty:"Strike"},
+      {id:"2-11", text:"Repeated attendance violations and unexcused duty absences", penalty:"Strike"},
+      {id:"2-12", text:"Assisting unauthorized persons in accessing restricted areas", penalty:"Strike"},
+      {id:"2-13", text:"Leaving post without notifying or properly handing over duties", penalty:"Strike"},
+      {id:"2-14", text:"Violating rules on prohibited vehicle stops or checkpoints", penalty:"Strike"},
+    ]},
+  { tier:3, title:"Tier 3 — Serious Violations", color:"tier-3", badgeClass:"penalty-suspend",
+    laws:[
+      {id:"3-1", text:"Insubordination — refusing direct orders from supervisors", penalty:"Suspend"},
+      {id:"3-2", text:"Gross misconduct in repeated radio violations", penalty:"Suspend"},
+      {id:"3-3", text:"Misconduct with civilians that causes complaint or harm", penalty:"Suspend"},
+      {id:"3-4", text:"Violating protocols when dealing with officers or suspects", penalty:"Suspend"},
+      {id:"3-5", text:"Unauthorized information leak to criminal organizations", penalty:"Suspend"},
+      {id:"3-6", text:"Abandoning duty post without any authorization", penalty:"Suspend"},
+      {id:"3-7", text:"Covering a crime or failure to report a known violation", penalty:"Suspend"},
+      {id:"3-8", text:"Interfering with lawful arrest or detention procedures", penalty:"Suspend"},
+      {id:"3-9", text:"Allowing unauthorized person access to police restricted zones", penalty:"Suspend"},
+      {id:"3-10", text:"Creating hazardous situations causing civilian or officer injuries", penalty:"Suspend"},
+      {id:"3-11", text:"Misuse of police communications or official channels", penalty:"Suspend"},
+      {id:"3-12", text:"Officer Down violations — failure to respond to officer in danger", penalty:"Suspend"},
+      {id:"3-13", text:"Threatening or intimidating fellow officers", penalty:"Suspend"},
+      {id:"3-14", text:"Altering official records or falsifying department documents", penalty:"Suspend"},
+    ]},
+  { tier:4, title:"Tier 4 — Severe Violations", color:"tier-4", badgeClass:"penalty-fire",
+    laws:[
+      {id:"4-1", text:"Systemic abuse of general or command authority", penalty:"Terminate"},
+      {id:"4-2", text:"Unauthorized surveillance, eavesdropping, or tracking of personnel", penalty:"Terminate"},
+      {id:"4-3", text:"Breaking privacy rights and leaking confidential information", penalty:"Terminate"},
+      {id:"4-4", text:"Theft or misappropriation of department property or funds", penalty:"Terminate"},
+      {id:"4-5", text:"Sexual harassment or inappropriate conduct in any form", penalty:"Terminate"},
+      {id:"4-6", text:"Violating evidence chain of custody procedures", penalty:"Terminate"},
+      {id:"4-7", text:"Physical assault on a fellow officer or superior", penalty:"Terminate"},
+      {id:"4-8", text:"Accepting bribes or engaging in corrupt dealings", penalty:"Terminate"},
+      {id:"4-9", text:"Fabricating false reports or evidence against colleagues", penalty:"Terminate"},
+      {id:"4-10", text:"Colluding with or assisting criminal organizations", penalty:"Terminate"},
+    ]},
+  { tier:5, title:"Tier 5 — Misconduct Violations", color:"tier-5", badgeClass:"penalty-demotion",
+    laws:[
+      {id:"5-1", text:"Persistent failure to apply rules properly after repeated training", penalty:"Demotion"},
+      {id:"5-2", text:"Publicly disrespecting command in front of subordinate officers", penalty:"Demotion"},
+      {id:"5-3", text:"Spreading false or damaging information about a fellow officer", penalty:"Demotion"},
+      {id:"5-4", text:"Inciting division, protests, or insubordination within the department", penalty:"Demotion"},
+      {id:"5-5", text:"Accumulating violations — demotable upon 3rd documented offense", penalty:"Demotion"},
+    ]},
+  { tier:6, title:"Tier 6 — Administrative Violations", color:"tier-6", badgeClass:"penalty-fire",
+    laws:[
+      {id:"6-1", text:"Not attending mandatory meetings or briefings without prior notice", penalty:"Terminate"},
+      {id:"6-2", text:"Exploiting rank or authority to gain personal benefits", penalty:"Terminate"},
+      {id:"6-3", text:"Insulting or demeaning civilians outside the roleplay context", penalty:"Terminate"},
+      {id:"6-4", text:"Violations of use-of-force policies leading to serious harm", penalty:"Terminate"},
+      {id:"6-5", text:"Inappropriate personal relationships that harm department integrity", penalty:"Terminate"},
+      {id:"6-6", text:"Unannounced withdrawal from active situations or operations", penalty:"Terminate"},
+    ]},
+];
+
+const EQUIPMENT = [
+  {name:"Taser",qty:1,icon:"⚡"},{name:"Glock 22",qty:1,icon:"🔫"},{name:"Handcuffs",qty:1,icon:"⛓"},
+  {name:"Nightstick",qty:1,icon:"🪄"},{name:"Parachute",qty:1,icon:"🪂"},{name:"Radio",qty:1,icon:"📻"},
+  {name:"Pistol Ammo",qty:15,icon:"🔸"},{name:"Armor",qty:5,icon:"🛡"},{name:"Flashlight",qty:1,icon:"🔦"},
+  {name:"Evidence Bag",qty:10,icon:"📦"},{name:"Bandage",qty:10,icon:"🩹"},{name:"Bodycam / DashCam",qty:1,icon:"📷"},
+  {name:"Badge",qty:1,icon:"⭐"},{name:"Keyfob",qty:1,icon:"🔑"},
+];
+
+const OUTFITS = [
+  {rank:"Staff Sergeant",items:{Mask:"0/0","Scarf & Chains":"8/0",Jacket:"1145/0",Shirt:"65/0","Body Armor":"14/0","Bags/Parachute":"251/8",Hands:"74/0",Pants:"457/0",Shoes:"17/0",Decals:"290/4","Hats/Helmet":"0/0"}},
+  {rank:"First Sergeant",items:{Mask:"0/0","Scarf & Chains":"8/0",Jacket:"1145/0",Shirt:"65/0","Body Armor":"14/0","Bags/Parachute":"251/8",Hands:"74/0",Pants:"457/0",Shoes:"17/0",Decals:"290/5","Hats/Helmet":"0/0"}},
+  {rank:"Sergeant",items:{Mask:"0/0","Scarf & Chains":"8/0",Jacket:"1145/0",Shirt:"65/0","Body Armor":"14/0","Bags/Parachute":"251/8",Hands:"74/0",Pants:"457/0",Shoes:"17/0",Decals:"290/0","Hats/Helmet":"0/0"}},
+  {rank:"Corporal",items:{Mask:"0/0","Scarf & Chains":"8/0",Jacket:"1146/0",Shirt:"65/0","Body Armor":"14/0","Bags/Parachute":"251/8",Hands:"74/0",Pants:"457/0",Shoes:"17/0",Decals:"290/1","Hats/Helmet":"0/0"}},
+  {rank:"Officer",items:{Mask:"0/0","Scarf & Chains":"8/0",Jacket:"1147/0",Shirt:"65/0","Body Armor":"14/0","Bags/Parachute":"251/8",Hands:"74/0",Pants:"457/0",Shoes:"17/0",Decals:"0/0","Hats/Helmet":"0/0"}},
+];
+
+const RADIO_PROTOCOLS = [
+  {code:"10-4", desc:"Message received / Acknowledged", example:"Unit 401, 10-4."},
+  {code:"10-7", desc:"Out of service / Off duty", example:"Unit 401 going 10-7, end of shift."},
+  {code:"10-8", desc:"In service / Available", example:"Unit 401, 10-8 and available."},
+  {code:"10-20", desc:"Location / What is your position?", example:"Unit 401, what's your 10-20?"},
+  {code:"10-23", desc:"Arrived on scene", example:"Unit 401, 10-23 at Sandy Shores."},
+  {code:"10-33", desc:"Emergency — all units stop transmitting", example:"10-33! Officer needs immediate assistance!"},
+  {code:"Code 1", desc:"Routine response — no lights or sirens", example:"Unit 401, Code 1 to 10-20."},
+  {code:"Code 2", desc:"Urgent — no lights, siren optional", example:"Unit 401, Code 2 en route."},
+  {code:"Code 3", desc:"Emergency — full lights and sirens", example:"Unit 401, Code 3! In pursuit!"},
+  {code:"Code 99", desc:"Officer down — all units respond immediately", example:"Code 99! Officer down at Legion Square!"},
+  {code:"MDT-7", desc:"Check subject — run plates/ID", example:"MDT-7 on plate XYZ123."},
+  {code:"MDT-17", desc:"Probable cause to detain", example:"MDT-17 confirmed, detaining suspect."},
+];
+
+let officers = [
+  {id:1,name:"John Hartley",badge:100,rank:"Chief of Police",dept:"LSPD",section:"",discord:"",points:0,status:"active"},
+  {id:2,name:"Michael Kane",badge:200,rank:"Captain",dept:"LSPD",section:"",discord:"",points:0,status:"active"},
+  {id:3,name:"Sarah Williams",badge:300,rank:"Staff Sergeant",dept:"LSPD",section:"",discord:"",points:0,status:"active"},
+  {id:4,name:"James Torres",badge:401,rank:"Sergeant",dept:"LSPD",section:"FTO",discord:"",points:307,status:"active"},
+  {id:5,name:"Emily Chen",badge:402,rank:"Officer II",dept:"LSPD",section:"",discord:"",points:180,status:"active"},
+  {id:6,name:"Dmitry Salmon",badge:325,rank:"Sergeant",dept:"LSPD",section:"",discord:"997765193331384403",points:0,status:"active"},
+  {id:7,name:"Tortal Mecko",badge:326,rank:"Sergeant",dept:"LSPD",section:"P.A.M",discord:"118754134678595180",points:307.5,status:"active"},
+  {id:8,name:"Paulie Walnuts",badge:380,rank:"Corporal",dept:"LSPD",section:"LA-FTO",discord:"683686714824327346",points:370.5,status:"active"},
+  {id:9,name:"Mansour Obaid",badge:401,rank:"Senior Officer",dept:"LSPD",section:"FTO",discord:"639511434571594",points:29.75,status:"active"},
+  {id:10,name:"Tomas Willem",badge:431,rank:"Officer III",dept:"LSPD",section:"",discord:"786227993156124682",points:255,status:"active"},
+  {id:11,name:"Hamad Tahnun",badge:432,rank:"Officer III",dept:"LSPD",section:"",discord:"148210001274077640",points:185,status:"active"},
+  {id:12,name:"Axel Morgan",badge:451,rank:"Officer II",dept:"LSPD",section:"",discord:"819955089878941744",points:73,status:"active"},
+  {id:13,name:"Saul Goodman",badge:531,rank:"Officer I",dept:"LSPD",section:"",discord:"737013780965359667",points:67.25,status:"active"},
+  {id:14,name:"Sultan Alshamsi",badge:600,rank:"Cadet",dept:"LSPD",section:"",discord:"774587276369068082",points:0,status:"active"},
+];
+
+let disciplineLog = [];
+let promotionLog = [];
+let nextId = 200;
+let activityLog = [];
+
+// ═══════════════════════════════════════════════════════
+// INSIGNIA RENDERER
+// ═══════════════════════════════════════════════════════
+function renderInsignia(rank) {
+  const t = rank.tier;
+  const stars = rank.svgStars || 0;
+  
+  if (t === 'command' && stars > 0) {
+    const starSVGs = Array(stars).fill(0).map((_,i) => {
+      const x = 8 + i * 12;
+      return `<polygon points="${x},2 ${x+2},7 ${x+7},7 ${x+3},10 ${x+4.5},15 ${x},12 ${x-4.5},15 ${x-3},10 ${x-7},7 ${x-2},7" fill="#FFD700" stroke="#c8a000" stroke-width="0.5"/>`;
+    });
+    const w = stars <= 2 ? 40 : stars === 3 ? 52 : 64;
+    return `<svg width="${w}" height="18" viewBox="0 0 ${w} 18">${starSVGs.join('')}</svg>`;
+  }
+  if (t === 'highcmd') {
+    const bars = rank.name.includes('First') || rank.name === 'Captain' ? 2 : 1;
+    const bSVG = Array(bars).fill(0).map((_,i)=>`<rect x="${4+i*10}" y="2" width="8" height="14" rx="1" fill="#4fb3ff" opacity="0.9"/>`).join('');
+    return `<svg width="${4+bars*10+4}" height="18" viewBox="0 0 ${4+bars*10+4} 18">${bSVG}</svg>`;
+  }
+  if (t === 'supervisor') {
+    const n = rank.name.includes('Staff') ? 3 : rank.name.includes('First') ? 2 : rank.name.includes('Sergeant') ? 1 : 0;
+    if (n > 0) {
+      const tris = Array(n).fill(0).map((_,i)=>`<polygon points="${8+i*13},14 ${14+i*13},14 ${11+i*13},4" fill="#00c8f0" stroke="#009ab8" stroke-width="0.5"/>`).join('');
+      return `<svg width="${n*13+5}" height="18" viewBox="0 0 ${n*13+5} 18">${tris}</svg>`;
+    }
+    return `<svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="3" width="12" height="12" transform="rotate(45 9 9)" fill="#00c8f0" opacity="0.8"/></svg>`;
+  }
+  if (t === 'officer') {
+    const n = rank.name.includes('III') ? 3 : rank.name.includes('II') ? 2 : 1;
+    const chevs = Array(n).fill(0).map((_,i)=>`<polyline points="2,${14-i*4} 9,${8-i*4} 16,${14-i*4}" stroke="#94a3b8" stroke-width="2" fill="none" stroke-linecap="round"/>`).join('');
+    return `<svg width="18" height="18" viewBox="0 0 18 18">${chevs}</svg>`;
+  }
+  return `<svg width="18" height="18" viewBox="0 0 18 18"><line x1="4" y1="9" x2="14" y2="9" stroke="#5a6480" stroke-width="2" stroke-linecap="round"/></svg>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════
+function getRankObj(name) { return RANKS.find(r => r.name === name) || {}; }
+function getRankClass(name) { return getRankObj(name).color || 'rank-cadet'; }
+function getStatusDot(status) {
+  const map = {active:'dot-active',vacation:'dot-vacation',suspended:'dot-suspended',warning:'dot-warning'};
+  return `<span class="status-dot ${map[status]||'dot-active'}"></span>`;
+}
+function showNotification(msg, type='success') {
+  const n = document.getElementById('notification');
+  n.style.borderColor = type==='danger'?'var(--red)':'var(--green)';
+  n.style.color = type==='danger'?'var(--red)':'var(--green)';
+  document.getElementById('notification-text').textContent = msg;
+  n.classList.add('show');
+  setTimeout(()=>n.classList.remove('show'), 3000);
+}
+function logActivity(msg) {
+  activityLog.unshift({msg, time: new Date().toLocaleTimeString()});
+  if (activityLog.length > 20) activityLog.pop();
+  updateActivityFeed();
+}
+function updateActivityFeed() {
+  const f = document.getElementById('activity-feed');
+  if (!f) return;
+  if (!activityLog.length) { f.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text3);">No activity yet.</div>'; return; }
+  f.innerHTML = activityLog.slice(0,8).map(a=>`
+    <div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;color:var(--text2);">${a.msg}</span>
+      <span style="font-size:11px;color:var(--text3);font-family:'Share Tech Mono',monospace;">${a.time}</span>
+    </div>`).join('');
+}
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if (el) el.classList.add('active');
+  if (id==='webhooks') {
+    const u = document.getElementById('webhook-url-input');
+    if (u && webhookUrl) u.value = webhookUrl;
+    addWebhookLog('', '', false, ''); // refresh
+    const feed = document.getElementById('webhook-log-feed');
+    if (feed && webhookLog.length === 0) feed.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px;">No webhooks sent yet.</div>';
+  }
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
+});
+
+// ═══════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════
+function updateDashboard() {
+  document.getElementById('stat-total').textContent = officers.length;
+  document.getElementById('stat-cmd').textContent = officers.filter(o=>['Chief of Police','Assistant Chief','Deputy Chief','Commander','Captain','First Lieutenant','Lieutenant'].includes(o.rank)).length;
+  document.getElementById('stat-field').textContent = officers.filter(o=>['Staff Sergeant','First Sergeant','Sergeant','Corporal','Senior Officer','Officer III','Officer II','Officer I'].includes(o.rank)).length;
+  document.getElementById('stat-cadet').textContent = officers.filter(o=>['Cadet','Solo Cadet'].includes(o.rank)).length;
+  const dist={};
+  officers.forEach(o=>{dist[o.rank]=(dist[o.rank]||0)+1;});
+  const max=Math.max(...Object.values(dist),1);
+  document.getElementById('rank-distribution').innerHTML = Object.entries(dist).map(([rank,count])=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
+      <div style="min-width:170px;font-size:12px;color:var(--text2);">${rank}</div>
+      <div style="flex:1;background:var(--surface);border-radius:3px;height:8px;overflow:hidden;">
+        <div style="width:${Math.round(count/max*100)}%;height:100%;background:var(--blue);border-radius:3px;"></div>
+      </div>
+      <div style="min-width:24px;font-size:12px;color:var(--cyan);font-family:'Share Tech Mono',monospace;">${count}</div>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// OFFICERS
+// ═══════════════════════════════════════════════════════
+function renderOfficers(list) {
+  const tb = document.getElementById('officers-table');
+  if (!list.length) { tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text3);">No officers found.</td></tr>'; return; }
+  tb.innerHTML = list.map(o=>`
+    <tr>
+      <td><span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);">#${o.badge}</span></td>
+      <td style="font-weight:600;">${o.name}</td>
+      <td>
+        <div class="rank-insignia-wrap">
+          <span class="rank-insignia">${renderInsignia(getRankObj(o.rank))}</span>
+          <span class="rank-badge ${getRankClass(o.rank)}">${o.rank}</span>
+        </div>
+      </td>
+      <td>${o.dept}</td>
+      <td style="color:var(--text3);font-size:12px;">${o.section||'—'}</td>
+      <td class="points-cell ${o.points>0?'points-pos':'points-zero'}">${o.points}</td>
+      <td>${getStatusDot(o.status)} ${o.status.charAt(0).toUpperCase()+o.status.slice(1)}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openEditOfficer(${o.id})" title="Edit"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-success btn-sm" onclick="openPoints(${o.id})" title="Points"><i class="ti ti-chart-bar"></i></button>
+        <button class="btn btn-gold btn-sm" onclick="openPromotionForOfficer(${o.id})" title="Promote"><i class="ti ti-trending-up"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="deleteOfficer(${o.id})" title="Remove"><i class="ti ti-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+function filterOfficers() {
+  const q=document.getElementById('search-officers').value.toLowerCase();
+  const rank=document.getElementById('filter-rank').value;
+  const dept=document.getElementById('filter-dept').value;
+  const status=document.getElementById('filter-status').value;
+  renderOfficers(officers.filter(o=>
+    (!q||o.name.toLowerCase().includes(q)||String(o.badge).includes(q))&&
+    (!rank||o.rank===rank)&&(!dept||o.dept===dept)&&(!status||o.status===status)));
+}
+
+function populateRankDropdowns() {
+  ['add-rank','edit-rank','filter-rank','filter-pts-rank','promo-to-rank'].forEach(id=>{
+    const el=document.getElementById(id); if(!el)return;
+    const hasAll=el.id.startsWith('filter');
+    el.innerHTML = hasAll ? '<option value="">All Ranks</option>' : '';
+    RANKS.forEach(r=>{
+      const opt=document.createElement('option');
+      opt.value=r.name; opt.textContent=r.name;
+      el.appendChild(opt);
+    });
+  });
+}
+
+function openAddOfficer() {
+  ['add-name','add-badge','add-section','add-discord'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('modal-add-officer').classList.add('open');
+}
+
+function addOfficer() {
+  const name=document.getElementById('add-name').value.trim();
+  const badge=parseInt(document.getElementById('add-badge').value);
+  const rank=document.getElementById('add-rank').value;
+  const dept=document.getElementById('add-dept').value;
+  const section=document.getElementById('add-section').value.trim();
+  const discord=document.getElementById('add-discord').value.trim();
+  const status=document.getElementById('add-status').value;
+  if(!name||!badge||!rank){showNotification('Please fill in required fields','danger');return;}
+  const o={id:++nextId,name,badge,rank,dept,section,discord,points:0,status};
+  officers.push(o);
+  closeModal('modal-add-officer');
+  filterOfficers(); updateDashboard();
+  logActivity(`Officer ${name} (#${badge}) added as ${rank}`);
+  showNotification(`${name} added successfully`);
+  sendWebhook({
+    title:'👮 New Officer Added',
+    description:`A new officer has been added to the ${dept} roster.`,
+    color:0x00d68f,
+    fields:[
+      {name:'Officer',value:`${name} (#${badge})`,inline:true},
+      {name:'Department',value:dept,inline:true},
+      {name:'Rank',value:rank,inline:true},
+      {name:'Section',value:section||'—',inline:true},
+      {name:'Status',value:status,inline:true},
+    ]
+  });
+}
+
+function openEditOfficer(id) {
+  const o=officers.find(x=>x.id===id); if(!o)return;
+  document.getElementById('edit-id').value=id;
+  document.getElementById('edit-name').value=o.name;
+  document.getElementById('edit-badge').value=o.badge;
+  document.getElementById('edit-section').value=o.section;
+  document.getElementById('edit-status').value=o.status;
+  setTimeout(()=>{
+    document.getElementById('edit-rank').value=o.rank;
+    document.getElementById('edit-dept').value=o.dept;
+  },50);
+  document.getElementById('modal-edit-officer').classList.add('open');
+}
+
+function saveEditOfficer() {
+  const id=parseInt(document.getElementById('edit-id').value);
+  const o=officers.find(x=>x.id===id); if(!o)return;
+  const oldRank=o.rank, oldStatus=o.status;
+  o.name=document.getElementById('edit-name').value.trim();
+  o.badge=parseInt(document.getElementById('edit-badge').value);
+  o.rank=document.getElementById('edit-rank').value;
+  o.dept=document.getElementById('edit-dept').value;
+  o.section=document.getElementById('edit-section').value.trim();
+  o.status=document.getElementById('edit-status').value;
+  closeModal('modal-edit-officer');
+  filterOfficers(); updateDashboard();
+  const changed=[];
+  if(oldRank!==o.rank) changed.push(`Rank: ${oldRank} → ${o.rank}`);
+  if(oldStatus!==o.status) changed.push(`Status: ${oldStatus} → ${o.status}`);
+  logActivity(`${o.name} record updated${changed.length?' ('+changed.join(', ')+')':''}`);
+  showNotification(`${o.name} updated`);
+  if(changed.length) sendWebhook({
+    title:'✏️ Officer Record Updated',
+    description:`Officer record has been modified.`,
+    color:0x4fb3ff,
+    fields:[
+      {name:'Officer',value:`${o.name} (#${o.badge})`,inline:true},
+      {name:'Changes',value:changed.join('\n')||'Minor edits',inline:false},
+    ]
+  });
+}
+
+function deleteOfficer(id) {
+  const o=officers.find(x=>x.id===id); if(!o)return;
+  if(!confirm(`Remove ${o.name} (#${o.badge}) from roster?`))return;
+  officers=officers.filter(x=>x.id!==id);
+  filterOfficers(); updateDashboard();
+  logActivity(`Officer ${o.name} (#${o.badge}) removed`);
+  showNotification(`${o.name} removed`,'danger');
+  sendWebhook({
+    title:'🚫 Officer Removed',
+    description:`An officer has been removed from the roster.`,
+    color:0xff3b3b,
+    fields:[
+      {name:'Officer',value:`${o.name} (#${o.badge})`,inline:true},
+      {name:'Rank',value:o.rank,inline:true},
+      {name:'Department',value:o.dept,inline:true},
+    ]
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// POINTS
+// ═══════════════════════════════════════════════════════
+function renderPointsTable(list) {
+  const tb=document.getElementById('points-table');
+  if(!list.length){tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3);">No records.</td></tr>';return;}
+  tb.innerHTML=list.map(o=>{
+    const req=POINT_REQUIREMENTS[o.rank];
+    let progress='';
+    if(typeof req==='number'){
+      const pct=Math.min(Math.round(o.points/req*100),100);
+      progress=`<div style="background:var(--surface);border-radius:4px;height:6px;width:100px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:6px;"><div style="width:${pct}%;height:100%;background:${pct>=100?'var(--green)':'var(--blue)'};"></div></div><span style="font-size:11px;color:var(--text3);">${pct}%</span>`;
+    }
+    return `<tr>
+      <td><span style="font-family:'Share Tech Mono',monospace;color:var(--cyan);">#${o.badge}</span></td>
+      <td style="font-weight:600;">${o.name}</td>
+      <td><span class="rank-badge ${getRankClass(o.rank)}">${o.rank}</span></td>
+      <td class="points-cell ${o.points>0?'points-pos':'points-zero'}">${o.points}</td>
+      <td style="font-size:13px;color:var(--text3);">${req===null?'—':(req||'Merit')}</td>
+      <td>${progress}</td>
+      <td><button class="btn btn-success btn-sm" onclick="openPoints(${o.id})"><i class="ti ti-plus"></i> Adjust</button></td>
+    </tr>`;}).join('');
+}
+
+function filterPoints() {
+  const q=document.getElementById('search-pts').value.toLowerCase();
+  const rank=document.getElementById('filter-pts-rank').value;
+  renderPointsTable(officers.filter(o=>(!q||o.name.toLowerCase().includes(q)||String(o.badge).includes(q))&&(!rank||o.rank===rank)));
+}
+
+function openPoints(id) {
+  const o=officers.find(x=>x.id===id); if(!o)return;
+  document.getElementById('pts-officer-id').value=id;
+  document.getElementById('pts-modal-title').textContent=`Adjust Points — ${o.name}`;
+  document.getElementById('pts-officer-name').textContent=`${o.name} (#${o.badge})`;
+  document.getElementById('pts-current').textContent=o.points;
+  document.getElementById('pts-amount').value=10;
+  document.getElementById('pts-reason').value='';
+  document.getElementById('modal-points').classList.add('open');
+}
+
+function applyPoints() {
+  const id=parseInt(document.getElementById('pts-officer-id').value);
+  const o=officers.find(x=>x.id===id); if(!o)return;
+  const op=document.getElementById('pts-op').value;
+  const amount=parseFloat(document.getElementById('pts-amount').value)||0;
+  const reason=document.getElementById('pts-reason').value.trim();
+  const old=o.points;
+  if(op==='add') o.points=Math.round((o.points+amount)*100)/100;
+  else if(op==='sub') o.points=Math.max(0,Math.round((o.points-amount)*100)/100);
+  else o.points=amount;
+  closeModal('modal-points');
+  filterPoints(); updateDashboard();
+  logActivity(`${o.name}: pts ${old} → ${o.points}${reason?' ('+reason+')':''}`);
+  showNotification(`Points updated: ${o.name} → ${o.points} pts`);
+  sendWebhook({
+    title:'📊 Points Updated',
+    description:`Officer points have been adjusted.`,
+    color:0x00c8f0,
+    fields:[
+      {name:'Officer',value:`${o.name} (#${o.badge})`,inline:true},
+      {name:'Rank',value:o.rank,inline:true},
+      {name:'Points Change',value:`${old} → **${o.points}**`,inline:true},
+      {name:'Operation',value:op==='add'?`+${amount}`:op==='sub'?`-${amount}`:`Set to ${amount}`,inline:true},
+      {name:'Reason',value:reason||'—',inline:false},
+    ]
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// PROMOTIONS
+// ═══════════════════════════════════════════════════════
+function openPromotionModal() {
+  const sel=document.getElementById('promo-officer');
+  sel.innerHTML=officers.map(o=>`<option value="${o.id}">#${o.badge} — ${o.name} (${o.rank})</option>`).join('');
+  updatePromoFromRank();
+  document.getElementById('promo-reason').value='';
+  document.getElementById('promo-by').value='';
+  document.getElementById('modal-promotion').classList.add('open');
+}
+
+function openPromotionForOfficer(id) {
+  openPromotionModal();
+  setTimeout(()=>{
+    document.getElementById('promo-officer').value=id;
+    updatePromoFromRank();
+  },50);
+}
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'promo-officer') updatePromoFromRank();
+});
+
+function updatePromoFromRank() {
+  const sel=document.getElementById('promo-officer');
+  if(!sel)return;
+  const o=officers.find(x=>x.id===parseInt(sel.value));
+  if(o) document.getElementById('promo-from-rank').value=o.rank;
+}
+
+function applyPromotion() {
+  const oid=parseInt(document.getElementById('promo-officer').value);
+  const o=officers.find(x=>x.id===oid); if(!o)return;
+  const toRank=document.getElementById('promo-to-rank').value;
+  const reason=document.getElementById('promo-reason').value.trim();
+  const by=document.getElementById('promo-by').value.trim();
+  if(!reason){showNotification('سبب الترقية مطلوب!','danger');return;}
+  if(!by){showNotification('Please enter who issued the promotion','danger');return;}
+  if(o.rank===toRank){showNotification('Same rank selected','danger');return;}
+  const fromRank=o.rank;
+  const date=new Date().toLocaleDateString();
+  o.rank=toRank;
+  promotionLog.unshift({date,officer:o.name,badge:o.badge,fromRank,toRank,reason,by});
+  renderPromotionsTable();
+  closeModal('modal-promotion');
+  filterOfficers(); updateDashboard();
+  logActivity(`PROMOTED: ${o.name} → ${toRank} (by ${by})`);
+  showNotification(`${o.name} promoted to ${toRank}!`);
+  sendWebhook({
+    title:'🏅 Officer Promoted',
+    description:`A promotion has been officially recorded in the LSPD system.`,
+    color:0xffd700,
+    fields:[
+      {name:'Officer',value:`${o.name} (#${o.badge})`,inline:true},
+      {name:'Department',value:o.dept,inline:true},
+      {name:'From Rank',value:fromRank,inline:true},
+      {name:'To Rank',value:`✨ ${toRank}`,inline:true},
+      {name:'Reason',value:reason,inline:false},
+      {name:'Promoted By',value:by,inline:true},
+      {name:'Date',value:date,inline:true},
+    ]
+  });
+}
+
+function renderPromotionsTable() {
+  const tb=document.getElementById('promotions-table');
+  if(!promotionLog.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3);">No promotions recorded yet.</td></tr>';return;}
+  tb.innerHTML=promotionLog.map(p=>`
+    <tr>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${p.date}</td>
+      <td style="font-weight:600;">${p.officer} <span style="color:var(--text3);font-size:11px;">#${p.badge}</span></td>
+      <td><span class="rank-badge ${getRankClass(p.fromRank)}">${p.fromRank}</span></td>
+      <td><span class="rank-badge ${getRankClass(p.toRank)}">${p.toRank}</span></td>
+      <td style="font-size:12px;color:var(--text2);max-width:250px;">${p.reason}</td>
+      <td style="font-size:13px;color:var(--text3);">${p.by}</td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// LAWS
+// ═══════════════════════════════════════════════════════
+function renderLaws() {
+  const total=LAWS.reduce((s,t)=>s+t.laws.length,0);
+  const el=document.getElementById('laws-total-count');
+  if(el) el.textContent=`${total} Laws`;
+  document.getElementById('laws-content').innerHTML = LAWS.map(tier=>`
+    <div class="law-tier">
+      <div class="law-tier-header" onclick="toggleLawTier(this)">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="law-tier-title ${tier.color}">${tier.title}</span>
+          <span class="law-badge pill ${tier.badgeClass}">${tier.laws.length} laws</span>
+        </div>
+        <i class="ti ti-chevron-down chevron"></i>
+      </div>
+      <div class="law-list" style="display:none;">
+        ${tier.laws.map(law=>`
+          <div class="law-item">
+            <span class="law-num">${law.id}</span>
+            <span class="law-text">${law.text}</span>
+            <span class="law-penalty ${tier.badgeClass}">${law.penalty}</span>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function toggleLawTier(header) {
+  const list=header.nextElementSibling;
+  const chev=header.querySelector('.chevron');
+  const open=list.style.display!=='none';
+  list.style.display=open?'none':'block';
+  chev.classList.toggle('open',!open);
+}
+
+// ═══════════════════════════════════════════════════════
+// RANKS PAGE
+// ═══════════════════════════════════════════════════════
+function renderRanks() {
+  const el=document.getElementById('ranks-list');
+  const groups=[
+    {label:"COMMAND", ranks:["Chief of Police","Assistant Chief","Deputy Chief","Commander"]},
+    {label:"HIGH COMMAND", ranks:["Captain","First Lieutenant","Lieutenant"]},
+    {label:"SUPERVISORS", ranks:["Staff Sergeant","First Sergeant","Sergeant","Corporal"]},
+    {label:"OFFICERS", ranks:["Senior Officer","Officer III","Officer II","Officer I","Solo Cadet","Cadet"]},
+    {label:"SPECIAL UNITS", ranks:["Head Of Internal Affairs","Internal Affairs","FTO","Detective","AirShip","Interceptor","MotorCycle","SWAT"]},
+  ];
+  el.innerHTML=groups.map(g=>`
+    <div class="divider">${g.label}</div>
+    ${g.ranks.map(rname=>{
+      const r=RANKS.find(x=>x.name===rname); if(!r)return'';
+      return `
+        <div class="rank-card">
+          <div class="rank-card-header" onclick="toggleRankDetail(this)">
+            <div class="rank-insignia-box">${renderInsignia(r)}</div>
+            <div style="flex:1;">
+              <div class="rank-card-title">${r.name}</div>
+              <div class="rank-card-sub">${r.responsibilities||''}</div>
+            </div>
+            <span class="rank-badge ${r.color||'rank-cadet'}" style="margin-right:10px;">${r.tier.toUpperCase()}</span>
+            ${r.pLevel?`<span class="pill pill-blue" style="margin-right:8px;">${r.pLevel} pts</span>`:''}
+            ${r.dispatchPts?`<span class="pill pill-gold" style="margin-right:8px;">Dispatch: ${r.dispatchPts}</span>`:''}
+            <i class="ti ti-chevron-down chevron"></i>
+          </div>
+          <div class="rank-details">
+            <div class="detail-grid">
+              ${r.pLevel?`<div class="detail-item"><div class="dl">Points Required</div><div class="dv">${r.pLevel}</div></div>`:''}
+              ${r.dispatchPts?`<div class="detail-item"><div class="dl">Dispatch Points</div><div class="dv">${r.dispatchPts}</div></div>`:''}
+              ${r.adminRank?`<div class="detail-item"><div class="dl">Administrative Rank</div><div class="dv">${r.adminRank}</div></div>`:''}
+            </div>
+            <div class="dl" style="margin-bottom:6px;">Permissions & Abilities</div>
+            <ul class="perm-list">${(r.perms||[]).map(p=>`<li>${p}</li>`).join('')}</ul>
+          </div>
+        </div>`;}).join('')}`).join('');
+}
+
+function toggleRankDetail(header) {
+  const detail=header.nextElementSibling;
+  const chev=header.querySelector('.chevron');
+  detail.classList.toggle('open');
+  chev.classList.toggle('open',detail.classList.contains('open'));
+}
+
+// ═══════════════════════════════════════════════════════
+// OUTFITS / EQUIP / RADIO
+// ═══════════════════════════════════════════════════════
+function renderOutfits() {
+  document.getElementById('outfits-content').innerHTML=`
+    <p style="font-size:13px;color:var(--text3);margin-bottom:1rem;">Format: Item ID / Texture ID</p>
+    <div class="outfit-grid">${OUTFITS.map(o=>`
+      <div class="outfit-card">
+        <div class="outfit-title">${o.rank}</div>
+        ${Object.entries(o.items).map(([k,v])`=>`
+          <div class="outfit-row"><span class="outfit-item-name">${k}</span><span class="outfit-item-val">${v}</span></div>`).join('')}
+      </div>`).join('')}
+    </div>`;
+}
+
+function renderEquipment() {
+  document.getElementById('equipment-content').innerHTML=`
+    <div class="equip-grid">${EQUIPMENT.map(e=>`
+      <div class="equip-card">
+        <div class="equip-icon">${e.icon}</div>
+        <div class="equip-name">${e.name}</div>
+        <div class="equip-qty">×${e.qty}</div>
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:1.5rem;" class="section-header"><div class="section-title">Service Strips</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">
+      ${['2 Month','4 Month','6 Month','8 Month','10 Month','12 Month','12 Month + WC','From Police Chief'].map((s,i)=>`
+      <div class="outfit-card" style="text-align:center;">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--cyan);margin-bottom:6px;">${'/'.repeat(i+1)}</div>
+        <div style="font-size:12px;color:var(--text2);">${s}</div>
+        <div style="font-size:11px;color:var(--text3);">Strip ${i+1}</div>
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:1.5rem;" class="section-header"><div class="section-title">Medals</div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">
+      ${[
+        {name:'Leadership Medal',pts:'+75',color:'var(--gold)',from:'From Police Chief'},
+        {name:'Medal of Honor',pts:'+60',color:'#FFD700',from:'12 Months + WC'},
+        {name:'Medal of Excellence',pts:'+40',color:'#C0C0C0',from:'12 Months'},
+        {name:'Achievement Medal',pts:'+35',color:'#CD7F32',from:'10 Months'},
+        {name:'Medal of Merit',pts:'+30',color:'#4fb3ff',from:'8 Months'},
+        {name:'Sacrifice Medal',pts:'+25',color:'#74c0fc',from:'6 Months'},
+        {name:'Training Medal',pts:'+25',color:'#69db7c',from:'4 Months'},
+        {name:'Justice Medal',pts:'+20',color:'#a9e34b',from:'2 Months'},
+      ].map(m=>`
+        <div class="outfit-card" style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:24px;">🎖</span>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:${m.color};">${m.name}</div>
+            <div style="font-size:12px;color:var(--text3);">${m.from}</div>
+            <div style="font-size:12px;color:var(--green);">${m.pts} points</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderRadio() {
+  document.getElementById('radio-content').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px;">
+      ${RADIO_PROTOCOLS.map(r=>`
+        <div class="radio-card">
+          <div class="radio-code">${r.code}</div>
+          <div class="radio-desc">${r.desc}</div>
+          <div class="radio-example">"${r.example}"</div>
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:1.5rem;padding:14px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:8px;">GENERAL RADIO RULES</div>
+      <ul style="list-style:none;font-size:13px;color:var(--text2);line-height:1.8;">
+        <li>• Always identify yourself by badge number when transmitting</li>
+        <li>• Keep transmissions brief and professional</li>
+        <li>• No personal conversations on primary channel</li>
+        <li>• Use proper 10-codes and signals at all times</li>
+        <li>• Emergency Code 99 / 10-33 always takes priority</li>
+        <li>• Confirm all dispatch messages with 10-4</li>
+      </ul>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// DISCIPLINE
+// ═══════════════════════════════════════════════════════
+function openDisciplineModal() {
+  const sel=document.getElementById('disc-officer');
+  sel.innerHTML=officers.map(o=>`<option value="${o.id}">#${o.badge} — ${o.name} (${o.rank})</option>`).join('');
+  document.getElementById('disc-violation').value='';
+  document.getElementById('disc-by').value='';
+  document.getElementById('modal-discipline').classList.add('open');
+}
+
+function addDiscipline() {
+  const oid=parseInt(document.getElementById('disc-officer').value);
+  const o=officers.find(x=>x.id===oid);
+  const violation=document.getElementById('disc-violation').value.trim();
+  const action=document.getElementById('disc-action').value;
+  const by=document.getElementById('disc-by').value.trim();
+  if(!violation||!by){showNotification('Please fill in all fields','danger');return;}
+  const date=new Date().toLocaleDateString();
+  disciplineLog.unshift({date,officer:o?o.name:'—',rank:o?o.rank:'—',badge:o?o.badge:'—',violation,action,by});
+  renderDisciplineTable();
+  closeModal('modal-discipline');
+  logActivity(`Discipline: ${o?o.name:'—'} — ${action}`);
+  showNotification('Discipline record added');
+  const colorMap={'Termination':0xff3b3b,'Suspension':0xff6b6b,'Demotion':0x74c0fc,'Strike Point':0xcc5de8};
+  sendWebhook({
+    title:`⚠️ Discipline Record — ${action}`,
+    description:`A discipline action has been recorded.`,
+    color:colorMap[action]||0xffaa00,
+    fields:[
+      {name:'Officer',value:`${o?o.name:'—'} (#${o?o.badge:'—'})`,inline:true},
+      {name:'Rank',value:o?o.rank:'—',inline:true},
+      {name:'Action',value:action,inline:true},
+      {name:'Violation',value:violation,inline:false},
+      {name:'Issued By',value:by,inline:true},
+      {name:'Date',value:date,inline:true},
+    ]
+  });
+}
+
+function renderDisciplineTable() {
+  const tb=document.getElementById('discipline-table');
+  if(!disciplineLog.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text3);">No records yet.</td></tr>';return;}
+  const aMap={'Termination':'penalty-fire','Suspension':'penalty-suspend','Demotion':'penalty-demotion','Strike Point':'penalty-strike'};
+  tb.innerHTML=disciplineLog.map(d=>`
+    <tr>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text3);">${d.date}</td>
+      <td style="font-weight:600;">${d.officer}</td>
+      <td><span class="rank-badge ${getRankClass(d.rank)}">${d.rank}</span></td>
+      <td style="font-size:13px;color:var(--text2);">${d.violation}</td>
+      <td><span class="law-penalty ${aMap[d.action]||'penalty-warn'}">${d.action}</span></td>
+      <td style="font-size:13px;color:var(--text3);">${d.by}</td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════
+function updateClock() {
+  const c=document.getElementById('clock');
+  if(c) c.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+function init() {
+  populateRankDropdowns();
+  filterOfficers();
+  filterPoints();
+  renderRanks();
+  renderLaws();
+  renderOutfits();
+  renderEquipment();
+  renderRadio();
+  renderDisciplineTable();
+  renderPromotionsTable();
+  updateDashboard();
+  // Load saved webhook URL
+  const saved=localStorage.getItem('lspd_webhook');
+  if(saved) webhookUrl=saved;
+}
+</script>
+</body>
+</html>
