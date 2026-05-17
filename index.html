@@ -866,23 +866,50 @@ async function checkOAuthCallback() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
   const state = params.get('state');
-  if (!code) return false;
+  if (!code) { console.log('[OAuth] No code in URL'); return false; }
+
+  console.log('[OAuth] Code found:', code.slice(0,8) + '...');
+
   // Clear URL params
   window.history.replaceState({}, '', window.location.pathname);
   document.getElementById('login-checking').classList.add('show');
   document.getElementById('login-page').querySelector('.btn-discord').style.opacity = '0.5';
+
   try {
-    // In production: send code to Cloudflare Worker
-    // const res = await fetch(DISCORD_CONFIG.WORKER_URL + '/auth?code=' + code);
-    // const data = await res.json();
-    // if (data.hasRole) bootApp(data.user); else showDenied();
-    
-    // Demo: simulate verification
-    await new Promise(r => setTimeout(r, 1500));
-    bootApp({ username: 'Discord User', demo: false });
-    return true;
+    const redirectUri = window.location.origin + window.location.pathname;
+    const workerUrl = DISCORD_CONFIG.WORKER_URL + '/auth?code=' + encodeURIComponent(code) + '&redirect_uri=' + encodeURIComponent(redirectUri);
+    console.log('[OAuth] Calling Worker:', workerUrl);
+
+    const res = await fetch(workerUrl);
+    console.log('[OAuth] Worker status:', res.status);
+
+    if (!res.ok) {
+      console.error('[OAuth] Worker error:', await res.text());
+      showLoginError('خطأ في الاتصال بالسيرفر.');
+      return false;
+    }
+
+    const data = await res.json();
+    console.log('[OAuth] Worker data:', data);
+
+    if (data.ok) {
+      sessionStorage.setItem('lspd_auth', JSON.stringify(data.user));
+      bootApp(data.user);
+      return true;
+    } else {
+      const msgs = {
+        not_in_server: 'أنت لست عضواً في السيرفر.',
+        no_role: 'ليس لديك الرتبة المطلوبة للوصول.',
+        invalid_token: 'فشل التحقق من الهوية. حاول مجدداً.',
+        token_exchange_failed: 'فشل تبادل الـ token. تأكد من إعدادات Discord.',
+        no_code: 'لم يتم استقبال الـ code من Discord.'
+      };
+      showLoginError(msgs[data.reason] || 'تم رفض الوصول: ' + data.reason);
+      return false;
+    }
   } catch(e) {
-    showLoginError('حدث خطأ في التحقق. حاول مجدداً.');
+    console.error('[OAuth] Exception:', e);
+    showLoginError('حدث خطأ: ' + e.message);
     return false;
   }
 }
@@ -1697,7 +1724,7 @@ function renderOutfits() {
     <div class="outfit-grid">${OUTFITS.map(o=>`
       <div class="outfit-card">
         <div class="outfit-title">${o.rank}</div>
-      ${Object.entries(o.items).map(([k,v]) =>`
+        ${Object.entries(o.items).map(([k,v]) => `
           <div class="outfit-row"><span class="outfit-item-name">${k}</span><span class="outfit-item-val">${v}</span></div>`).join('')}
       </div>`).join('')}
     </div>`;
