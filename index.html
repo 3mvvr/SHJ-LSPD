@@ -1697,7 +1697,7 @@ function renderOutfits() {
     <div class="outfit-grid">${OUTFITS.map(o=>`
       <div class="outfit-card">
         <div class="outfit-title">${o.rank}</div>
-        ${Object.entries(o.items).map(([k,v])`=>`
+      ${Object.entries(o.items).map(([k,v]) =>`
           <div class="outfit-row"><span class="outfit-item-name">${k}</span><span class="outfit-item-val">${v}</span></div>`).join('')}
       </div>`).join('')}
     </div>`;
