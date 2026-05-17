@@ -865,51 +865,31 @@ function doLogout() {
 async function checkOAuthCallback() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
-  const state = params.get('state');
-  if (!code) { console.log('[OAuth] No code in URL'); return false; }
-
-  console.log('[OAuth] Code found:', code.slice(0,8) + '...');
-
-  // Clear URL params
+  if (!code) { console.log('[OAuth] No code'); return false; }
   window.history.replaceState({}, '', window.location.pathname);
   document.getElementById('login-checking').classList.add('show');
   document.getElementById('login-page').querySelector('.btn-discord').style.opacity = '0.5';
-
   try {
     const redirectUri = window.location.origin + window.location.pathname;
-    const workerUrl = DISCORD_CONFIG.WORKER_URL + '/auth?code=' + encodeURIComponent(code) + '&redirect_uri=' + encodeURIComponent(redirectUri);
-    console.log('[OAuth] Calling Worker:', workerUrl);
-
-    const res = await fetch(workerUrl);
-    console.log('[OAuth] Worker status:', res.status);
-
-    if (!res.ok) {
-      console.error('[OAuth] Worker error:', await res.text());
-      showLoginError('خطأ في الاتصال بالسيرفر.');
-      return false;
-    }
-
+    const url = DISCORD_CONFIG.WORKER_URL + '/auth?code=' + encodeURIComponent(code) + '&redirect_uri=' + encodeURIComponent(redirectUri);
+    console.log('[OAuth] Calling Worker:', url);
+    const res = await fetch(url);
+    console.log('[OAuth] Status:', res.status);
+    if (!res.ok) { showLoginError('خطأ في الاتصال بالسيرفر.'); return false; }
     const data = await res.json();
-    console.log('[OAuth] Worker data:', data);
-
+    console.log('[OAuth] Response:', data);
     if (data.ok) {
       sessionStorage.setItem('lspd_auth', JSON.stringify(data.user));
       bootApp(data.user);
       return true;
     } else {
-      const msgs = {
-        not_in_server: 'أنت لست عضواً في السيرفر.',
-        no_role: 'ليس لديك الرتبة المطلوبة للوصول.',
-        invalid_token: 'فشل التحقق من الهوية. حاول مجدداً.',
-        token_exchange_failed: 'فشل تبادل الـ token. تأكد من إعدادات Discord.',
-        no_code: 'لم يتم استقبال الـ code من Discord.'
-      };
-      showLoginError(msgs[data.reason] || 'تم رفض الوصول: ' + data.reason);
+      const msgs = { not_in_server:'أنت لست في السيرفر.', no_role:'ليس لديك الرتبة المطلوبة.', invalid_token:'فشل التحقق.', token_exchange_failed:'فشل تبادل الـ token.' };
+      showLoginError(msgs[data.reason] || 'رُفض الوصول: ' + data.reason);
       return false;
     }
   } catch(e) {
-    console.error('[OAuth] Exception:', e);
-    showLoginError('حدث خطأ: ' + e.message);
+    console.error('[OAuth] Error:', e);
+    showLoginError('خطأ: ' + e.message);
     return false;
   }
 }
@@ -1287,6 +1267,7 @@ function logActivity(msg) {
   activityLog.unshift({msg, time: new Date().toLocaleTimeString()});
   if (activityLog.length > 20) activityLog.pop();
   updateActivityFeed();
+  saveData();
 }
 function updateActivityFeed() {
   const f = document.getElementById('activity-feed');
@@ -1405,8 +1386,9 @@ function addOfficer() {
   if(!name||!badge||!rank){showNotification('Please fill in required fields','danger');return;}
   const o={id:++nextId,name,badge,rank,dept,section,discord,points:0,status};
   officers.push(o);
+  saveData();
   closeModal('modal-add-officer');
-  filterOfficers(); updateDashboard();
+  renderAll();
   logActivity(`Officer ${name} (#${badge}) added as ${rank}`);
   showNotification(`${name} added successfully`);
   sendWebhook({
@@ -1447,8 +1429,9 @@ function saveEditOfficer() {
   o.dept=document.getElementById('edit-dept').value;
   o.section=document.getElementById('edit-section').value.trim();
   o.status=document.getElementById('edit-status').value;
+  saveData();
   closeModal('modal-edit-officer');
-  filterOfficers(); updateDashboard();
+  renderAll();
   const changed=[];
   if(oldRank!==o.rank) changed.push(`Rank: ${oldRank} → ${o.rank}`);
   if(oldStatus!==o.status) changed.push(`Status: ${oldStatus} → ${o.status}`);
@@ -1469,7 +1452,8 @@ function deleteOfficer(id) {
   const o=officers.find(x=>x.id===id); if(!o)return;
   if(!confirm(`Remove ${o.name} (#${o.badge}) from roster?`))return;
   officers=officers.filter(x=>x.id!==id);
-  filterOfficers(); updateDashboard();
+  saveData();
+  renderAll();
   logActivity(`Officer ${o.name} (#${o.badge}) removed`);
   showNotification(`${o.name} removed`,'danger');
   sendWebhook({
@@ -1535,8 +1519,9 @@ function applyPoints() {
   if(op==='add') o.points=Math.round((o.points+amount)*100)/100;
   else if(op==='sub') o.points=Math.max(0,Math.round((o.points-amount)*100)/100);
   else o.points=amount;
+  saveData();
   closeModal('modal-points');
-  filterPoints(); updateDashboard();
+  renderAll();
   logActivity(`${o.name}: pts ${old} → ${o.points}${reason?' ('+reason+')':''}`);
   showNotification(`Points updated: ${o.name} → ${o.points} pts`);
   sendWebhook({
@@ -1597,6 +1582,7 @@ function applyPromotion() {
   const date=new Date().toLocaleDateString();
   o.rank=toRank;
   promotionLog.unshift({date,officer:o.name,badge:o.badge,fromRank,toRank,reason,by});
+  saveData();
   renderPromotionsTable();
   closeModal('modal-promotion');
   filterOfficers(); updateDashboard();
@@ -1724,7 +1710,7 @@ function renderOutfits() {
     <div class="outfit-grid">${OUTFITS.map(o=>`
       <div class="outfit-card">
         <div class="outfit-title">${o.rank}</div>
-        ${Object.entries(o.items).map(([k,v]) => `
+      ${Object.entries(o.items).map(([k,v]) =>`
           <div class="outfit-row"><span class="outfit-item-name">${k}</span><span class="outfit-item-val">${v}</span></div>`).join('')}
       </div>`).join('')}
     </div>`;
@@ -1814,6 +1800,7 @@ function addDiscipline() {
   if(!violation||!by){showNotification('Please fill in all fields','danger');return;}
   const date=new Date().toLocaleDateString();
   disciplineLog.unshift({date,officer:o?o.name:'—',rank:o?o.rank:'—',badge:o?o.badge:'—',violation,action,by});
+  saveData();
   renderDisciplineTable();
   closeModal('modal-discipline');
   logActivity(`Discipline: ${o?o.name:'—'} — ${action}`);
@@ -1862,21 +1849,74 @@ updateClock();
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
-function init() {
-  populateRankDropdowns();
+// ═══════════════════════════════════════════════════════
+// DATA PERSISTENCE — localStorage
+// ═══════════════════════════════════════════════════════
+const LS_OFFICERS   = 'lspd_officers';
+const LS_DISCIPLINE = 'lspd_discipline';
+const LS_PROMOTIONS = 'lspd_promotions';
+const LS_NEXTID     = 'lspd_nextid';
+const LS_ACTIVITY   = 'lspd_activity';
+
+function saveData() {
+  try {
+    localStorage.setItem(LS_OFFICERS,   JSON.stringify(officers));
+    localStorage.setItem(LS_DISCIPLINE, JSON.stringify(disciplineLog));
+    localStorage.setItem(LS_PROMOTIONS, JSON.stringify(promotionLog));
+    localStorage.setItem(LS_NEXTID,     String(nextId));
+    localStorage.setItem(LS_ACTIVITY,   JSON.stringify(activityLog));
+    console.log('[DB] Saved:', officers.length, 'officers');
+  } catch(e) { console.error('[DB] Save failed:', e); }
+}
+
+function loadData() {
+  try {
+    const o = localStorage.getItem(LS_OFFICERS);
+    if (o) { officers = JSON.parse(o); console.log('[DB] Loaded', officers.length, 'officers'); }
+
+    const d = localStorage.getItem(LS_DISCIPLINE);
+    if (d) disciplineLog = JSON.parse(d);
+
+    const p = localStorage.getItem(LS_PROMOTIONS);
+    if (p) promotionLog = JSON.parse(p);
+
+    const n = localStorage.getItem(LS_NEXTID);
+    if (n) nextId = parseInt(n);
+
+    const a = localStorage.getItem(LS_ACTIVITY);
+    if (a) activityLog = JSON.parse(a);
+
+    console.log('[DB] Load complete');
+  } catch(e) { console.error('[DB] Load failed:', e); }
+}
+
+function resetData() {
+  if (!confirm('هل تريد مسح جميع البيانات والرجوع للافتراضي؟')) return;
+  [LS_OFFICERS,LS_DISCIPLINE,LS_PROMOTIONS,LS_NEXTID,LS_ACTIVITY].forEach(k=>localStorage.removeItem(k));
+  location.reload();
+}
+
+function renderAll() {
   filterOfficers();
   filterPoints();
+  renderDisciplineTable();
+  renderPromotionsTable();
+  updateDashboard();
+  updateActivityFeed();
+}
+
+function init() {
+  loadData();
+  populateRankDropdowns();
+  renderAll();
   renderRanks();
   renderLaws();
   renderOutfits();
   renderEquipment();
   renderRadio();
-  renderDisciplineTable();
-  renderPromotionsTable();
-  updateDashboard();
-  // Load saved webhook URL
   const saved=localStorage.getItem('lspd_webhook');
   if(saved) webhookUrl=saved;
+  console.log('[LSPD] System initialized');
 }
 </script>
 </body>
