@@ -274,9 +274,7 @@
     <div style="width:80px; height:80px; background:#0b1730; border:2px solid #f3c75a; border-radius:50%; display:grid; place-items:center; font-size:40px; margin:0 auto 20px">🛡️</div>
     <h1 style="font-size:28px; font-weight:900">SHJ LSPD</h1>
     <p style="color:#8fa0bd; margin:8px 0 24px">Central Police Management System</p>
-    <a id="discordLoginBtn" href="/auth/discord" class="btn btn-primary" style="width:100%; justify-content:center; display:inline-flex; text-decoration:none; color:#fff;">
-      <i class="ti ti-brand-discord"></i> Login with Discord
-    </a>
+    <button id="discordLoginBtn" class="btn btn-primary" style="width:100%; justify-content:center"><i class="ti ti-brand-discord"></i> Login with Discord</button>
     <p id="loginMessage" style="margin-top:16px; font-size:13px; color:#8fa0bd"></p>
   </div>
 </div>
@@ -558,6 +556,9 @@
     } catch(e) { console.error(e); }
   }
 
+  document.getElementById('discordLoginBtn')?.addEventListener('click', () => {
+    window.location.href = '/auth/discord';
+  });
   document.getElementById('logoutBtn')?.addEventListener('click', () => {
     window.location.href = '/auth/logout';
   });
