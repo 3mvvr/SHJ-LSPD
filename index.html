@@ -101,52 +101,70 @@
   <div id="toast" class="toast"></div>
 
 <script>
-const qs=(s,p=document)=>p.querySelector(s), qsa=(s,p=document)=>[...p.querySelectorAll(s)];
-const state={token:localStorage.getItem('lspd_token')||'',user:null,isAdmin:false,data:{}};
-const ranks=['Cadet','Officer I','Officer II','Senior Officer','Corporal','Sergeant','Staff Sergeant','Lieutenant','Captain','Assistant Chief','Chief of Police'];
-const demoData={
-  officers:[
-    {id:1,name:'John Hartley',badge:100,rank:'Chief of Police',dept:'LSPD',section:'Command',points:30,status:'active'},
-    {id:2,name:'Michael Kane',badge:200,rank:'Captain',dept:'LSPD',section:'Command',points:24,status:'active'},
-    {id:3,name:'Sarah Williams',badge:300,rank:'Sergeant',dept:'LSPD',section:'Patrol',points:18,status:'active'},
-    {id:4,name:'James Torres',badge:401,rank:'Officer II',dept:'LSPD',section:'FTO',points:12,status:'active'}
+// ======================= UTILITIES =======================
+const qs = (s, p = document) => p.querySelector(s);
+const qsa = (s, p = document) => [...p.querySelectorAll(s)];
+const state = { token: localStorage.getItem('lspd_token') || '', user: null, isAdmin: false, data: {} };
+const ranks = ['Cadet','Officer I','Officer II','Senior Officer','Corporal','Sergeant','Staff Sergeant','Lieutenant','Captain','Assistant Chief','Chief of Police'];
+const demoData = {
+  officers: [
+    { id: 1, name: 'John Hartley', badge: 100, rank: 'Chief of Police', dept: 'LSPD', section: 'Command', points: 30, status: 'active' },
+    { id: 2, name: 'Michael Kane', badge: 200, rank: 'Captain', dept: 'LSPD', section: 'Command', points: 24, status: 'active' },
+    { id: 3, name: 'Sarah Williams', badge: 300, rank: 'Sergeant', dept: 'LSPD', section: 'Patrol', points: 18, status: 'active' },
+    { id: 4, name: 'James Torres', badge: 401, rank: 'Officer II', dept: 'LSPD', section: 'FTO', points: 12, status: 'active' }
   ],
-  discipline:[],promotions:[],reports:[],wanted:[{name:'Unknown Suspect',level:'High',case:'Armed robbery'}],impound:[],activity:[{msg:'System started',time:Date.now()}],notifications:[]
+  discipline: [], promotions: [], reports: [], wanted: [{ name: 'Unknown Suspect', level: 'High', case: 'Armed robbery' }], impound: [], activity: [{ msg: 'System started', time: Date.now() }], notifications: []
 };
-function esc(x){return String(x??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[m]));}
-function toast(msg){const t=qs('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
-function apiUrl(path){
+function esc(x) { return String(x ?? '').replace(/[&<>'"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[m])); }
+function toast(msg) { const t = qs('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2600); }
+function apiUrl(path) {
   const base = String(APP_CONFIG.WORKER_URL || '').replace(/\/+$/, '');
   const cleanPath = String(path || '').startsWith('/') ? path : '/' + path;
   return base + cleanPath;
 }
-async function api(path,opt={}){const headers={'Content-Type':'application/json',...(opt.headers||{})}; if(state.token)headers.Authorization='Bearer '+state.token; const res=await fetch(apiUrl(path),{...opt,headers}); return res.json();}
-function loginDiscord(){const redirect=encodeURIComponent(location.origin+location.pathname); const url='https://discord.com/oauth2/authorize?'+new URLSearchParams({client_id:APP_CONFIG.DISCORD_CLIENT_ID,redirect_uri:redirect,response_type:'code',scope:'identify guilds.members.read'}); location.href=url;}
-async function handleOAuth(){
+async function api(path, opt = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opt.headers || {}) };
+  if (state.token) headers.Authorization = 'Bearer ' + state.token;
+  const res = await fetch(apiUrl(path), { ...opt, headers });
+  return res.json();
+}
+
+// ======================= DISCORD OAUTH (FIXED) =======================
+function loginDiscord() {
+  const redirect = location.origin + location.pathname; // raw, no extra encoding
+  const params = new URLSearchParams({
+    client_id: APP_CONFIG.DISCORD_CLIENT_ID,
+    redirect_uri: redirect,
+    response_type: 'code',
+    scope: 'identify guilds.members.read'
+  });
+  location.href = 'https://discord.com/oauth2/authorize?' + params.toString();
+}
+
+async function handleOAuth() {
   const urlParams = new URLSearchParams(location.search);
   const code = urlParams.get('code');
-  if(!code) return;
-  
-  // إظهار رسالة جاري التحميل
+  if (!code) return;
+
   const msgEl = qs('#loginMsg');
-  if(msgEl) msgEl.textContent = 'جاري تسجيل الدخول...';
-  
+  if (msgEl) msgEl.textContent = 'جاري تسجيل الدخول...';
+
   try {
     const redirect = location.origin + location.pathname;
-    const res = await api('/auth?code='+encodeURIComponent(code)+'&redirect_uri='+encodeURIComponent(redirect));
-    if(!res.ok) throw new Error(res.reason || 'فشل التبادل');
-    
+    const authParams = new URLSearchParams({ code, redirect_uri: redirect });
+    const res = await api('/auth?' + authParams.toString());
+    if (!res.ok) throw new Error(res.reason || 'فشل التبادل');
+
     state.token = res.access_token;
     localStorage.setItem('lspd_token', state.token);
-    // إزالة الكود من الرابط دون إعادة تحميل الصفحة (لتفادي إعادة الاستخدام)
-    const cleanUrl = location.pathname + location.search.replace(/[?&]code=[^&]*/, '').replace(/^&/, '?').replace(/[?]$/, '');
+    // Remove code from URL to avoid reuse
+    const cleanUrl = location.pathname;
     history.replaceState({}, '', cleanUrl);
     await start(res);
-  } catch(e) {
+  } catch (e) {
     console.error('OAuth error:', e);
     toast('فشل الدخول: ' + e.message);
-    if(msgEl) msgEl.textContent = 'فشل الدخول: ' + e.message;
-    // إزالة الكود المعطل من الرابط وإعادة تحميل الصفحة نظيفة بعد 2 ثانية
+    if (msgEl) msgEl.textContent = 'فشل الدخول: ' + e.message;
     setTimeout(() => {
       const cleanUrl = location.pathname;
       history.replaceState({}, '', cleanUrl);
@@ -154,44 +172,102 @@ async function handleOAuth(){
     }, 2000);
   }
 }
-function demoLogin(){state.user={username:'Demo Admin',avatar:null};state.isAdmin=true;state.token='demo';state.data=JSON.parse(JSON.stringify(demoData));showApp();renderAll();}
-async function start(authRes=null){try{if(state.token==='demo')return demoLogin(); if(authRes){state.user=authRes.user;state.isAdmin=authRes.isAdmin}else{const me=await api('/api/me'); if(!me.ok)throw new Error('unauthorized'); state.user=me.user;state.isAdmin=me.isAdmin} showApp(); await loadData(); renderAll();}catch(e){localStorage.removeItem('lspd_token');state.token='';qs('#login').classList.remove('hide');qs('#app').classList.add('hide');qs('#loginMsg').textContent='سجل دخول من جديد'}}
-function showApp(){qs('#login').classList.add('hide');qs('#app').classList.remove('hide');document.body.classList.toggle('is-admin',!!state.isAdmin);qs('#userName').textContent=state.user?.username||'User';qs('#userRole').textContent=state.isAdmin?'Admin':'Officer';if(state.user?.avatar)qs('#avatar').innerHTML='<img src="'+state.user.avatar+'">';else qs('#avatar').textContent=(state.user?.username||'U')[0].toUpperCase();}
-async function loadData(){if(state.token==='demo'){state.data=JSON.parse(JSON.stringify(demoData));return} const d=await api('/api/data'); if(d.ok)state.data=d; else throw new Error(d.reason||'data_failed')}
-function logout(){localStorage.removeItem('lspd_token');location.href=location.origin+location.pathname}
-function head(title,sub,actions=''){return `<div class="page-head"><div><h2>${title}</h2><p>${sub}</p></div><div class="toolbar">${actions}</div></div>`}
-function renderAll(){renderDashboard();renderOfficers();renderRanks();renderPoints();renderLaws();renderUniform();renderCodes();renderReports();renderWanted();renderPenalties();renderUsers();renderLogs();renderSettings();}
-function renderDashboard(){const o=state.data.officers||[], disc=state.data.discipline||[], promos=state.data.promotions||[], logs=state.data.activity||[];qs('#dashboard').innerHTML=head('Dashboard','نظرة عامة على حالة الشرطة والنشاطات.')+`<div class="grid stats"><div class="card card-pad stat"><i class="ti ti-users"></i><small>أفراد الشرطة</small><b>${o.length}</b></div><div class="card card-pad stat"><i class="ti ti-shield-check"></i><small>أونلاين/نشط</small><b>${o.filter(x=>x.status==='active').length}</b></div><div class="card card-pad stat"><i class="ti ti-stairs-up"></i><small>الترقيات</small><b>${promos.length}</b></div><div class="card card-pad stat"><i class="ti ti-gavel"></i><small>المخالفات</small><b>${disc.length}</b></div></div><div class="grid two"><div class="card"><div class="card-title">قائمة الشرطة</div><div style="overflow:auto"><table><thead><tr><th>الاسم</th><th>الرتبة</th><th>النقاط</th><th>الحالة</th></tr></thead><tbody>${o.map(x=>`<tr><td>${esc(x.name)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${x.points||0}/30</td><td><span class="pill green">Active</span></td></tr>`).join('')}</tbody></table></div></div><div class="card"><div class="card-title">آخر العمليات</div><div class="card-pad list">${logs.slice(0,8).map(l=>`<div class="item"><h4>${esc(l.msg||l)}</h4><p>${l.time?new Date(l.time).toLocaleString('ar-SA'):''}</p></div>`).join('')||'<div class="muted">لا توجد عمليات</div>'}</div></div></div>`}
-function renderOfficers(){const o=state.data.officers||[];qs('#officers').innerHTML=head('إدارة أفراد الشرطة','بحث وتعديل وحذف وعرض بيانات الأفراد.',state.isAdmin?`<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> إضافة شرطي</button>`:'')+`<div class="toolbar"><input id="officerSearch" class="input" placeholder="بحث بالاسم أو البادج" oninput="filterOfficers()"><select id="rankFilter" class="select" onchange="filterOfficers()"><option value="">كل الرتب</option>${ranks.map(r=>`<option>${r}</option>`).join('')}</select></div><div class="card"><div style="overflow:auto">\n<table><thead><tr><th>الشرطي</th><th>البادج</th><th>الرتبة</th><th>القسم</th><th>النقاط</th><th>إجراءات</th></tr></thead><tbody id="officersRows">${officerRows(o)}</tbody></table></div></div>`}
-function officerRows(list){return list.map(x=>`<tr data-name="${esc((x.name||'').toLowerCase())}" data-badge="${esc(x.badge)}" data-rank="${esc(x.rank)}"><td><b>${esc(x.name)}</b><div class="weak">${esc(x.dept||'LSPD')}</div></td><td class="mono">#${esc(x.badge)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${esc(x.section||'-')}</td><td><div class="progress"><div class="bar" style="width:${Math.min(100,((x.points||0)/30)*100)}%"></div></div><small class="muted">${x.points||0}/30</small></td><td>${state.isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openOfficerModal(${x.id})">تعديل</button> <button class="btn btn-red btn-sm" onclick="deleteOfficer(${x.id})">حذف</button>`:'<span class="muted">عرض فقط</span>'}</td></tr>`).join('')}
-function filterOfficers(){const q=qs('#officerSearch').value.toLowerCase(),r=qs('#rankFilter').value; qsa('#officersRows tr').forEach(tr=>{const ok=(!q||tr.dataset.name.includes(q)||tr.dataset.badge.includes(q))&&(!r||tr.dataset.rank===r);tr.style.display=ok?'':'none'})}
-function renderRanks(){qs('#ranks').innerHTML=head('الرتب والترقيات','شجرة تقدم ونسبة نقاط لكل رتبة.',state.isAdmin?`<button class="btn btn-gold" onclick="openPromoteModal()">ترقية شرطي</button>`:'')+`<div class="grid three">${ranks.map((r,i)=>`<div class="card card-pad"><h3>${r}</h3><p class="muted">النقاط المطلوبة: ${Math.min(30,i*3)}</p><div class="progress"><div class="bar" style="width:${Math.min(100,i/ranks.length*100)}%"></div></div></div>`).join('')}</div>`}
-function renderPoints(){const top=[...(state.data.officers||[])].sort((a,b)=>(b.points||0)-(a.points||0));qs('#points').innerHTML=head('نظام النقاط','إضافة وخصم النقاط مع سبب وسجل.',state.isAdmin?`<button class="btn btn-primary" onclick="openPointsModal()">تعديل نقاط</button>`:'')+`<div class="card"><div class="card-title">Top Officers</div><div class="card-pad list">${top.map(o=>`<div class="item"><h4>${esc(o.name)} <span class="pill">${o.points||0}/30</span></h4><div class="progress"><div class="bar" style="width:${((o.points||0)/30)*100}%"></div></div></div>`).join('')}</div></div>`}
-function renderLaws(){const laws=state.data.laws||[{cat:'قوانين عامة',items:['احترام الرتب الأعلى وتنفيذ الأوامر النظامية.','يمنع استغلال الصلاحيات أو المعدات خارج العمل.','يجب توثيق جميع المخالفات والتقارير.']},{cat:'المطاردات',items:['يجب الالتزام بتدرج القوة.','يمنع الصدم العشوائي بدون سبب RP واضح.']}];qs('#laws').innerHTML=head('القوانين','تصنيف وقراءة سريعة للقوانين.',state.isAdmin?`<button class="btn btn-primary" onclick="toast('تعديل القوانين متاح من worker API')">إدارة</button>`:'')+`<div class="list">${laws.map(c=>`<div class="card"><div class="card-title">${esc(c.cat)}</div><div class="card-pad list">${c.items.map(x=>`<div class="item">${esc(x)}</div>`).join('')}</div></div>`).join('')}</div>`}
-function renderUniform(){qs('#uniform').innerHTML=head('الزي الرسمي','أرقام الملابس حسب الرتب والأقسام.')+`<div class="grid three">${['Cadet','Officer','Sergeant','Command'].map(r=>`<div class="card card-pad"><h3>${r}</h3><p class="muted">Torso: 55 | Pants: 35 | Shoes: 10 | Badge: 1</p><button class="btn btn-ghost btn-sm" onclick="copyText('Torso 55 Pants 35 Shoes 10')">نسخ</button></div>`).join('')}</div>`}
-function renderCodes(){const codes=['10-4 تم الاستلام','10-8 متاح للخدمة','10-20 الموقع','Code 3 استجابة عاجلة','Code 4 الوضع آمن','Signal 100 راديو صامت'];qs('#codes').innerHTML=head('الأكواد والبلاغات','اضغط على الكود للنسخ السريع.')+`<div class="grid three">${codes.map(c=>`<div class="card card-pad code-card" onclick="copyText('${esc(c)}')"><h3 class="mono">${esc(c)}</h3><p class="muted">اضغط للنسخ</p></div>`).join('')}</div>`}
-function renderReports(){qs('#reports').innerHTML=head('التقارير والقضايا','كتابة تقارير وملفات قضايا.',`<button class="btn btn-primary" onclick="openReportModal()">تقرير جديد</button>`)+`<div class="card"><div class="card-pad list">${(state.data.reports||[]).map(r=>`<div class="item"><h4>${esc(r.title)}</h4><p>${esc(r.body)}</p></div>`).join('')||'<div class="muted">لا توجد تقارير</div>'}</div></div>`}
-function renderWanted(){qs('#wanted').innerHTML=head('المطلوبين والحجز','Wanted System و Vehicle Impound.')+`<div class="grid two"><div class="card"><div class="card-title">المطلوبين</div><div class="card-pad list">${(state.data.wanted||[]).map(w=>`<div class="item"><h4>${esc(w.name)} <span class="pill red">${esc(w.level||'Normal')}</span></h4><p>${esc(w.case||'')}</p></div>`).join('')||'<div class="muted">لا يوجد مطلوبين</div>'}</div></div><div class="card"><div class="card-title">حجز المركبات</div><div class="card-pad muted">لا توجد مركبات محجوزة</div></div></div>`}
-function renderPenalties(){qs('#penalties').innerHTML=head('العقوبات والمخالفات','خصم نقاط تلقائي وسجل مخالفات.',state.isAdmin?`<button class="btn btn-red" onclick="openPenaltyModal()">إضافة مخالفة</button>`:'')+`<div class="card"><div style="overflow:auto">\n<table><thead><tr><th>الشرطي</th><th>السبب</th><th>خصم</th><th>الوقت</th></tr></thead><tbody>${(state.data.discipline||[]).map(x=>`<tr><td>${esc(x.officer||x.officerName||'')}</td><td>${esc(x.reason||'')}</td><td>${x.points||x.deduct||0}</td><td>${x.time?new Date(x.time).toLocaleString('ar-SA'):''}</td></tr>`).join('')}</tbody></table></div></div>`}
-function renderUsers(){qs('#users').innerHTML=head('مستخدمين Discord','الحسابات المرتبطة والصلاحيات.')+`<div class="card card-pad muted">تظهر هنا الحسابات بعد تسجيل الدخول الحقيقي عبر Discord.</div>`}
-function renderLogs(){qs('#logs').innerHTML=head('اللوقات','سجل كامل للعمليات.')+`<div class="card card-pad list">${(state.data.activity||[]).map(a=>`<div class="item"><h4>${esc(a.msg||a)}</h4><p>${a.time?new Date(a.time).toLocaleString('ar-SA'):''}</p></div>`).join('')||'<div class="muted">لا توجد لوقات</div>'}</div>`}
-function renderSettings(){qs('#settings').innerHTML=head('الإعدادات','Discord OAuth, Webhooks, Security.')+`<div class="card card-pad"><p class="muted">لا تحط Bot Token أو Client Secret داخل HTML. خليها Secrets داخل Cloudflare Worker.</p><pre class="mono" style="white-space:pre-wrap;margin-top:12px;color:var(--cyan)">DISCORD_CLIENT_ID\nDISCORD_CLIENT_SECRET\nDISCORD_BOT_TOKEN\nDISCORD_GUILD_ID\nALLOWED_ORIGINS</pre></div>`}
-function openModal(title,body,foot){qs('#modalTitle').textContent=title;qs('#modalBody').innerHTML=body;qs('#modalFoot').innerHTML=foot;qs('#modal').classList.add('open')} function closeModal(){qs('#modal').classList.remove('open')}
-function openOfficerModal(id){if(!state.isAdmin)return toast('هذه الخاصية للإدارة فقط'); const o=(state.data.officers||[]).find(x=>x.id===id)||{}; openModal(id?'تعديل شرطي':'إضافة شرطي',`<div class="form-grid"><div class="field"><label>الاسم</label><input id="f_name" value="${esc(o.name||'')}"></div><div class="field"><label>البادج</label><input id="f_badge" value="${esc(o.badge||'')}"></div><div class="field"><label>الرتبة</label><select id="f_rank">${ranks.map(r=>`<option ${o.rank===r?'selected':''}>${r}</option>`).join('')}</select></div><div class="field"><label>القسم</label><input id="f_section" value="${esc(o.section||'Patrol')}"></div></div>`,`<button class="btn btn-primary" onclick="saveOfficer(${id||0})">حفظ</button>`)}
-async function saveOfficer(id){const body={id:id||undefined,name:qs('#f_name').value,badge:qs('#f_badge').value,rank:qs('#f_rank').value,section:qs('#f_section').value,status:'active'}; if(state.token==='demo'){if(id){Object.assign(state.data.officers.find(x=>x.id===id),body)}else{body.id=Date.now();body.points=0;state.data.officers.push(body)}closeModal();renderAll();return toast('تم الحفظ تجريبيًا')} const r=await api('/api/officers',{method:id?'PUT':'POST',body:JSON.stringify(body)}); if(r.ok){await loadData();renderAll();closeModal();toast('تم الحفظ')}else toast(r.reason||'خطأ')}
-async function deleteOfficer(id){if(!confirm('حذف الشرطي؟'))return; if(state.token==='demo'){state.data.officers=state.data.officers.filter(x=>x.id!==id);renderAll();return toast('تم الحذف')} const r=await api('/api/officers',{method:'DELETE',body:JSON.stringify({id})}); if(r.ok){await loadData();renderAll();toast('تم الحذف')}}
-function openPointsModal(){openModal('تعديل النقاط',`<div class="form-grid"><div class="field"><label>الشرطي</label><select id="p_id">${(state.data.officers||[]).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></div><div class="field"><label>العملية</label><select id="p_op"><option value="add">إضافة</option><option value="sub">خصم</option><option value="set">تعيين</option></select></div><div class="field"><label>العدد</label><input id="p_amount" type="number" value="1"></div><div class="field"><label>السبب</label><input id="p_reason"></div></div>`,`<button class="btn btn-primary" onclick="savePoints()">تطبيق</button>`)}
-async function savePoints(){const id=+qs('#p_id').value,op=qs('#p_op').value,amount=+qs('#p_amount').value,reason=qs('#p_reason').value;if(state.token==='demo'){const o=state.data.officers.find(x=>x.id===id); if(op==='add')o.points=Math.min(30,(o.points||0)+amount); if(op==='sub')o.points=Math.max(0,(o.points||0)-amount); if(op==='set')o.points=amount; closeModal();renderAll();return toast('تم تعديل النقاط')} const r=await api('/api/points',{method:'PUT',body:JSON.stringify({id,op,amount,reason})}); if(r.ok){await loadData();renderAll();closeModal();toast('تم تعديل النقاط')}}
-function openPromoteModal(){if(!state.isAdmin)return toast('للإدارة فقط');openModal('ترقية شرطي',`<div class="form-grid"><div class="field"><label>الشرطي</label><select id="pr_id">${(state.data.officers||[]).map(o=>`<option value="${o.id}">${esc(o.name)} - ${esc(o.rank)}</option>`).join('')}</select></div><div class="field"><label>الرتبة الجديدة</label><select id="pr_rank">${ranks.map(r=>`<option>${r}</option>`).join('')}</select></div><div class="field" style="grid-column:1/-1"><label>السبب</label><input id="pr_reason"></div></div>`,`<button class="btn btn-gold" onclick="savePromote()">ترقية</button>`)}
-async function savePromote(){const officerId=+qs('#pr_id').value,toRank=qs('#pr_rank').value,reason=qs('#pr_reason').value;if(state.token==='demo'){const o=state.data.officers.find(x=>x.id===officerId);const fromRank=o.rank;o.rank=toRank;state.data.promotions.unshift({officer:o.name,fromRank,toRank,reason,date:new Date().toLocaleDateString('ar-SA')});closeModal();renderAll();return toast('تمت الترقية')} const r=await api('/api/promote',{method:'POST',body:JSON.stringify({officerId,toRank,reason})}); if(r.ok){await loadData();renderAll();closeModal();toast('تمت الترقية')}}
-function openPenaltyModal(){if(!state.isAdmin)return toast('للإدارة فقط');openModal('إضافة مخالفة',`<div class="form-grid"><div class="field"><label>الشرطي</label><select id="d_id">${(state.data.officers||[]).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></div><div class="field"><label>خصم نقاط</label><input id="d_points" type="number" value="1"></div><div class="field" style="grid-column:1/-1"><label>السبب</label><textarea id="d_reason"></textarea></div></div>`,`<button class="btn btn-red" onclick="savePenalty()">حفظ المخالفة</button>`)}
-async function savePenalty(){const officerId=+qs('#d_id').value,points=+qs('#d_points').value,reason=qs('#d_reason').value;if(state.token==='demo'){const o=state.data.officers.find(x=>x.id===officerId);o.points=Math.max(0,(o.points||0)-points);state.data.discipline.unshift({officer:o.name,points,reason,time:Date.now()});closeModal();renderAll();return toast('تمت إضافة المخالفة')} const r=await api('/api/discipline',{method:'POST',body:JSON.stringify({officerId,points,reason})}); if(r.ok){await loadData();renderAll();closeModal();toast('تمت إضافة المخالفة')}}
-function openReportModal(){openModal('تقرير جديد',`<div class="field"><label>العنوان</label><input id="r_title"></div><div class="field" style="margin-top:12px"><label>التقرير</label><textarea id="r_body"></textarea></div>`,`<button class="btn btn-primary" onclick="saveReport()">حفظ التقرير</button>`)}
-async function saveReport(){const title=qs('#r_title').value,body=qs('#r_body').value;if(state.token==='demo'){state.data.reports.unshift({title,body,time:Date.now()});closeModal();renderReports();return toast('تم حفظ التقرير')} const r=await api('/api/reports',{method:'POST',body:JSON.stringify({title,body})}); if(r.ok){await loadData();renderAll();closeModal();toast('تم حفظ التقرير')}}
-function copyText(t){navigator.clipboard?.writeText(t);toast('تم النسخ')}
-qsa('.nav button[data-page]').forEach(b=>b.onclick=()=>{qsa('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');qsa('.page').forEach(p=>p.classList.remove('active'));qs('#'+b.dataset.page).classList.add('active');qs('#side').classList.remove('open')});
-function toggleSide(){qs('#side').classList.toggle('open')} setInterval(()=>qs('#clock').textContent=new Date().toLocaleString('ar-SA'),1000);qs('#clock').textContent=new Date().toLocaleString('ar-SA');
-handleOAuth(); if(state.token) start();
+
+// ======================= LOGIN / START / DEMO =======================
+function demoLogin() { state.user = { username: 'Demo Admin', avatar: null }; state.isAdmin = true; state.token = 'demo'; state.data = JSON.parse(JSON.stringify(demoData)); showApp(); renderAll(); }
+async function start(authRes = null) {
+  try {
+    if (state.token === 'demo') return demoLogin();
+    if (authRes) { state.user = authRes.user; state.isAdmin = authRes.isAdmin; }
+    else {
+      const me = await api('/api/me');
+      if (!me.ok) throw new Error('unauthorized');
+      state.user = me.user;
+      state.isAdmin = me.isAdmin;
+    }
+    showApp();
+    await loadData();
+    renderAll();
+  } catch (e) {
+    localStorage.removeItem('lspd_token');
+    state.token = '';
+    qs('#login').classList.remove('hide');
+    qs('#app').classList.add('hide');
+    qs('#loginMsg').textContent = 'سجل دخول من جديد';
+  }
+}
+function showApp() {
+  qs('#login').classList.add('hide');
+  qs('#app').classList.remove('hide');
+  document.body.classList.toggle('is-admin', !!state.isAdmin);
+  qs('#userName').textContent = state.user?.username || 'User';
+  qs('#userRole').textContent = state.isAdmin ? 'Admin' : 'Officer';
+  if (state.user?.avatar) qs('#avatar').innerHTML = '<img src="' + state.user.avatar + '">';
+  else qs('#avatar').textContent = (state.user?.username || 'U')[0].toUpperCase();
+}
+async function loadData() {
+  if (state.token === 'demo') { state.data = JSON.parse(JSON.stringify(demoData)); return; }
+  const d = await api('/api/data');
+  if (d.ok) state.data = d;
+  else throw new Error(d.reason || 'data_failed');
+}
+function logout() { localStorage.removeItem('lspd_token'); location.href = location.origin + location.pathname; }
+
+// ======================= RENDER HELPERS =======================
+function head(title, sub, actions = '') { return `<div class="page-head"><div><h2>${title}</h2><p>${sub}</p></div><div class="toolbar">${actions}</div></div>`; }
+function renderAll() { renderDashboard(); renderOfficers(); renderRanks(); renderPoints(); renderLaws(); renderUniform(); renderCodes(); renderReports(); renderWanted(); renderPenalties(); renderUsers(); renderLogs(); renderSettings(); }
+function renderDashboard() {
+  const o = state.data.officers || [], disc = state.data.discipline || [], promos = state.data.promotions || [], logs = state.data.activity || [];
+  qs('#dashboard').innerHTML = head('Dashboard', 'نظرة عامة على حالة الشرطة والنشاطات.') +
+    `<div class="grid stats"><div class="card card-pad stat"><i class="ti ti-users"></i><small>أفراد الشرطة</small><b>${o.length}</b></div><div class="card card-pad stat"><i class="ti ti-shield-check"></i><small>أونلاين/نشط</small><b>${o.filter(x => x.status === 'active').length}</b></div><div class="card card-pad stat"><i class="ti ti-stairs-up"></i><small>الترقيات</small><b>${promos.length}</b></div><div class="card card-pad stat"><i class="ti ti-gavel"></i><small>المخالفات</small><b>${disc.length}</b></div></div>` +
+    `<div class="grid two"><div class="card"><div class="card-title">قائمة الشرطة</div><div style="overflow:auto"><table><thead><tr><th>الاسم</th><th>الرتبة</th><th>النقاط</th><th>الحالة</th></tr></thead><tbody>${o.map(x => `<tr><td>${esc(x.name)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${x.points || 0}/30</td><td><span class="pill green">Active</span></td></tr>`).join('')}</tbody></table></div></div>` +
+    `<div class="card"><div class="card-title">آخر العمليات</div><div class="card-pad list">${logs.slice(0, 8).map(l => `<div class="item"><h4>${esc(l.msg || l)}</h4><p>${l.time ? new Date(l.time).toLocaleString('ar-SA') : ''}</p></div>`).join('') || '<div class="muted">لا توجد عمليات</div>'}</div></div></div>`;
+}
+function renderOfficers() {
+  const o = state.data.officers || [];
+  qs('#officers').innerHTML = head('إدارة أفراد الشرطة', 'بحث وتعديل وحذف وعرض بيانات الأفراد.', state.isAdmin ? `<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> إضافة شرطي</button>` : '') +
+    `<div class="toolbar"><input id="officerSearch" class="input" placeholder="بحث بالاسم أو البادج" oninput="filterOfficers()"><select id="rankFilter" class="select" onchange="filterOfficers()"><option value="">كل الرتب</option>${ranks.map(r => `<option>${r}</option>`).join('')}</select></div>` +
+    `<div class="card"><div style="overflow:auto"><table><thead><tr><th>الشرطي</th><th>البادج</th><th>الرتبة</th><th>القسم</th><th>النقاط</th><th>إجراءات</th></tr></thead><tbody id="officersRows">${officerRows(o)}</tbody></table></div></div>`;
+}
+function officerRows(list) { return list.map(x => `<tr data-name="${esc((x.name || '').toLowerCase())}" data-badge="${esc(x.badge)}" data-rank="${esc(x.rank)}"><td><b>${esc(x.name)}</b><div class="weak">${esc(x.dept || 'LSPD')}</div></td><td class="mono">#${esc(x.badge)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${esc(x.section || '-')}</td><td><div class="progress"><div class="bar" style="width:${Math.min(100, ((x.points || 0) / 30) * 100)}%"></div></div><small class="muted">${x.points || 0}/30</small></td><td>${state.isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openOfficerModal(${x.id})">تعديل</button> <button class="btn btn-red btn-sm" onclick="deleteOfficer(${x.id})">حذف</button>` : '<span class="muted">عرض فقط</span>'}</td></tr>`).join(''); }
+function filterOfficers() { const q = qs('#officerSearch').value.toLowerCase(), r = qs('#rankFilter').value; qsa('#officersRows tr').forEach(tr => { const ok = (!q || tr.dataset.name.includes(q) || tr.dataset.badge.includes(q)) && (!r || tr.dataset.rank === r); tr.style.display = ok ? '' : 'none'; }); }
+function renderRanks() { qs('#ranks').innerHTML = head('الرتب والترقيات', 'شجرة تقدم ونسبة نقاط لكل رتبة.', state.isAdmin ? `<button class="btn btn-gold" onclick="openPromoteModal()">ترقية شرطي</button>` : '') + `<div class="grid three">${ranks.map((r, i) => `<div class="card card-pad"><h3>${r}</h3><p class="muted">النقاط المطلوبة: ${Math.min(30, i * 3)}</p><div class="progress"><div class="bar" style="width:${Math.min(100, i / ranks.length * 100)}%"></div></div></div>`).join('')}</div>`; }
+function renderPoints() { const top = [...(state.data.officers || [])].sort((a, b) => (b.points || 0) - (a.points || 0)); qs('#points').innerHTML = head('نظام النقاط', 'إضافة وخصم النقاط مع سبب وسجل.', state.isAdmin ? `<button class="btn btn-primary" onclick="openPointsModal()">تعديل نقاط</button>` : '') + `<div class="card"><div class="card-title">Top Officers</div><div class="card-pad list">${top.map(o => `<div class="item"><h4>${esc(o.name)} <span class="pill">${o.points || 0}/30</span></h4><div class="progress"><div class="bar" style="width:${((o.points || 0) / 30) * 100}%"></div></div></div>`).join('')}</div></div>`; }
+function renderLaws() { const laws = state.data.laws || [{ cat: 'قوانين عامة', items: ['احترام الرتب الأعلى وتنفيذ الأوامر النظامية.', 'يمنع استغلال الصلاحيات أو المعدات خارج العمل.', 'يجب توثيق جميع المخالفات والتقارير.'] }, { cat: 'المطاردات', items: ['يجب الالتزام بتدرج القوة.', 'يمنع الصدم العشوائي بدون سبب RP واضح.'] }]; qs('#laws').innerHTML = head('القوانين', 'تصنيف وقراءة سريعة للقوانين.', state.isAdmin ? `<button class="btn btn-primary" onclick="toast('تعديل القوانين متاح من worker API')">إدارة</button>` : '') + `<div class="list">${laws.map(c => `<div class="card"><div class="card-title">${esc(c.cat)}</div><div class="card-pad list">${c.items.map(x => `<div class="item">${esc(x)}</div>`).join('')}</div></div>`).join('')}</div>`; }
+function renderUniform() { qs('#uniform').innerHTML = head('الزي الرسمي', 'أرقام الملابس حسب الرتب والأقسام.') + `<div class="grid three">${['Cadet', 'Officer', 'Sergeant', 'Command'].map(r => `<div class="card card-pad"><h3>${r}</h3><p class="muted">Torso: 55 | Pants: 35 | Shoes: 10 | Badge: 1</p><button class="btn btn-ghost btn-sm" onclick="copyText('Torso 55 Pants 35 Shoes 10')">نسخ</button></div>`).join('')}</div>`; }
+function renderCodes() { const codes = ['10-4 تم الاستلام', '10-8 متاح للخدمة', '10-20 الموقع', 'Code 3 استجابة عاجلة', 'Code 4 الوضع آمن', 'Signal 100 راديو صامت']; qs('#codes').innerHTML = head('الأكواد والبلاغات', 'اضغط على الكود للنسخ السريع.') + `<div class="grid three">${codes.map(c => `<div class="card card-pad code-card" onclick="copyText('${esc(c)}')"><h3 class="mono">${esc(c)}</h3><p class="muted">اضغط للنسخ</p></div>`).join('')}</div>`; }
+function renderReports() { qs('#reports').innerHTML = head('التقارير والقضايا', 'كتابة تقارير وملفات قضايا.', `<button class="btn btn-primary" onclick="openReportModal()">تقرير جديد</button>`) + `<div class="card"><div class="card-pad list">${(state.data.reports || []).map(r => `<div class="item"><h4>${esc(r.title)}</h4><p>${esc(r.body)}</p></div>`).join('') || '<div class="muted">لا توجد تقارير</div>'}</div></div>`; }
+function renderWanted() { qs('#wanted').innerHTML = head('المطلوبين والحجز', 'Wanted System و Vehicle Impound.') + `<div class="grid two"><div class="card"><div class="card-title">المطلوبين</div><div class="card-pad list">${(state.data.wanted || []).map(w => `<div class="item"><h4>${esc(w.name)} <span class="pill red">${esc(w.level || 'Normal')}</span></h4><p>${esc(w.case || '')}</p></div>`).join('') || '<div class="muted">لا يوجد مطلوبين</div>'}</div></div><div class="card"><div class="card-title">حجز المركبات</div><div class="card-pad muted">لا توجد مركبات محجوزة</div></div></div>`; }
+function renderPenalties() { qs('#penalties').innerHTML = head('العقوبات والمخالفات', 'خصم نقاط تلقائي وسجل مخالفات.', state.isAdmin ? `<button class="btn btn-red" onclick="openPenaltyModal()">إضافة مخالفة</button>` : '') + `<div class="card"><div style="overflow:auto"><table><thead><tr><th>الشرطي</th><th>السبب</th><th>خصم</th><th>الوقت</th></tr></thead><tbody>${(state.data.discipline || []).map(x => `<tr><td>${esc(x.officer || x.officerName || '')}</td><td>${esc(x.reason || '')}</td><td>${x.points || x.deduct || 0}</td><td>${x.time ? new Date(x.time).toLocaleString('ar-SA') : ''}</td></tr>`).join('')}</tbody></table></div></div>`; }
+function renderUsers() { qs('#users').innerHTML = head('مستخدمين Discord', 'الحسابات المرتبطة والصلاحيات.') + `<div class="card card-pad muted">تظهر هنا الحسابات بعد تسجيل الدخول الحقيقي عبر Discord.</div>`; }
+function renderLogs() { qs('#logs').innerHTML = head('اللوقات', 'سجل كامل للعمليات.') + `<div class="card card-pad list">${(state.data.activity || []).map(a => `<div class="item"><h4>${esc(a.msg || a)}</h4><p>${a.time ? new Date(a.time).toLocaleString('ar-SA') : ''}</p></div>`).join('') || '<div class="muted">لا توجد لوقات</div>'}</div>`; }
+function renderSettings() { qs('#settings').innerHTML = head('الإعدادات', 'Discord OAuth, Webhooks, Security.') + `<div class="card card-pad"><p class="muted">لا تحط Bot Token أو Client Secret داخل HTML. خليها Secrets داخل Cloudflare Worker.</p><pre class="mono" style="white-space:pre-wrap;margin-top:12px;color:var(--cyan)">DISCORD_CLIENT_ID\nDISCORD_CLIENT_SECRET\nDISCORD_BOT_TOKEN\nDISCORD_GUILD_ID\nALLOWED_ORIGINS</pre></div>`; }
+
+// ======================= MODALS & ACTIONS =======================
+function openModal(title, body, foot) { qs('#modalTitle').textContent = title; qs('#modalBody').innerHTML = body; qs('#modalFoot').innerHTML = foot; qs('#modal').classList.add('open'); }
+function closeModal() { qs('#modal').classList.remove('open'); }
+function openOfficerModal(id) { if (!state.isAdmin) return toast('هذه الخاصية للإدارة فقط'); const o = (state.data.officers || []).find(x => x.id === id) || {}; openModal(id ? 'تعديل شرطي' : 'إضافة شرطي', `<div class="form-grid"><div class="field"><label>الاسم</label><input id="f_name" value="${esc(o.name || '')}"></div><div class="field"><label>البادج</label><input id="f_badge" value="${esc(o.badge || '')}"></div><div class="field"><label>الرتبة</label><select id="f_rank">${ranks.map(r => `<option ${o.rank === r ? 'selected' : ''}>${r}</option>`).join('')}</select></div><div class="field"><label>القسم</label><input id="f_section" value="${esc(o.section || 'Patrol')}"></div></div>`, `<button class="btn btn-primary" onclick="saveOfficer(${id || 0})">حفظ</button>`); }
+async function saveOfficer(id) { const body = { id: id || undefined, name: qs('#f_name').value, badge: qs('#f_badge').value, rank: qs('#f_rank').value, section: qs('#f_section').value, status: 'active' }; if (state.token === 'demo') { if (id) { Object.assign(state.data.officers.find(x => x.id === id), body); } else { body.id = Date.now(); body.points = 0; state.data.officers.push(body); } closeModal(); renderAll(); return toast('تم الحفظ تجريبيًا'); } const r = await api('/api/officers', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) }); if (r.ok) { await loadData(); renderAll(); closeModal(); toast('تم الحفظ'); } else toast(r.reason || 'خطأ'); }
+async function deleteOfficer(id) { if (!confirm('حذف الشرطي؟')) return; if (state.token === 'demo') { state.data.officers = state.data.officers.filter(x => x.id !== id); renderAll(); return toast('تم الحذف'); } const r = await api('/api/officers', { method: 'DELETE', body: JSON.stringify({ id }) }); if (r.ok) { await loadData(); renderAll(); toast('تم الحذف'); } }
+function openPointsModal() { openModal('تعديل النقاط', `<div class="form-grid"><div class="field"><label>الشرطي</label><select id="p_id">${(state.data.officers || []).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></div><div class="field"><label>العملية</label><select id="p_op"><option value="add">إضافة</option><option value="sub">خصم</option><option value="set">تعيين</option></select></div><div class="field"><label>العدد</label><input id="p_amount" type="number" value="1"></div><div class="field"><label>السبب</label><input id="p_reason"></div></div>`, `<button class="btn btn-primary" onclick="savePoints()">تطبيق</button>`); }
+async function savePoints() { const id = +qs('#p_id').value, op = qs('#p_op').value, amount = +qs('#p_amount').value, reason = qs('#p_reason').value; if (state.token === 'demo') { const o = state.data.officers.find(x => x.id === id); if (op === 'add') o.points = Math.min(30, (o.points || 0) + amount); if (op === 'sub') o.points = Math.max(0, (o.points || 0) - amount); if (op === 'set') o.points = amount; closeModal(); renderAll(); return toast('تم تعديل النقاط'); } const r = await api('/api/points', { method: 'PUT', body: JSON.stringify({ id, op, amount, reason }) }); if (r.ok) { await loadData(); renderAll(); closeModal(); toast('تم تعديل النقاط'); } }
+function openPromoteModal() { if (!state.isAdmin) return toast('للإدارة فقط'); openModal('ترقية شرطي', `<div class="form-grid"><div class="field"><label>الشرطي</label><select id="pr_id">${(state.data.officers || []).map(o => `<option value="${o.id}">${esc(o.name)} - ${esc(o.rank)}</option>`).join('')}</select></div><div class="field"><label>الرتبة الجديدة</label><select id="pr_rank">${ranks.map(r => `<option>${r}</option>`).join('')}</select></div><div class="field" style="grid-column:1/-1"><label>السبب</label><input id="pr_reason"></div></div>`, `<button class="btn btn-gold" onclick="savePromote()">ترقية</button>`); }
+async function savePromote() { const officerId = +qs('#pr_id').value, toRank = qs('#pr_rank').value, reason = qs('#pr_reason').value; if (state.token === 'demo') { const o = state.data.officers.find(x => x.id === officerId); const fromRank = o.rank; o.rank = toRank; state.data.promotions.unshift({ officer: o.name, fromRank, toRank, reason, date: new Date().toLocaleDateString('ar-SA') }); closeModal(); renderAll(); return toast('تمت الترقية'); } const r = await api('/api/promote', { method: 'POST', body: JSON.stringify({ officerId, toRank, reason }) }); if (r.ok) { await loadData(); renderAll(); closeModal(); toast('تمت الترقية'); } }
+function openPenaltyModal() { if (!state.isAdmin) return toast('للإدارة فقط'); openModal('إضافة مخالفة', `<div class="form-grid"><div class="field"><label>الشرطي</label><select id="d_id">${(state.data.officers || []).map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select></div><div class="field"><label>خصم نقاط</label><input id="d_points" type="number" value="1"></div><div class="field" style="grid-column:1/-1"><label>السبب</label><textarea id="d_reason"></textarea></div></div>`, `<button class="btn btn-red" onclick="savePenalty()">حفظ المخالفة</button>`); }
+async function savePenalty() { const officerId = +qs('#d_id').value, points = +qs('#d_points').value, reason = qs('#d_reason').value; if (state.token === 'demo') { const o = state.data.officers.find(x => x.id === officerId); o.points = Math.max(0, (o.points || 0) - points); state.data.discipline.unshift({ officer: o.name, points, reason, time: Date.now() }); closeModal(); renderAll(); return toast('تمت إضافة المخالفة'); } const r = await api('/api/discipline', { method: 'POST', body: JSON.stringify({ officerId, points, reason }) }); if (r.ok) { await loadData(); renderAll(); closeModal(); toast('تمت إضافة المخالفة'); } }
+function openReportModal() { openModal('تقرير جديد', `<div class="field"><label>العنوان</label><input id="r_title"></div><div class="field" style="margin-top:12px"><label>التقرير</label><textarea id="r_body"></textarea></div>`, `<button class="btn btn-primary" onclick="saveReport()">حفظ التقرير</button>`); }
+async function saveReport() { const title = qs('#r_title').value, body = qs('#r_body').value; if (state.token === 'demo') { state.data.reports.unshift({ title, body, time: Date.now() }); closeModal(); renderReports(); return toast('تم حفظ التقرير'); } const r = await api('/api/reports', { method: 'POST', body: JSON.stringify({ title, body }) }); if (r.ok) { await loadData(); renderAll(); closeModal(); toast('تم حفظ التقرير'); } }
+function copyText(t) { navigator.clipboard?.writeText(t); toast('تم النسخ'); }
+
+// ======================= NAVIGATION & CLOCK =======================
+qsa('.nav button[data-page]').forEach(b => b.onclick = () => { qsa('.nav button').forEach(x => x.classList.remove('active')); b.classList.add('active'); qsa('.page').forEach(p => p.classList.remove('active')); qs('#' + b.dataset.page).classList.add('active'); qs('#side').classList.remove('open'); });
+function toggleSide() { qs('#side').classList.toggle('open'); }
+setInterval(() => qs('#clock').textContent = new Date().toLocaleString('ar-SA'), 1000);
+qs('#clock').textContent = new Date().toLocaleString('ar-SA');
+
+// ======================= INIT =======================
+handleOAuth();
+if (state.token) start();
 </script>
 </body>
 </html>
