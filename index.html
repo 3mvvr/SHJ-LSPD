@@ -23,10 +23,9 @@
 </head>
 <body>
   <script>
-    /* تم تحديث الـ Client ID الجديد */
     const APP_CONFIG = {
       WORKER_URL: 'https://lspd.oabbmb.workers.dev',
-      DISCORD_CLIENT_ID: '1505897669334138940',   // تم التحديث
+      DISCORD_CLIENT_ID: '1505897669334138940',
       GUILD_ID: '1154498662286770179'
     };
   </script>
@@ -37,7 +36,7 @@
       <div class="title">SHJ LSPD</div>
       <div class="subtitle">نظام إدارة الشرطة</div>
       <div class="hint">
-        اربط الصفحة مع Cloudflare Worker من الأعلى، ثم اضغط تسجيل دخول Discord.<br>
+        اضغط تسجيل دخول Discord للدخول بحسابك.<br>
         للتجربة بدون دسكورد استخدم زر الدخول التجريبي.
       </div>
       <button class="btn btn-primary btn-wide" onclick="loginDiscord()"><i class="ti ti-brand-discord"></i> تسجيل دخول Discord</button>
@@ -122,8 +121,39 @@ function apiUrl(path){
   return base + cleanPath;
 }
 async function api(path,opt={}){const headers={'Content-Type':'application/json',...(opt.headers||{})}; if(state.token)headers.Authorization='Bearer '+state.token; const res=await fetch(apiUrl(path),{...opt,headers}); return res.json();}
-function loginDiscord(){const redirect=location.origin+location.pathname; const url='https://discord.com/oauth2/authorize?'+new URLSearchParams({client_id:APP_CONFIG.DISCORD_CLIENT_ID,redirect_uri:redirect,response_type:'code',scope:'identify guilds.members.read'}); location.href=url;}
-async function handleOAuth(){const code=new URLSearchParams(location.search).get('code'); if(!code)return; qs('#loginMsg').textContent='جاري تسجيل الدخول...'; try{const redirect=location.origin+location.pathname; const res=await api('/auth?code='+encodeURIComponent(code)+'&redirect_uri='+encodeURIComponent(redirect)); if(!res.ok)throw new Error(res.reason||'login_failed'); state.token=res.access_token; localStorage.setItem('lspd_token',state.token); history.replaceState({},'',redirect); await start(res)}catch(e){qs('#loginMsg').textContent='خطأ: '+e.message; toast('فشل الدخول: '+e.message)}}
+function loginDiscord(){const redirect=encodeURIComponent(location.origin+location.pathname); const url='https://discord.com/oauth2/authorize?'+new URLSearchParams({client_id:APP_CONFIG.DISCORD_CLIENT_ID,redirect_uri:redirect,response_type:'code',scope:'identify guilds.members.read'}); location.href=url;}
+async function handleOAuth(){
+  const urlParams = new URLSearchParams(location.search);
+  const code = urlParams.get('code');
+  if(!code) return;
+  
+  // إظهار رسالة جاري التحميل
+  const msgEl = qs('#loginMsg');
+  if(msgEl) msgEl.textContent = 'جاري تسجيل الدخول...';
+  
+  try {
+    const redirect = location.origin + location.pathname;
+    const res = await api('/auth?code='+encodeURIComponent(code)+'&redirect_uri='+encodeURIComponent(redirect));
+    if(!res.ok) throw new Error(res.reason || 'فشل التبادل');
+    
+    state.token = res.access_token;
+    localStorage.setItem('lspd_token', state.token);
+    // إزالة الكود من الرابط دون إعادة تحميل الصفحة (لتفادي إعادة الاستخدام)
+    const cleanUrl = location.pathname + location.search.replace(/[?&]code=[^&]*/, '').replace(/^&/, '?').replace(/[?]$/, '');
+    history.replaceState({}, '', cleanUrl);
+    await start(res);
+  } catch(e) {
+    console.error('OAuth error:', e);
+    toast('فشل الدخول: ' + e.message);
+    if(msgEl) msgEl.textContent = 'فشل الدخول: ' + e.message;
+    // إزالة الكود المعطل من الرابط وإعادة تحميل الصفحة نظيفة بعد 2 ثانية
+    setTimeout(() => {
+      const cleanUrl = location.pathname;
+      history.replaceState({}, '', cleanUrl);
+      location.reload();
+    }, 2000);
+  }
+}
 function demoLogin(){state.user={username:'Demo Admin',avatar:null};state.isAdmin=true;state.token='demo';state.data=JSON.parse(JSON.stringify(demoData));showApp();renderAll();}
 async function start(authRes=null){try{if(state.token==='demo')return demoLogin(); if(authRes){state.user=authRes.user;state.isAdmin=authRes.isAdmin}else{const me=await api('/api/me'); if(!me.ok)throw new Error('unauthorized'); state.user=me.user;state.isAdmin=me.isAdmin} showApp(); await loadData(); renderAll();}catch(e){localStorage.removeItem('lspd_token');state.token='';qs('#login').classList.remove('hide');qs('#app').classList.add('hide');qs('#loginMsg').textContent='سجل دخول من جديد'}}
 function showApp(){qs('#login').classList.add('hide');qs('#app').classList.remove('hide');document.body.classList.toggle('is-admin',!!state.isAdmin);qs('#userName').textContent=state.user?.username||'User';qs('#userRole').textContent=state.isAdmin?'Admin':'Officer';if(state.user?.avatar)qs('#avatar').innerHTML='<img src="'+state.user.avatar+'">';else qs('#avatar').textContent=(state.user?.username||'U')[0].toUpperCase();}
@@ -131,8 +161,8 @@ async function loadData(){if(state.token==='demo'){state.data=JSON.parse(JSON.st
 function logout(){localStorage.removeItem('lspd_token');location.href=location.origin+location.pathname}
 function head(title,sub,actions=''){return `<div class="page-head"><div><h2>${title}</h2><p>${sub}</p></div><div class="toolbar">${actions}</div></div>`}
 function renderAll(){renderDashboard();renderOfficers();renderRanks();renderPoints();renderLaws();renderUniform();renderCodes();renderReports();renderWanted();renderPenalties();renderUsers();renderLogs();renderSettings();}
-function renderDashboard(){const o=state.data.officers||[], disc=state.data.discipline||[], promos=state.data.promotions||[], logs=state.data.activity||[];qs('#dashboard').innerHTML=head('Dashboard','نظرة عامة على حالة الشرطة والنشاطات.')+`<div class="grid stats"><div class="card card-pad stat"><i class="ti ti-users"></i><small>أفراد الشرطة</small><b>${o.length}</b></div><div class="card card-pad stat"><i class="ti ti-shield-check"></i><small>أونلاين/نشط</small><b>${o.filter(x=>x.status==='active').length}</b></div><div class="card card-pad stat"><i class="ti ti-stairs-up"></i><small>الترقيات</small><b>${promos.length}</b></div><div class="card card-pad stat"><i class="ti ti-gavel"></i><small>المخالفات</small><b>${disc.length}</b></div></div><div class="grid two"><div class="card"><div class="card-title">قائمة الشرطة</div><div style="overflow:auto"><tr><thead><tr><th>الاسم</th><th>الرتبة</th><th>النقاط</th><th>الحالة</th></tr></thead><tbody>${o.map(x=>`<tr><td>${esc(x.name)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${x.points||0}/30</td><td><span class="pill green">Active</span></td></tr>`).join('')}</tbody></table></div></div><div class="card"><div class="card-title">آخر العمليات</div><div class="card-pad list">${logs.slice(0,8).map(l=>`<div class="item"><h4>${esc(l.msg||l)}</h4><p>${l.time?new Date(l.time).toLocaleString('ar-SA'):''}</p></div>`).join('')||'<div class="muted">لا توجد عمليات</div>'}</div></div></div>`}
-function renderOfficers(){const o=state.data.officers||[];qs('#officers').innerHTML=head('إدارة أفراد الشرطة','بحث وتعديل وحذف وعرض بيانات الأفراد.',state.isAdmin?`<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> إضافة شرطي</button>`:'')+`<div class="toolbar"><input id="officerSearch" class="input" placeholder="بحث بالاسم أو البادج" oninput="filterOfficers()"><select id="rankFilter" class="select" onchange="filterOfficers()"><option value="">كل الرتب</option>${ranks.map(r=>`<option>${r}</option>`).join('')}</select></div><div class="card"><div style="overflow:auto"><table><thead><tr><th>الشرطي</th><th>البادج</th><th>الرتبة</th><th>القسم</th><th>النقاط</th><th>إجراءات</th></tr></thead><tbody id="officersRows">${officerRows(o)}</tbody></table></div></div>`}
+function renderDashboard(){const o=state.data.officers||[], disc=state.data.discipline||[], promos=state.data.promotions||[], logs=state.data.activity||[];qs('#dashboard').innerHTML=head('Dashboard','نظرة عامة على حالة الشرطة والنشاطات.')+`<div class="grid stats"><div class="card card-pad stat"><i class="ti ti-users"></i><small>أفراد الشرطة</small><b>${o.length}</b></div><div class="card card-pad stat"><i class="ti ti-shield-check"></i><small>أونلاين/نشط</small><b>${o.filter(x=>x.status==='active').length}</b></div><div class="card card-pad stat"><i class="ti ti-stairs-up"></i><small>الترقيات</small><b>${promos.length}</b></div><div class="card card-pad stat"><i class="ti ti-gavel"></i><small>المخالفات</small><b>${disc.length}</b></div></div><div class="grid two"><div class="card"><div class="card-title">قائمة الشرطة</div><div style="overflow:auto"><table><thead><tr><th>الاسم</th><th>الرتبة</th><th>النقاط</th><th>الحالة</th></tr></thead><tbody>${o.map(x=>`<tr><td>${esc(x.name)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${x.points||0}/30</td><td><span class="pill green">Active</span></td></tr>`).join('')}</tbody></table></div></div><div class="card"><div class="card-title">آخر العمليات</div><div class="card-pad list">${logs.slice(0,8).map(l=>`<div class="item"><h4>${esc(l.msg||l)}</h4><p>${l.time?new Date(l.time).toLocaleString('ar-SA'):''}</p></div>`).join('')||'<div class="muted">لا توجد عمليات</div>'}</div></div></div>`}
+function renderOfficers(){const o=state.data.officers||[];qs('#officers').innerHTML=head('إدارة أفراد الشرطة','بحث وتعديل وحذف وعرض بيانات الأفراد.',state.isAdmin?`<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> إضافة شرطي</button>`:'')+`<div class="toolbar"><input id="officerSearch" class="input" placeholder="بحث بالاسم أو البادج" oninput="filterOfficers()"><select id="rankFilter" class="select" onchange="filterOfficers()"><option value="">كل الرتب</option>${ranks.map(r=>`<option>${r}</option>`).join('')}</select></div><div class="card"><div style="overflow:auto">\n<table><thead><tr><th>الشرطي</th><th>البادج</th><th>الرتبة</th><th>القسم</th><th>النقاط</th><th>إجراءات</th></tr></thead><tbody id="officersRows">${officerRows(o)}</tbody></table></div></div>`}
 function officerRows(list){return list.map(x=>`<tr data-name="${esc((x.name||'').toLowerCase())}" data-badge="${esc(x.badge)}" data-rank="${esc(x.rank)}"><td><b>${esc(x.name)}</b><div class="weak">${esc(x.dept||'LSPD')}</div></td><td class="mono">#${esc(x.badge)}</td><td><span class="pill gold">${esc(x.rank)}</span></td><td>${esc(x.section||'-')}</td><td><div class="progress"><div class="bar" style="width:${Math.min(100,((x.points||0)/30)*100)}%"></div></div><small class="muted">${x.points||0}/30</small></td><td>${state.isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openOfficerModal(${x.id})">تعديل</button> <button class="btn btn-red btn-sm" onclick="deleteOfficer(${x.id})">حذف</button>`:'<span class="muted">عرض فقط</span>'}</td></tr>`).join('')}
 function filterOfficers(){const q=qs('#officerSearch').value.toLowerCase(),r=qs('#rankFilter').value; qsa('#officersRows tr').forEach(tr=>{const ok=(!q||tr.dataset.name.includes(q)||tr.dataset.badge.includes(q))&&(!r||tr.dataset.rank===r);tr.style.display=ok?'':'none'})}
 function renderRanks(){qs('#ranks').innerHTML=head('الرتب والترقيات','شجرة تقدم ونسبة نقاط لكل رتبة.',state.isAdmin?`<button class="btn btn-gold" onclick="openPromoteModal()">ترقية شرطي</button>`:'')+`<div class="grid three">${ranks.map((r,i)=>`<div class="card card-pad"><h3>${r}</h3><p class="muted">النقاط المطلوبة: ${Math.min(30,i*3)}</p><div class="progress"><div class="bar" style="width:${Math.min(100,i/ranks.length*100)}%"></div></div></div>`).join('')}</div>`}
