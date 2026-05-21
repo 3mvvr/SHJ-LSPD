@@ -490,7 +490,7 @@
   function renderRanks(){
     const ranks = store.ranks || [];
     const rows = ranks.map(r=>`
-      <tr>
+      <table>
         <td><b>${esc(r.name)}</b></td>
         <td>${r.pointsReq||0} pts</td>
         <td>
@@ -691,7 +691,7 @@
   function renderCodes(){
     const codes = store.codes || [];
     const rows = codes.map(c=>`
-      <tr>
+      <table>
         <td><b>${esc(c.code||'')}</b></td>
         <td>${esc(c.description||'')}</td>
         <td><span class="badge badge-${c.priority==='danger'?'danger':c.priority==='warning'?'warning':'info'}">${esc(c.priority||'info')}</span></td>
@@ -792,7 +792,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td></tr>'}</tbody></table>
+          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td><tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -1088,7 +1088,6 @@
   } else {
     init();
   }
-} // ← هذا القوس المغلق للـ IIFE كان مفقوداً
 })();
 </script>
 </body>
