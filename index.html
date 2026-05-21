@@ -292,15 +292,20 @@
     return window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
   }
 
-  function loginDiscord() {
-    const redirect = getRedirectUri();
-    location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
-      client_id: CFG.DISCORD_CLIENT_ID,
-      redirect_uri: redirect,
-      response_type: 'code',
-      scope: 'identify guilds.members.read'
-    });
-  }
+ function loginDiscord() {
+  const redirectUri = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
+  const clientId = '1505897669334138940';
+  const scope = 'identify guilds.members.read';
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: scope,
+  });
+
+  location.href = 'https://discord.com/oauth2/authorize?' + params.toString();
+}
 
   async function handleOAuth(){
     const params = new URLSearchParams(location.search);
