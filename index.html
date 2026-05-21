@@ -780,14 +780,12 @@
 // ------------------ CORE LOADER ------------------
 
 async function init(){
-    // initNav(); // تم تعطيل هذا السطر لحل مشكلة عدم استجابة زر الديسكورد
-    if (isNew()) {
-        qs('#closeModalBtn').onclick = closeModal;
-        qs('#modalCancelBtn').onclick = closeModal;
-        qs('#mobileMenuBtn').onclick = () => { qs('#sidebar').classList.toggle('open'); };
-        qs('#logoutBtn').onclick = () => { ClearSession(); location.reload(); };
-        qs('#discordLoginBtn').onclick = loginDiscord;
-    }
+    // initNav();
+    qs('#closeModalBtn').onclick = closeModal;
+    qs('#modalCancelBtn').onclick = closeModal;
+    qs('#mobileMenuBtn').onclick = () => { qs('#sidebar').classList.toggle('open'); };
+    qs('#logoutBtn').onclick = () => { ClearSession(); location.reload(); };
+    qs('#discordLoginBtn').onclick = loginDiscord;
 
     setInterval(() => { qs('#clock').textContent = new Date().toLocaleString(); }, 1000);
 
