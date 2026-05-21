@@ -273,6 +273,8 @@
 
   // ═══════════════════════════ SESSION ══════════════════════════
   function saveSession(user,admin,token){
+    // Session expires in 12 hours — Discord tokens typically last ~7 days
+    // but we re-validate role from server on every boot anyway
     localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, token, ts:Date.now() }));
     currentUser=user; isAdmin=admin; accessToken=token;
   }
@@ -280,18 +282,42 @@
     try {
       const s = JSON.parse(localStorage.getItem('lspd_session')||'null');
       if(!s) return false;
-      if(Date.now()-s.ts > 7*24*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
+      // Session max age: 12 hours (roles can change; we re-verify below)
+      if(Date.now()-s.ts > 12*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
       currentUser=s.user; isAdmin=s.isAdmin; accessToken=s.token;
       return true;
     } catch{ return false; }
   }
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
+  // Re-validate roles from server on every app boot
+  // This ensures that if someone's Discord role is removed, they lose access immediately
+  async function validateSessionWithServer(){
+    if(!accessToken) return false;
+    try {
+      const r = await api('GET', '/api/me');
+      if(!r.ok){
+        // Server rejected the token (no longer authorized)
+        clearSession();
+        return false;
+      }
+      // Update isAdmin from server truth — not from localStorage
+      isAdmin = r.isAdmin === true;
+      if(currentUser) currentUser = { ...currentUser, ...r.user };
+      // Refresh the stored session with updated role
+      saveSession(currentUser, isAdmin, accessToken);
+      return true;
+    } catch(e){
+      console.error('Session validation failed:', e);
+      return false;
+    }
+  }
+
   // ═══════════════════════════ DISCORD OAUTH ════════════════════
   function loginDiscord() {
     const redirectUri = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
     const clientId = '1505897669334138940';
-    const scope = 'identify guilds.members.read';
+    const scope = 'identify';   // Only "identify" needed — guild check done via Bot Token server-side
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -1068,6 +1094,15 @@
 
     const loggedIn = await handleOAuth() || loadSession();
     if(loggedIn){
+      // Always re-validate roles from Discord API — prevents bypass via localStorage tampering
+      const serverOk = await validateSessionWithServer();
+      if(!serverOk){
+        // Token rejected by server (role removed, kicked from server, token expired)
+        qs('#loginContainer').style.display = 'grid';
+        qs('#appContainer').style.display   = 'none';
+        qs('#loginMessage').textContent = 'Session expired or access revoked. Please login again.';
+        return;
+      }
       bootApp();
       await loadAllData();
       navigate('dashboard');
