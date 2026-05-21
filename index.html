@@ -582,20 +582,74 @@
     };
 
     function renderUniforms(){
-      const rows = store.uniforms.map(u=>`
-        <tr><td><b>${esc(u.rank)}</b></td><td>${esc(u.male)}</td><td>${esc(u.female)}</td><td>
-          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
-        </td></tr>`).join('');
-      qs('#uniform').innerHTML = `
-        <div class="card">
-          <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
-            ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
-          </div>
-          <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-          <tbody>${rows}</tbody></table></div></div>`;
-    }
+  const rows = store.uniforms.map(u=>`
+    <tr><td><b>${esc(u.rank)}</b></td><td>${esc(u.male)}</td><td>${esc(u.female)}</td><td>
+      ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
+      <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
+    </td></tr>`).join('');
 
+  qs('#uniform').innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
+
+        ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
+      </div>
+
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Male Uniform</th>
+              <th>Female Uniform</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+/* ===========================
+   ADD THIS DIRECTLY BELOW
+=========================== */
+
+function renderCodes(){
+  const rows = (store.codes || []).map(c => `
+    <tr>
+      <td><b>${esc(c.code)}</b></td>
+      <td>${esc(c.description)}</td>
+      <td>${esc(c.priority || 'info')}</td>
+    </tr>
+  `).join('');
+
+  qs('#codes').innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3><i class="ti ti-radio"></i> Police Codes</h3>
+      </div>
+
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Description</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
     window.deleteUniform = async id => {
       if(!confirm('Delete Uniform configuration?')) return;
       const r = await api('DELETE','/api/uniforms',{ id });
