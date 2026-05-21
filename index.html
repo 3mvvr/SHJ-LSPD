@@ -325,18 +325,18 @@
   // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
   const PAGE_RENDERERS = {
     dashboard:    renderDashboard,
-    officers:     renderOfficers,
+    officers:      renderOfficers,
     ranks:        renderRanks,
     points:       renderPoints,
-    laws:         renderLaws,
+    laws:          renderLaws,
     uniform:      renderUniforms,
     codes:        renderCodes,
     wanted:       renderWanted,
     cases:        renderCases,
     reports:      renderReports,
     discordUsers: renderDiscordUsers,
-    logs:         renderLogs,
-    settings:     renderSettings,
+    logs:          renderLogs,
+    settings:      renderSettings,
   };
 
   function navigate(pageId){
@@ -453,10 +453,14 @@
 
   function renderRanks(){
     const rows = store.ranks.map(r=>`
-      <tr><td><b>${esc(r.name)}</b></td><td>${r.pointsReq} pts</td><td>
-        ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})"><i class="ti ti-trash"></i></button>`:''}
-      </td></tr>`).join('');
+      <tr>
+        <td><b>${esc(r.name)}</b></td>
+        <td>${r.pointsReq} pts</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
     qs('#ranks').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
@@ -601,207 +605,53 @@
       <div class="form-group"><label>Female Uniform Strings</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = { rank: qs('#uniRank').value, male: qs('#uniMale').value, female: qs('#uniFemale').value };
-      const res = await api(id ? 'PUT' : 'POST', '/api/uniforms', id ? { id, ...payload } : payload);
-      if(res.ok){ await loadAllData(); renderUniforms(); closeModal(); toast('Uniform Guard Updated ✓'); }
+      if(id){
+        const r = await api('PUT','/api/uniforms',{ id, ...payload });
+        if(r.ok){ const idx=store.uniforms.findIndex(x=>x.id===id); if(idx!==-1) store.uniforms[idx]=r.data; }
+      } else {
+        const r = await api('POST','/api/uniforms', payload);
+        if(r.ok) store.uniforms.push(r.data);
+      }
+      renderUniforms(); closeModal(); toast('Saved ✓');
     };
     openModal();
   };
 
-  function renderCodes(){
-    const rows = store.codes.map(c=>`
-      <tr><td><span class="badge badge-${c.priority}">${esc(c.code)}</span></td><td>${esc(c.description)}</td><td>
-        ${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteCode(${c.id})"><i class="ti ti-trash"></i></button>`:''}
-      </td></tr>`).join('');
-    qs('#codes').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-radio"></i> Police Radio Codes</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openCodeModal()"><i class="ti ti-plus"></i> Add Code</button>':''}
-        </div>
-        <div class="card-body"><table><thead><tr><th>Code</th><th>Description</th><th>Actions</th></tr></thead>
-        <tbody>${rows}</tbody></table></div></div>`;
+  function renderCodes() { qs('#codes').innerHTML = `<div class="card"><div class="card-body"><h3>Police Codes</h3></div></div>`; }
+  function renderWanted() { qs('#wanted').innerHTML = `<div class="card"><div class="card-body"><h3>Wanted & Impound Logs</h3></div></div>`; }
+  function renderCases() { qs('#cases').innerHTML = `<div class="card"><div class="card-body"><h3>Cases System</h3></div></div>`; }
+  function renderReports() { qs('#reports').innerHTML = `<div class="card"><div class="card-body"><h3>Reports Center</h3></div></div>`; }
+  function renderDiscordUsers() { qs('#discordUsers').innerHTML = `<div class="card"><div class="card-body"><h3>Discord Users Management</h3></div></div>`; }
+  function renderLogs() { qs('#logs').innerHTML = `<div class="card"><div class="card-body"><h3>System Activity Logs</h3></div></div>`; }
+  function renderSettings() { qs('#settings').innerHTML = `<div class="card"><div class="card-body"><h3>System Settings</h3></div></div>`; }
+
+  // ═══════════════════════════ CORE LOADER ═══════════════════════════
+  function initNav() {
+    qsa('.nav button').forEach(btn => {
+      btn.onclick = () => navigate(btn.dataset.page);
+    });
   }
 
-  window.deleteCode = async id => {
-    if(!confirm('Delete Code?')) return;
-    const r = await api('DELETE','/api/codes',{ id });
-    if(r.ok){ store.codes = store.codes.filter(x=>x.id!==id); renderCodes(); toast('Deleted','#ff5a67'); }
-  };
-  window.openCodeModal = () => {
-    qs('#modalTitle').textContent = 'Add Radio Code';
-    qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Code (e.g. 10-4)</label><input id="cdCode"></div>
-      <div class="form-group"><label>Description</label><input id="cdDesc"></div>
-      <div class="form-group"><label>Priority</label><select id="cdPriority"><option>info</option><option>warning</option><option>danger</option></select></div>`;
-    qs('#modalConfirmBtn').onclick = async () => {
-      const payload = { code: qs('#cdCode').value, description: qs('#cdDesc').value, priority: qs('#cdPriority').value };
-      const r = await api('POST','/api/codes', payload);
-      if(r.ok){ store.codes.push(r.data); renderCodes(); closeModal(); toast('Code Added'); }
-    };
-    openModal();
-  };
-
-  function renderWanted(){
-    const wRows = store.wanted.map(w=>`
-      <tr><td><b>${esc(w.name)}</b></td><td>${esc(w.plate||'-')}</td><td>${esc(w.reason)}</td><td>${esc(w.by)}</td><td>
-        <button class="btn btn-sm btn-success" onclick="removeWanted(${w.id})">Clear</button>
-      </td></tr>`).join('');
-    const iRows = store.impound.map(i=>`
-      <tr><td><b>${esc(i.plate)}</b></td><td>${esc(i.model)}</td><td>${esc(i.reason)}</td><td>${i.fee} AED</td><td>
-        <button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})">Release</button>
-      </td></tr>`).join('');
-
-    qs('#wanted').innerHTML = `
-      <div class="card"><div class="card-header"><h3>🚨 Active Wanted List</h3><button class="btn btn-danger" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button></div>
-      <div class="card-body"><table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Issued By</th><th>Actions</th></tr></thead><tbody>${wRows||'<tr><td colspan="5">No active alerts</td></tr>'}</tbody></table></div></div>
-      <div class="card"><div class="card-header"><h3>🚧 Vehicle Impound Yard</h3><button class="btn btn-warning" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Impound Vehicle</button></div>
-      <div class="card-body"><table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fine Fee</th><th>Actions</th></tr></thead><tbody>${iRows||'<tr><td colspan="5">Yard Empty</td></tr>'}</tbody></table></div></div>`;
-  }
-
-  window.removeWanted = async id => {
-    const r = await api('DELETE','/api/wanted',{ id });
-    if(r.ok){ store.wanted=store.wanted.filter(x=>x.id!==id); renderWanted(); toast('Cleared ✓'); }
-  };
-  window.openWantedModal = () => {
-    qs('#modalTitle').textContent = 'Issue Wanted Alert';
-    qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Subject Name</label><input id="wName"></div>
-      <div class="form-group"><label>Vehicle Plate (Optional)</label><input id="wPlate"></div>
-      <div class="form-group"><label>Reason / Charges</label><textarea id="wReason"></textarea></div>`;
-    qs('#modalConfirmBtn').onclick = async () => {
-      const payload = { name: qs('#wName').value, plate: qs('#wPlate').value, reason: qs('#wReason').value };
-      const r = await api('POST','/api/wanted', payload);
-      if(r.ok){ store.wanted.unshift(r.data); renderWanted(); closeModal(); toast('Alert Issued'); }
-    };
-    openModal();
-  };
-
-  window.releaseImpound = async id => {
-    const r = await api('DELETE','/api/impound',{ id });
-    if(r.ok){ store.impound=store.impound.filter(x=>x.id!==id); renderWanted(); toast('Released ✓'); }
-  };
-  window.openImpoundModal = () => {
-    qs('#modalTitle').textContent = 'Impound Vehicle';
-    qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Plate Number</label><input id="impPlate"></div>
-      <div class="form-group"><label>Vehicle Model</label><input id="impModel"></div>
-      <div class="form-group"><label>Seizure Reason</label><input id="impReason"></div>
-      <div class="form-group"><label>Release Fee (AED)</label><input id="impFee" type="number" value="1000"></div>`;
-    qs('#modalConfirmBtn').onclick = async () => {
-      const payload = { plate: qs('#impPlate').value, model: qs('#impModel').value, reason: qs('#impReason').value, fee: parseInt(qs('#impFee').value)||0 };
-      const r = await api('POST','/api/impound', payload);
-      if(r.ok){ store.impound.unshift(r.data); renderWanted(); closeModal(); toast('Vehicle Registered'); }
-    };
-    openModal();
-  };
-
-  function renderCases(){
-    const rows = store.cases.map(c=>`
-      <tr><td><b>Case #${c.id.toString().slice(-4)}</b></td><td>${esc(c.title)}</td><td><span class="badge badge-info">${c.status}</span></td><td>${esc(c.by)}</td><td>${fmtTime(c.time)}</td><td>
-        <button class="btn btn-sm" onclick="viewCase(${c.id})"><i class="ti ti-eye"></i></button>
-      </td></tr>`).join('');
-    qs('#cases').innerHTML = `
-      <div class="card"><div class="card-header"><h3>📁 Criminal & Investigation Cases</h3><button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> File New Case</button></div>
-      <div class="card-body"><table><thead><tr><th>Case ID</th><th>Title</th><th>Status</th><th>Filer</th><th>Date</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No files filed</td></tr>'}</tbody></table></div></div>`;
-  }
-
-  window.openCaseModal = () => {
-    qs('#modalTitle').textContent = 'File Investigation Case';
-    qs('#modalBody').innerHTML = `<div class="form-group"><label>Case Title</label><input id="csTitle"></div><div class="form-group"><label>Full Incident Log & Details</label><textarea id="csDesc" style="min-height:200px"></textarea></div>`;
-    qs('#modalConfirmBtn').onclick = async () => {
-      const r = await api('POST','/api/cases',{ title: qs('#csTitle').value, description: qs('#csDesc').value });
-      if(r.ok){ store.cases.unshift(r.data); renderCases(); closeModal(); toast('Case Filed'); }
-    };
-    openModal();
-  };
-  window.viewCase = id => {
-    const c = store.cases.find(x=>x.id===id); if(!c) return;
-    qs('#modalTitle').textContent = `Case Details — By ${c.by}`;
-    qs('#modalBody').innerHTML = `<h4>${esc(c.title)}</h4><p style="margin-top:12px; white-space:pre-wrap; background:#070b13; padding:16px; border-radius:12px; color:#cdd9ed">${esc(c.description)}</p>`;
-    qs('#modalConfirmBtn').onclick = closeModal;
-    openModal();
-  };
-
-  function renderReports(){
-    const rows = store.reports.map(r=>`
-      <div class="officer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <div style="display:flex;justify-content:space-between;width:100%"><b>${esc(r.title)}</b><span style="font-size:12px;color:#8fa0bd">${fmtTime(r.time)}</span></div>
-        <p style="color:#8fa0bd;font-size:13px;white-space:pre-wrap">${esc(r.body)}</p>
-        <div style="font-size:11px;color:#53617a">Submitted by: ${esc(r.by)}</div>
-      </div><div class="divider"></div>`).join('');
-    qs('#reports').innerHTML = `
-      <div class="card"><div class="card-header"><h3>📝 Officer Daily Reports</h3><button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> Submit Report</button></div>
-      <div class="card-body">${rows||'<p style="color:#8fa0bd">No reports recorded today.</p>'}</div></div>`;
-  }
-
-  window.openReportModal = () => {
-    qs('#modalTitle').textContent = 'Submit Activity Report';
-    qs('#modalBody').innerHTML = `<div class="form-group"><label>Report Header</label><input id="rpTitle" placeholder="e.g. Patrol Shift Report"></div><div class="form-group"><label>Details</label><textarea id="rpBody" style="min-height:150px"></textarea></div>`;
-    qs('#modalConfirmBtn').onclick = async () => {
-      const r = await api('POST','/api/reports',{ title: qs('#rpTitle').value, body: qs('#rpBody').value });
-      if(r.ok){ store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report Submitted ✓'); }
-    };
-    openModal();
-  };
-
-  function renderDiscordUsers(){
-    const rows = store.users.map(u=>`<tr><td><b>${esc(u.username)}</b></td><td><code>${u.id}</code></td><td>${u.isAdmin?'Admin':'Officer'}</td><td>${fmtTime(u.lastLogin)}</td></tr>`).join('');
-    qs('#discordUsers').innerHTML = `
-      <div class="card"><div class="card-header"><h3>👥 Synchronized Discord Accounts</h3></div>
-      <div class="card-body"><table><thead><tr><th>Username</th><th>Discord Snowflake ID</th><th>System Role</th><th>Last Login</th></tr></thead><tbody>${rows||'<tr><td colspan="4">No users synced</td></tr>'}</tbody></table></div></div>`;
-  }
-
-  function renderLogs(){
-    const rows = store.activity.map(a=>`<tr><td><code>${fmtTime(a.time)}</code></td><td>${esc(a.msg)}</td><td><span class="badge badge-info">${esc(a.type||'info')}</span></td></tr>`).join('');
-    qs('#logs').innerHTML = `
-      <div class="card"><div class="card-header"><h3>⚙️ Core System Activity Logs</h3></div>
-      <div class="card-body"><table><thead><tr><th>Timestamp</th><th>Log Message</th><th>Category</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
-  }
-
-  function renderSettings(){
-    qs('#settings').innerHTML = `
-      <div class="card"><div class="card-header"><h3>🔧 System Core Settings</h3></div>
-      <div class="card-body">
-        <div class="form-group"><label>Discord Audit Log Webhook URL</label><input id="stWebhook" value="${esc(store.settings?.webhookUrl)}"></div>
-        <div class="form-group" style="display:flex;align-items:center;gap:12px;margin-top:24px">
-          <input type="checkbox" id="stLogs" style="width:20px;height:20px" ${store.settings?.logsEnabled?'checked':''}>
-          <label for="stLogs" style="margin-bottom:0;cursor:pointer">Forward events and updates to Discord Webhook</label>
-        </div>
-        <button class="btn btn-primary" style="margin-top:24px" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Configurations</button>
-      </div></div>`;
-  }
-
-  window.saveSettings = async () => {
-    if(!isAdmin) return toast('Permission Denied','#ff5a67');
-    const payload = { webhookUrl: qs('#stWebhook').value, logsEnabled: qs('#stLogs').checked };
-    const r = await api('POST','/api/settings', payload);
-    if(r.ok){ store.settings = payload; toast('Settings Saved Systematically'); }
-  };
-
-// ------------------ CORE LOADER ------------------
-
-async function init(){
-    // initNav();
+  async function init(){
+    initNav();
     qs('#closeModalBtn').onclick = closeModal;
     qs('#modalCancelBtn').onclick = closeModal;
     qs('#mobileMenuBtn').onclick = () => { qs('#sidebar').classList.toggle('open'); };
-    qs('#logoutBtn').onclick = () => { ClearSession(); location.reload(); };
+    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
     qs('#discordLoginBtn').onclick = loginDiscord;
 
     setInterval(() => { qs('#clock').textContent = new Date().toLocaleString(); }, 1000);
 
-    const hasCode = await handleAuth();
-    if(hasCode || LoadSession()){
-        hideApp();
-        await loadAllData();
-        renderAll();
+    const hasCode = await handleOAuth();
+    if(hasCode || loadSession()){
+      bootApp();
+      await loadAllData();
+      renderDashboard();
     }
-}
-window.addEventListener('DOMContentLoaded', init);
+  }
 
-// حل مشكلة الدالة غير المعرفة لمنع توقف الزر عن العمل
-function initNav() {
-    console.log("Navigation initialized successfully.");
-}
+  window.addEventListener('DOMContentLoaded', init);
+})();
 </script>
 </body>
 </html>
