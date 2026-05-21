@@ -288,7 +288,6 @@
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
   // ═══════════════════════════ DISCORD OAUTH ════════════════════
-  // تم تعديل loginDiscord لاستخدام redirect_uri الثابت المتطابق مع Worker
   function loginDiscord() {
     const redirectUri = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
     const clientId = '1505897669334138940';
@@ -304,17 +303,14 @@
     location.href = 'https://discord.com/oauth2/authorize?' + params.toString();
   }
 
-  // تم تعديل handleOAuth لاستقبال البيانات من query string (بدلاً من fetch)
   async function handleOAuth() {
     const params = new URLSearchParams(location.search);
     const accessToken = params.get('access_token');
     const userParam = params.get('user');
     const isAdminParam = params.get('isAdmin');
 
-    // إذا لم توجد المعاملات، ربما تكون جلسة قديمة أو لا توجد عملية OAuth جارية
     if (!accessToken || !userParam) return false;
 
-    // تنظيف الرابط من المعاملات
     history.replaceState({}, '', location.pathname);
 
     try {
@@ -425,7 +421,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td><tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td></tr>'}</tbody>
         </table>
         </div>
       </div>`;
@@ -499,7 +495,7 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
         <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td><tr>'}</tbody></table></div></div>`;
+        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td></tr>'}</tbody></table></div></div>`;
   }
 
   window.deleteRank = async id => {
@@ -546,8 +542,8 @@
         <div class="card-header"><h3><i class="ti ti-chart-bar"></i> Points Management</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openPointsModal()"><i class="ti ti-adjustments"></i> Adjust Points</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td><tr>'}</tbody></table></div></div>`;
+        <div class="card-body"></table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td></tr>'}</tbody></table></div></div>`;
   }
 
   window.openPointsModal = () => {
@@ -646,7 +642,7 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
         <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td><tr>'}</tbody></table></div></div>`;
+        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td></tr>'}</tbody></table></div></div>`;
   }
 
   window.deleteUniform = async id => {
@@ -704,7 +700,7 @@
         <div class="card-body">
           <table>
             <thead><tr><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td><tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
@@ -778,7 +774,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody>${wRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td><tr>'}</tbody></table>
+          <tbody>${wRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td></tr>'}</tbody></table>
         </div>
       </div>
       <div class="card">
@@ -787,7 +783,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td><tr>'}</tbody></table>
+          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -867,8 +863,8 @@
           <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th><tr></thead>
-          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td><tr>'}</tbody></table>
+          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -927,7 +923,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td><tr>'}</tbody></table>
+          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -972,7 +968,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td><tr>'}</tbody></table>
+          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -992,7 +988,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td><tr>'}</tbody></table>
+          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
