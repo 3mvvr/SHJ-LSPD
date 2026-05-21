@@ -1,619 +1,711 @@
-// ============================================================
-//  SHJ-LSPD Worker — Cloudflare KV Persistent Storage
-//  KV Namespace binding name: LSPD_DATA
-// ============================================================
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHJ LSPD | Complete Police Command System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',system-ui,sans-serif; background:#070b13; color:#edf3ff; min-height:100vh; }
+    body::before { content:''; position:fixed; inset:0;
+      background: radial-gradient(circle at 20% 30%,rgba(47,124,255,.12),transparent 55%),
+                  radial-gradient(circle at 85% 70%,rgba(243,199,90,.08),transparent 50%);
+      pointer-events:none; z-index:-1; }
 
-const ROLE_OFFICER      = '1504910116804100337';
-const ROLE_ADMIN        = '1504903024794140672';
-const GUILD_ID_DEFAULT  = '1154498662286770179';
-const CLIENT_ID         = '1505897669334138940';
-const CLIENT_SECRET     = 'yqYGsdaOpruOm6AbSBR_VeSW1t7kpBcF';
-const BOT_TOKEN         = 'MTUwNTg5NzY2OTMzNDEzODk0MA.GXCVLV.-D2jr9MprgpSUCiUqo5wPG-DTU9WWivf1kEzVk';
+    .app { display:grid; grid-template-columns:280px 1fr; min-height:100vh; }
+    .sidebar { background:rgba(10,15,25,.92); backdrop-filter:blur(16px);
+      border-right:1px solid rgba(255,255,255,.08); padding:24px 16px;
+      position:sticky; top:0; height:100vh; overflow-y:auto; z-index:10; }
 
-// ── KV Keys ──────────────────────────────────────────────────
-const KEY = {
-  officers:   'officers',
-  discipline: 'discipline',
-  promotions: 'promotions',
-  reports:    'reports',
-  cases:      'cases',
-  wanted:     'wanted',
-  impound:    'impound',
-  laws:       'laws',
-  uniforms:   'uniforms',
-  codes:      'codes',
-  ranks:      'ranks',
-  pointsLog:  'pointsLog',
-  users:      'users',
-  activity:   'activity',
-  settings:   'settings',
-};
+    .brand { display:flex; align-items:center; gap:12px; margin-bottom:32px;
+      padding-bottom:16px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .brand-icon { width:48px; height:48px; background:#0b1730; border:2px solid #f3c75a;
+      border-radius:50%; display:grid; place-items:center; font-size:26px; }
+    .brand h1 { font-size:18px; font-weight:800; }
+    .brand p  { font-size:11px; color:#8fa0bd; }
 
-// ── Default seed data ────────────────────────────────────────
-const DEFAULTS = {
-  officers: [
-    { id: 1, name: 'John Hartley',    badge: 100, rank: 'Chief of Police', dept: 'LSPD', section: 'Command', discord: '', points: 30, status: 'active' },
-    { id: 2, name: 'Michael Kane',    badge: 200, rank: 'Captain',          dept: 'LSPD', section: 'Command', discord: '', points: 24, status: 'active' },
-    { id: 3, name: 'Sarah Williams',  badge: 300, rank: 'Sergeant',         dept: 'LSPD', section: 'Patrol',  discord: '', points: 18, status: 'active' },
-  ],
-  ranks: [
-    { id: 1, name: 'Cadet',           pointsReq: 0  },
-    { id: 2, name: 'Officer I',       pointsReq: 5  },
-    { id: 3, name: 'Officer II',      pointsReq: 10 },
-    { id: 4, name: 'Sergeant',        pointsReq: 15 },
-    { id: 5, name: 'Captain',         pointsReq: 20 },
-    { id: 6, name: 'Chief of Police', pointsReq: 30 },
-  ],
-  laws: [
-    { id: 1, title: 'General Conduct', content: 'Respect higher ranks and follow orders at all times.' },
-  ],
-  uniforms: [
-    { id: 1, rank: 'Cadet', male: 'Torso:55, Pants:35', female: 'Torso:60, Pants:40' },
-  ],
-  codes: [
-    { id: 1, code: '10-4', description: 'Message received', priority: 'info' },
-    { id: 2, code: '10-7', description: 'Out of service',   priority: 'warning' },
-  ],
-  settings: { webhookUrl: '', logsEnabled: true },
-  discipline: [], promotions: [], reports: [], cases: [],
-  wanted: [], impound: [], pointsLog: [], users: [],
-  activity: [{ id: 'init', msg: 'System initialized (KV)', time: Date.now() }],
-};
+    .nav-title { font-size:11px; font-weight:800; text-transform:uppercase;
+      letter-spacing:1px; color:#53617a; margin:24px 0 12px 8px; }
+    .nav button { width:100%; text-align:left; background:transparent; border:none;
+      color:#8fa0bd; padding:12px 16px; border-radius:14px; font-weight:600;
+      display:flex; align-items:center; gap:12px; cursor:pointer; transition:.2s; margin-bottom:6px; }
+    .nav button i { font-size:20px; }
+    .nav button.active,.nav button:hover { background:rgba(47,124,255,.12); color:white; }
 
-// ── KV Helpers ───────────────────────────────────────────────
-async function kvGet(env, key) {
-  const raw = await env.LSPD_DATA.get(key);
-  if (raw === null) return DEFAULTS[key] ?? null;
-  try { return JSON.parse(raw); } catch { return DEFAULTS[key] ?? null; }
-}
+    .main { min-width:0; }
+    .top-bar { height:70px; background:rgba(7,11,19,.7); backdrop-filter:blur(12px);
+      border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center;
+      justify-content:space-between; padding:0 32px; position:sticky; top:0; z-index:10; }
+    .user-info { display:flex; align-items:center; gap:16px; }
+    .avatar { width:42px; height:42px; background:linear-gradient(135deg,#2f7cff,#9c4dff);
+      border-radius:50%; display:grid; place-items:center; font-weight:bold; overflow:hidden; }
+    .avatar img { width:100%; height:100%; object-fit:cover; }
+    .role-badge { background:rgba(243,199,90,.15); border:1px solid rgba(243,199,90,.3);
+      border-radius:40px; padding:4px 12px; font-size:12px; font-weight:600; color:#f3c75a; }
 
-async function kvPut(env, key, value) {
-  await env.LSPD_DATA.put(key, JSON.stringify(value));
-}
+    .content { padding:28px 32px; max-width:1600px; }
+    .page { display:none; animation:fadeIn .25s ease; }
+    .page.active { display:block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
 
-async function kvGetAll(env) {
-  const keys = Object.values(KEY);
-  const results = await Promise.all(keys.map(k => kvGet(env, k)));
-  const out = {};
-  keys.forEach((k, i) => { out[k] = results[i]; });
-  return out;
-}
+    .card { background:rgba(16,24,39,.8); backdrop-filter:blur(4px);
+      border:1px solid rgba(255,255,255,.08); border-radius:24px; overflow:hidden; margin-bottom:28px; }
+    .card-header { padding:18px 24px; border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+    .card-header h3 { font-size:18px; font-weight:700; }
+    .card-body { padding:24px; }
 
-async function addLog(env, message, meta = {}) {
-  const logs = await kvGet(env, KEY.activity);
-  logs.unshift({ id: crypto.randomUUID(), msg: message, time: Date.now(), ...meta });
-  if (logs.length > 500) logs.length = 500;
-  await kvPut(env, KEY.activity, logs);
-}
+    .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:32px; }
+    .stat-card { background:rgba(16,24,39,.6); border:1px solid rgba(255,255,255,.08);
+      border-radius:20px; padding:20px; text-align:center; transition:.2s; }
+    .stat-card i { font-size:32px; color:#2f7cff; margin-bottom:12px; }
+    .stat-card .value { font-size:32px; font-weight:800; }
+    .stat-card .label { color:#8fa0bd; font-size:13px; margin-top:4px; }
 
-// ── HTTP Helpers ─────────────────────────────────────────────
-function cors() {
-  return {
-    'Access-Control-Allow-Origin':  '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age':       '86400',
+    table { width:100%; border-collapse:collapse; }
+    th,td { text-align:left; padding:14px 8px; border-bottom:1px solid rgba(255,255,255,.06); }
+    th { color:#8fa0bd; font-weight:600; font-size:12px; text-transform:uppercase; }
+
+    .officer-row { display:flex; justify-content:space-between; align-items:center;
+      padding:14px 0; border-bottom:1px solid rgba(255,255,255,.08); }
+    .officer-row:last-child { border-bottom:none; }
+    .divider { height:1px; background:rgba(255,255,255,.06); margin:12px 0; }
+
+    .btn { border:none; border-radius:12px; padding:8px 16px; font-weight:600; cursor:pointer;
+      display:inline-flex; align-items:center; gap:8px; transition:.2s;
+      background:rgba(255,255,255,.05); color:white; }
+    .btn-primary { background:linear-gradient(135deg,#2f7cff,#7258ff); }
+    .btn-danger  { background:rgba(255,90,103,.2); color:#ff5a67; border:1px solid rgba(255,90,103,.3); }
+    .btn-warning { background:rgba(243,199,90,.15); color:#f3c75a; border:1px solid rgba(243,199,90,.3); }
+    .btn-success { background:rgba(46,204,113,.15); color:#2ecc71; border:1px solid rgba(46,204,113,.3); }
+    .btn-sm { padding:6px 12px; font-size:12px; }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    .form-group { margin-bottom:20px; }
+    .form-group label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:#8fa0bd; }
+    input,select,textarea { width:100%; background:#0b1220; border:1px solid rgba(255,255,255,.12);
+      border-radius:14px; padding:12px 14px; color:white; font-family:inherit; }
+    textarea { resize:vertical; min-height:80px; }
+
+    .modal { position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(8px);
+      display:none; place-items:center; z-index:1000; }
+    .modal.open { display:grid; }
+    .modal-content { background:#101827; border:1px solid rgba(255,255,255,.1);
+      border-radius:28px; width:min(650px,90%); max-height:85vh; overflow-y:auto; }
+    .modal-header,.modal-footer { padding:18px 24px; border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; justify-content:space-between; align-items:center; }
+    .modal-footer { border-bottom:none; border-top:1px solid rgba(255,255,255,.08); justify-content:flex-end; gap:12px; }
+    .modal-body { padding:24px; }
+
+    .toast { position:fixed; bottom:24px; left:24px; background:#1b2942;
+      border-left:4px solid #2f7cff; padding:12px 20px; border-radius:12px;
+      display:none; z-index:1100; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+    .toast.show { display:block; }
+
+    .login-container { min-height:100vh; display:grid; place-items:center; padding:24px; }
+    .login-card { max-width:460px; background:linear-gradient(145deg,#101827,#070b13);
+      border:1px solid rgba(255,255,255,.1); border-radius:32px; padding:40px 32px;
+      text-align:center; box-shadow:0 24px 48px rgba(0,0,0,.4); }
+
+    .spinner { display:inline-block; width:18px; height:18px; border:2px solid rgba(255,255,255,.2);
+      border-top-color:white; border-radius:50%; animation:spin .6s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+    .badge-active  { background:rgba(46,204,113,.15); color:#2ecc71; }
+    .badge-inactive{ background:rgba(255,90,103,.15); color:#ff5a67; }
+    .badge-info    { background:rgba(52,152,219,.15); color:#3498db; }
+    .badge-warning { background:rgba(243,199,90,.15); color:#f3c75a; }
+    .badge-danger  { background:rgba(255,90,103,.15); color:#ff5a67; }
+
+    .points-bar { height:6px; background:#1b2942; border-radius:99px; overflow:hidden; margin-top:4px; }
+    .points-bar-fill { height:100%; background:linear-gradient(90deg,#2f7cff,#7258ff); border-radius:99px; }
+
+    .mobile-menu { display:none; }
+    @media(max-width:800px){
+      .app { grid-template-columns:1fr; }
+      .sidebar { position:fixed; right:-280px; transition:.2s; height:100vh; z-index:20; }
+      .sidebar.open { right:0; }
+      .mobile-menu { display:inline-flex; }
+      .stats-grid { grid-template-columns:1fr 1fr; }
+      .content { padding:20px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="loginContainer" class="login-container">
+  <div class="login-card">
+    <div style="width:80px;height:80px;background:#0b1730;border:2px solid #f3c75a;border-radius:50%;display:grid;place-items:center;font-size:40px;margin:0 auto 20px">🛡️</div>
+    <h1 style="font-size:28px;font-weight:900">SHJ LSPD</h1>
+    <p style="color:#8fa0bd;margin:8px 0 24px">Complete Police Management System</p>
+    <button id="discordLoginBtn" class="btn btn-primary" style="width:100%;justify-content:center">
+      <i class="ti ti-brand-discord"></i> Login with Discord
+    </button>
+    <p id="loginMessage" style="margin-top:16px;font-size:13px;color:#8fa0bd"></p>
+  </div>
+</div>
+
+<div id="appContainer" class="app" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div><h1>SHJ LSPD</h1><p>Command Center</p></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-title">Main</div>
+      <button class="active" data-page="dashboard"><i class="ti ti-dashboard"></i> Dashboard</button>
+      <button data-page="officers"><i class="ti ti-users"></i> Officers</button>
+      <button data-page="ranks"><i class="ti ti-stairs-up"></i> Ranks</button>
+      <button data-page="points"><i class="ti ti-chart-bar"></i> Points Logs</button>
+      <button data-page="laws"><i class="ti ti-book"></i> Laws & Rules</button>
+      <button data-page="uniform"><i class="ti ti-shirt"></i> Uniform Guide</button>
+      <button data-page="codes"><i class="ti ti-radio"></i> Police Codes</button>
+      <button data-page="wanted"><i class="ti ti-car"></i> Wanted & Impound</button>
+      <button data-page="cases"><i class="ti ti-folder"></i> Cases</button>
+      <button data-page="reports"><i class="ti ti-file-text"></i> Reports</button>
+      <div class="nav-title">Administration</div>
+      <button data-page="discordUsers"><i class="ti ti-brand-discord"></i> Discord Users</button>
+      <button data-page="logs"><i class="ti ti-history"></i> System Logs</button>
+      <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="top-bar">
+      <button class="btn mobile-menu" id="mobileMenuBtn"><i class="ti ti-menu-2"></i></button>
+      <div><b>Control Panel</b><div id="clock" style="font-size:12px;color:#8fa0bd"></div></div>
+      <div class="user-info">
+        <div class="avatar" id="userAvatar">U</div>
+        <div><b id="userName">User</b><div id="userRole" class="role-badge">Officer</div></div>
+        <button id="logoutBtn" class="btn" style="background:rgba(255,90,103,.15);color:#ff5a67">
+          <i class="ti ti-logout"></i> Logout
+        </button>
+      </div>
+    </div>
+    <div class="content">
+      <div id="dashboard"    class="page active"></div>
+      <div id="officers"     class="page"></div>
+      <div id="ranks"        class="page"></div>
+      <div id="points"       class="page"></div>
+      <div id="laws"         class="page"></div>
+      <div id="uniform"      class="page"></div>
+      <div id="codes"        class="page"></div>
+      <div id="wanted"       class="page"></div>
+      <div id="cases"        class="page"></div>
+      <div id="reports"      class="page"></div>
+      <div id="discordUsers" class="page"></div>
+      <div id="logs"         class="page"></div>
+      <div id="settings"     class="page"></div>
+    </div>
+  </main>
+</div>
+
+<div id="globalModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modalTitle">Modal</h3>
+      <button class="btn btn-sm" id="closeModalBtn">✕</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" id="modalCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="modalConfirmBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+<div id="toastMessage" class="toast"></div>
+
+<script>
+(function(){
+  // ═══════════════════════════ CONFIG ═══════════════════════════
+  const CFG = {
+    WORKER_URL:        'https://lspd.oabbmb.workers.dev',
+    DISCORD_CLIENT_ID: '1505897669334138940',
+    GUILD_ID:          '1154498662286770179',
   };
-}
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors() },
-  });
-}
+  // ═══════════════════════════ STATE ════════════════════════════
+  let currentUser = null;
+  let isAdmin     = false;
+  let accessToken = null;
+  let store = {
+    officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
+    codes:[], wanted:[], impound:[], cases:[], reports:[],
+    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true }
+  };
 
-async function discordFetch(path, token, isBot = false) {
-  return fetch('https://discord.com/api/v10' + path, {
-    headers: { Authorization: (isBot ? 'Bot ' : 'Bearer ') + token },
-  });
-}
+  // ═══════════════════════════ UTILS ════════════════════════════
+  const qs  = (s,p=document) => p.querySelector(s);
+  const qsa = (s,p=document) => [...p.querySelectorAll(s)];
+  function esc(str){ return String(str??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]); }
+  function toast(msg,color='#2f7cff'){
+    const t=qs('#toastMessage');
+    if(t){ t.textContent=msg; t.style.borderLeftColor=color; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'),3000); }
+  }
+  function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-US') : '-'; }
 
-async function verifyToken(request) {
-  const auth = request.headers.get('Authorization') || '';
-  if (!auth.startsWith('Bearer ')) return null;
-  const accessToken = auth.slice(7);
+  // ═══════════════════════════ API ENGINE ══════════════════════════
+  async function api(method, path, body=null){
+    const opts = { method, headers: { 'Content-Type':'application/json' } };
+    if(accessToken) opts.headers['Authorization'] = 'Bearer '+accessToken;
+    if(body) opts.body = JSON.stringify(body);
+    try {
+      const res = await fetch(CFG.WORKER_URL + path, opts);
+      const data = await res.json();
+      if(!data.ok && data.reason) console.warn('API warn:', data.reason);
+      return data;
+    } catch(e){ console.error('API error:', e); return { ok:false, reason: e.message }; }
+  }
 
-  const userRes = await discordFetch('/users/@me', accessToken, false);
-  if (!userRes.ok) return null;
-  const user = await userRes.json();
+  async function loadAllData(){
+    const data = await api('GET', '/api/data');
+    if(data.ok){
+      ['officers','ranks','pointsLog','laws','uniforms','codes',
+       'wanted','impound','cases','reports','users','activity','settings'
+      ].forEach(k => { if(data[k] !== undefined) store[k] = data[k]; });
+    }
+  }
 
-  const memberRes = await discordFetch(
-    `/guilds/${GUILD_ID_DEFAULT}/members/${user.id}`,
-    BOT_TOKEN, true,
-  );
-  if (!memberRes.ok) return null;
-  const member = await memberRes.json();
-  const roles = member.roles || [];
-  const isAdmin   = roles.includes(ROLE_ADMIN);
-  const isOfficer = isAdmin || roles.includes(ROLE_OFFICER);
-  if (!isOfficer) return null;
-  return { user, roles, isAdmin, isOfficer };
-}
+  // ═══════════════════════════ SESSION ══════════════════════════
+  function saveSession(user,admin,token){
+    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, token, ts:Date.now() }));
+    currentUser=user; isAdmin=admin; accessToken=token;
+  }
+  function loadSession(){
+    try {
+      const s = JSON.parse(localStorage.getItem('lspd_session')||'null');
+      if(!s) return false;
+      if(Date.now()-s.ts > 7*24*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
+      currentUser=s.user; isAdmin=s.isAdmin; accessToken=s.token;
+      return true;
+    } catch{ return false; }
+  }
+  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
-async function requireAuth(request) {
-  const ctx = await verifyToken(request);
-  if (!ctx) return [null, json({ ok: false, reason: 'unauthorized' }, 401)];
-  return [ctx, null];
-}
-
-function requireAdmin(ctx) {
-  if (!ctx?.isAdmin) return json({ ok: false, reason: 'forbidden_admin_only' }, 403);
-  return null;
-}
-
-async function readBody(request) {
-  try { return await request.json(); } catch { return {}; }
-}
-
-async function sendWebhook(env, title, description, color = 0x3498db) {
-  const settings = await kvGet(env, KEY.settings);
-  if (!settings?.logsEnabled || !settings?.webhookUrl) return;
-  try {
-    await fetch(settings.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        embeds: [{ title: `🛡️ ${title}`, description, color, timestamp: new Date().toISOString() }],
-      }),
+  // ═══════════════════════════ DISCORD OAUTH ════════════════════
+  function loginDiscord() {
+    // تعديل الرابط بالكامل وتمرير الـ Scopes الصحيحة لحل خطأ الـ Invalid OAuth2
+    const redirect = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
+    location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
+      client_id: CFG.DISCORD_CLIENT_ID, 
+      redirect_uri: redirect,
+      response_type: 'code', 
+      scope: 'identify guilds.members.read'
     });
-  } catch (_) {}
-}
+  }
 
-// ════════════════════════════════════════════════════════════
-//  MAIN FETCH HANDLER
-// ════════════════════════════════════════════════════════════
-export default {
-  async fetch(request, env) {
-    const url  = new URL(request.url);
-    const path = url.pathname.replace(/\/+$/, '') || '/';
+  async function handleOAuth(){
+    const code = new URLSearchParams(location.search).get('code');
+    if(!code) return false;
+    const msg = qs('#loginMessage');
+    if(msg) msg.innerHTML = '<span class="spinner"></span> Logging in...';
+    
+    const redirect = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
+    const res = await fetch(`${CFG.WORKER_URL}/auth?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect)}`);
+    const data = await res.json();
+    if(!data.ok){ if(msg) msg.textContent = 'Login failed: '+(data.reason||'unknown'); return false; }
+    saveSession(data.user, data.isAdmin, data.access_token);
+    history.replaceState({}, '', location.pathname);
+    return true;
+  }
 
-    if (request.method === 'OPTIONS') return new Response(null, { headers: cors() });
+  function bootApp(){
+    qs('#loginContainer').style.display = 'none';
+    qs('#appContainer').style.display   = 'grid';
+    document.body.classList.toggle('is-admin', isAdmin);
+    const av = qs('#userAvatar');
+    if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}">`;
+    else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
+    qs('#userName').textContent = currentUser?.username || 'User';
+    qs('#userRole').textContent = isAdmin ? 'Admin' : 'Officer';
+  }
 
-    if (path === '/' || path === '/health') {
-      return json({ ok: true, service: 'SHJ-LSPD API (KV)', time: Date.now() });
-    }
+  function openModal(){ qs('#globalModal').classList.add('open'); }
+  window.closeModal = () => qs('#globalModal').classList.remove('open');
 
-    // ── Seed / Reset (مفتوح بدون حماية للتجهيز) ──
-    if (path === '/api/seed' && request.method === 'POST') {
-      await Promise.all(Object.keys(DEFAULTS).map(k => kvPut(env, k, DEFAULTS[k])));
-      await addLog(env, 'Database seeded/reset', { by: 'system_init', type: 'seed' });
-      return json({ ok: true, message: 'Database reset to defaults' });
-    }
+  // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
+  const PAGE_RENDERERS = {
+    dashboard:    renderDashboard,
+    officers:     renderOfficers,
+    ranks:        renderRanks,
+    points:       renderPoints,
+    laws:         renderLaws,
+    uniform:      renderUniforms,
+    codes:        renderCodes,
+    wanted:       renderWanted,
+    cases:        renderCases,
+    reports:      renderReports,
+    discordUsers: renderDiscordUsers,
+    logs:         renderLogs,
+    settings:     renderSettings,
+  };
 
-    // ── Full Store Dump (مفتوح مؤقتاً للتأكد من البيانات) ──
-    if (path === '/api/data' && request.method === 'GET') {
-      const data = await kvGetAll(env);
-      return json({ ok: true, ...data });
-    }
+  function navigate(pageId){
+    qsa('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===pageId));
+    qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
+    qs('#sidebar')?.classList.remove('open');
+    PAGE_RENDERERS[pageId]?.();
+  }
 
-    // ── Discord OAuth ────────────────────────────────────────
-    if (path === '/auth' && request.method === 'GET') {
-      const code        = url.searchParams.get('code');
-      const redirectUri = url.searchParams.get('redirect_uri');
-      if (!code || !redirectUri)
-        return json({ ok: false, reason: 'missing_code_or_redirect_uri' }, 400);
+  // ═══════════════════════════ RENDERERS ════════════════════════
+  function renderDashboard(){
+    const o = store.officers;
+    const active = o.filter(x=>x.status==='active').length;
+    qs('#dashboard').innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><i class="ti ti-users"></i><div class="value">${o.length}</div><div class="label">Total Officers</div></div>
+        <div class="stat-card"><i class="ti ti-shield-check"></i><div class="value">${active}</div><div class="label">Active</div></div>
+        <div class="stat-card"><i class="ti ti-stairs-up"></i><div class="value">${store.ranks.length}</div><div class="label">Ranks</div></div>
+        <div class="stat-card"><i class="ti ti-file-text"></i><div class="value">${store.reports.length}</div><div class="label">Reports</div></div>
+      </div>
+      <div class="card"><div class="card-header"><h3><i class="ti ti-users"></i> Officers Overview</h3></div>
+      <div class="card-body">
+        ${o.map(of=>`
+          <div class="officer-row">
+            <div>
+              <b>${esc(of.name)}</b> &nbsp;<span style="color:#8fa0bd;font-size:13px">#${of.badge}</span>
+              <div style="font-size:12px;color:#8fa0bd;margin-top:2px">${esc(of.rank)}</div>
+              <div class="points-bar" style="width:160px"><div class="points-bar-fill" style="width:${Math.min(100,(of.points/30)*100)}%"></div></div>
+            </div>
+            <div style="text-align:right">
+              <span class="badge badge-${of.status==='active'?'active':'inactive'}">${of.status}</span>
+              <div style="font-size:12px;color:#8fa0bd;margin-top:4px">${of.points}/30 pts</div>
+            </div>
+          </div>
+        `).join('<div class="divider"></div>')}
+      </div></div>
+    `;
+  }
 
-      const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: CLIENT_ID, client_secret: CLIENT_SECRET,
-          grant_type: 'authorization_code', code, redirect_uri: redirectUri,
-        }),
-      });
-      if (!tokenRes.ok) {
-        const t = await tokenRes.text();
-        return json({ ok: false, reason: `token_exchange_failed: ${tokenRes.status} ${t.substring(0, 100)}` }, 400);
-      }
-      const { access_token } = await tokenRes.json();
-      const fakeReq = new Request(request.url, { headers: { Authorization: 'Bearer ' + access_token } });
-      const auth = await verifyToken(fakeReq);
-      if (!auth) return json({ ok: false, reason: 'not_allowed_or_not_in_guild' }, 403);
+  function renderOfficers(){
+    const rows = store.officers.map(o=>`
+      <tr>
+        <td><b>${esc(o.name)}</b></td>
+        <td>#${esc(String(o.badge))}</td>
+        <td>${esc(o.rank)}</td>
+        <td>${esc(o.dept||'LSPD')}</td>
+        <td>
+          <div class="points-bar" style="width:80px;display:inline-block">
+            <div class="points-bar-fill" style="width:${Math.min(100,(o.points/30)*100)}%"></div>
+          </div>
+          <span style="font-size:12px;color:#8fa0bd;margin-left:6px">${o.points}/30</span>
+        </td>
+        <td><span class="badge badge-${o.status==='active'?'active':'inactive'}">${o.status}</span></td>
+        <td>
+          ${isAdmin ? `<button class="btn btn-sm btn-warning" onclick="editOfficer(${o.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteOfficer(${o.id})"><i class="ti ti-trash"></i></button>` : ''}
+        </td>
+      </tr>`).join('');
+    qs('#officers').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-users"></i> Officers Management</h3>
+          ${isAdmin ? '<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> Add Officer</button>' : ''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        </div>
+      </div>`;
+  }
 
-      const avatar = auth.user.avatar
-        ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png`
-        : null;
+  window.editOfficer = id => openOfficerModal(id);
+  window.deleteOfficer = async id => {
+    if(!confirm('Delete officer?')) return;
+    const r = await api('DELETE','/api/officers',{ id });
+    if(r.ok){ store.officers = store.officers.filter(o=>o.id!==id); renderOfficers(); renderDashboard(); toast('Officer deleted','#ff5a67'); }
+  };
 
-      const users = await kvGet(env, KEY.users);
-      const existingIdx = users.findIndex(u => u.id === auth.user.id);
-      const userRecord = {
-        id: auth.user.id, username: auth.user.username, avatar,
-        isAdmin: auth.isAdmin, lastLogin: Date.now(),
+  window.openOfficerModal = (id=null) => {
+    const o = id ? store.officers.find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Officer' : 'Add Officer';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Full Name</label><input id="offName" value="${esc(o?.name||'')}"></div>
+      <div class="form-group"><label>Badge #</label><input id="offBadge" value="${esc(String(o?.badge||''))}"></div>
+      <div class="form-group"><label>Rank</label><select id="offRank">
+        ${store.ranks.map(r=>`<option ${o?.rank===r.name?'selected':''}>${esc(r.name)}</option>`).join('')}
+      </select></div>
+      <div class="form-group"><label>Department</label><input id="offDept" value="${esc(o?.dept||'LSPD')}"></div>
+      <div class="form-group"><label>Section</label><input id="offSection" value="${esc(o?.section||'')}"></div>
+      <div class="form-group"><label>Discord ID</label><input id="offDiscord" value="${esc(o?.discord||'')}"></div>
+      <div class="form-group"><label>Points (0-30)</label><input id="offPoints" type="number" min="0" max="30" value="${o?.points||0}"></div>
+      <div class="form-group"><label>Status</label><select id="offStatus">
+        <option ${o?.status==='active'?'selected':''}>active</option>
+        <option ${o?.status==='inactive'?'selected':''}>inactive</option>
+      </select></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        name:    qs('#offName').value, badge:   qs('#offBadge').value,
+        rank:    qs('#offRank').value, dept:    qs('#offDept').value,
+        section: qs('#offSection').value, discord: qs('#offDiscord').value,
+        points:  parseInt(qs('#offPoints').value)||0, status:  qs('#offStatus').value,
       };
-      if (existingIdx === -1) {
-        users.push({ ...userRecord, joinedAt: Date.now() });
-        await addLog(env, `New user registered: ${auth.user.username}`, { userId: auth.user.id, type: 'register' });
-        await sendWebhook(env, 'New User Registered', `${auth.user.username} joined the system`, 0x2ecc71);
+      if(id){
+        const r = await api('PUT','/api/officers',{ id, ...payload });
+        if(r.ok){ const idx=store.officers.findIndex(x=>x.id===id); if(idx!==-1) store.officers[idx]=r.data; }
       } else {
-        users[existingIdx] = { ...users[existingIdx], ...userRecord };
-        await addLog(env, `Login: ${auth.user.username}`, { userId: auth.user.id, type: 'login' });
+        const r = await api('POST','/api/officers', payload);
+        if(r.ok) store.officers.push(r.data);
       }
-      await kvPut(env, KEY.users, users);
+      renderOfficers(); renderDashboard(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
 
-      return json({
-        ok: true, access_token,
-        isAdmin: auth.isAdmin,
-        user: { id: auth.user.id, username: auth.user.username, avatar },
-      });
+  function renderRanks(){
+    const rows = store.ranks.map(r=>`
+      <tr>
+        <td><b>${esc(r.name)}</b></td>
+        <td>${r.pointsReq} pts</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
+    qs('#ranks').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
+        </div>
+        <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
+  }
+
+  window.deleteRank = async id => {
+    if(!confirm('Delete Rank?')) return;
+    const r = await api('DELETE','/api/ranks',{ id });
+    if(r.ok){ store.ranks = store.ranks.filter(x=>x.id!==id); renderRanks(); toast('Rank deleted','#ff5a67'); }
+  };
+  window.openRankModal = (id=null) => {
+    const rank = id ? store.ranks.find(r=>r.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Rank' : 'Add Rank';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Rank Name</label><input id="rankName" value="${esc(rank?.name||'')}"></div>
+      <div class="form-group"><label>Required Points</label><input id="rankPts" type="number" value="${rank?.pointsReq||0}"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = { name: qs('#rankName').value, pointsReq: parseInt(qs('#rankPts').value)||0 };
+      if(id){
+        const r = await api('PUT','/api/ranks',{ id, ...payload });
+        if(r.ok){ const idx=store.ranks.findIndex(x=>x.id===id); if(idx!==-1) store.ranks[idx]=r.data; }
+      } else {
+        const r = await api('POST','/api/ranks', payload);
+        if(r.ok) store.ranks.push(r.data);
+      }
+      renderRanks(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
+
+  function renderPoints(){
+    const rows = store.pointsLog.map(p=>`
+      <tr><td>${esc(p.officer)}</td>
+      <td style="color:${String(p.change).startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change))}</td>
+      <td>${esc(p.reason||'-')}</td><td>${esc(p.by||'-')}</td><td>${fmtTime(p.time)}</td></tr>`).join('');
+    qs('#points').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-chart-bar"></i> Points Management</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openPointsModal()"><i class="ti ti-adjustments"></i> Adjust Points</button>':''}
+        </div>
+        <div class="card-body"><table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td></tr>'}</tbody></table></div></div>`;
+  }
+
+  window.openPointsModal = () => {
+    qs('#modalTitle').textContent = 'Adjust Officer Points';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Officer</label><select id="ptsOfficer">
+        ${store.officers.map(o=>`<option value="${o.id}">${esc(o.name)} (${o.points} pts)</option>`).join('')}</select></div>
+      <div class="form-group"><label>Operation</label><select id="ptsOp">
+        <option value="add">Add Points</option><option value="sub">Remove Points</option><option value="set">Set Points</option></select></div>
+      <div class="form-group"><label>Amount</label><input id="ptsAmount" type="number" value="1" min="0"></div>
+      <div class="form-group"><label>Reason</label><input id="ptsReason" placeholder="Reason..."></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const id     = parseInt(qs('#ptsOfficer').value);
+      const op     = qs('#ptsOp').value;
+      const amount = parseInt(qs('#ptsAmount').value)||0;
+      const reason = qs('#ptsReason').value;
+      const r = await api('PUT','/api/points',{ id, op, amount, reason });
+      if(r.ok){
+        const idx = store.officers.findIndex(o=>o.id===id); if(idx!==-1) store.officers[idx] = r.data;
+        const logR = await api('GET','/api/pointsLog'); if(logR.ok) store.pointsLog = logR.data;
+        renderPoints(); renderDashboard(); closeModal(); toast('Points updated ✓');
+      }
+    };
+    openModal();
+  };
+
+  function renderLaws(){
+    qs('#laws').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-book"></i> Laws & Regulations</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openLawModal()"><i class="ti ti-plus"></i> Add Law</button>':''}
+        </div>
+        <div class="card-body">
+          ${store.laws.map(l=>`
+            <div class="officer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+              <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+                <b>${esc(l.title)}</b>
+                ${isAdmin?`<div><button class="btn btn-sm btn-warning" onclick="openLawModal(${l.id})"><i class="ti ti-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteLaw(${l.id})"><i class="ti ti-trash"></i></button></div>`:''}
+              </div>
+              <p style="color:#8fa0bd;font-size:13px">${esc(l.content)}</p>
+            </div><div class="divider"></div>`).join('')}
+        </div></div>`;
+  }
+
+  window.deleteLaw = async id => {
+    if(!confirm('Delete law?')) return;
+    const laws = store.laws.filter(l=>l.id!==id);
+    const r = await api('POST','/api/laws',{ laws });
+    if(r.ok){ store.laws=laws; renderLaws(); toast('Law deleted','#ff5a67'); }
+  };
+  window.openLawModal = (id=null) => {
+    const law = id ? store.laws.find(l=>l.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Law' : 'Add Law';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="lawTitle" value="${esc(law?.title||'')}"></div>
+      <div class="form-group"><label>Content</label><textarea id="lawContent">${esc(law?.content||'')}</textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const title   = qs('#lawTitle').value;
+      const content = qs('#lawContent').value;
+      let laws = [...store.laws];
+      if(id){ const idx=laws.findIndex(l=>l.id===id); if(idx!==-1) laws[idx]={...laws[idx],title,content}; }
+      else laws.push({ id:Date.now(), title, content });
+      const r = await api('POST','/api/laws',{ laws });
+      if(r.ok){ store.laws=laws; renderLaws(); closeModal(); toast('Saved ✓'); }
+    };
+    openModal();
+  };
+
+  function renderUniforms(){
+    const rows = store.uniforms.map(u=>`
+      <tr><td><b>${esc(u.rank)}</b></td><td>${esc(u.male)}</td><td>${esc(u.female)}</td><td>
+        ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
+      </td></tr>`).join('');
+    qs('#uniform').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
+        </div>
+        <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
+  }
+
+  window.deleteUniform = async id => {
+    if(!confirm('Delete Uniform configuration?')) return;
+    const r = await api('DELETE','/api/uniforms',{ id });
+    if(r.ok){ store.uniforms = store.uniforms.filter(x=>x.id!==id); renderUniforms(); toast('Deleted','#ff5a67'); }
+  };
+  window.openUniformModal = (id=null) => {
+    const u = id ? store.uniforms.find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Uniform' : 'Add Uniform';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Rank Name</label><input id="uniRank" value="${esc(u?.rank||'')}"></div>
+      <div class="form-group"><label>Male Uniform</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
+      <div class="form-group"><label>Female Uniform</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = { rank: qs('#uniRank').value, male: qs('#uniMale').value, female: qs('#uniFemale').value };
+      if(id){
+        const r = await api('PUT','/api/uniforms',{ id, ...payload });
+        if(r.ok){ const idx=store.uniforms.findIndex(x=>x.id===id); if(idx!==-1) store.uniforms[idx]=r.data; }
+      } else {
+        const r = await api('POST','/api/uniforms', payload);
+        if(r.ok) store.uniforms.push(r.data);
+      }
+      renderUniforms(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
+
+
+  function renderCodes(){
+    qs('#codes').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-radio"></i> Police Codes</h3>
+        </div>
+        <div class="card-body">
+          <table>
+            <thead>
+              <tr><th>Code</th><th>Description</th><th>Priority</th></tr>
+            </thead>
+            <tbody>
+              ${(store.codes || []).map(c => `
+                <tr>
+                  <td><b>${esc(c.code)}</b></td>
+                  <td>${esc(c.description)}</td>
+                  <td>${esc(c.priority || 'info')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function renderWanted(){
+    qs('#wanted').innerHTML = '<div class="card"><div class="card-header"><h3>Wanted & Impound</h3></div><div class="card-body">System Ready</div></div>';
+  }
+
+  function renderCases(){
+    qs('#cases').innerHTML = '<div class="card"><div class="card-header"><h3>Cases</h3></div><div class="card-body">Cases system ready</div></div>';
+  }
+
+  function renderReports(){
+    qs('#reports').innerHTML = '<div class="card"><div class="card-header"><h3>Reports</h3></div><div class="card-body">Reports system ready</div></div>';
+  }
+
+  function renderDiscordUsers(){
+    qs('#discordUsers').innerHTML = '<div class="card"><div class="card-header"><h3>Discord Users</h3></div><div class="card-body">Users system ready</div></div>';
+  }
+
+  function renderLogs(){
+    qs('#logs').innerHTML = '<div class="card"><div class="card-header"><h3>System Logs</h3></div><div class="card-body">Logs system ready</div></div>';
+  }
+
+  function renderSettings(){
+    qs('#settings').innerHTML = '<div class="card"><div class="card-header"><h3>Settings</h3></div><div class="card-body">Settings panel ready</div></div>';
+  }
+
+
+
+  // ═══════════════════════════ INITIALIZATION ═══════════════════════════
+  async function init(){
+    // إعداد مستمع الحدث لزر تسجيل الدخول
+    qs('#discordLoginBtn').onclick = loginDiscord;
+    
+    // مستمع تسجيل الخروج
+    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
+
+    // قائمة المتنقل للموبايل
+    qs('#mobileMenuBtn').onclick = () => qs('#sidebar').classList.toggle('open');
+    qs('#closeModalBtn').onclick = window.closeModal;
+    qs('#modalCancelBtn').onclick = window.closeModal;
+
+    // أزرار التنقل بين الصفحات
+    qsa('.nav button').forEach(b => {
+      b.onclick = () => navigate(b.dataset.page);
+    });
+
+    // ساعة لوحة التحكم
+    setInterval(() => { qs('#clock').textContent = fmtTime(Date.now()); }, 1000);
+
+    // معالجة التحقق بعد العودة من ديسكورد أو استعادة الجلسة
+    const loggedIn = await handleOAuth() || loadSession();
+    if(loggedIn){
+      bootApp();
+      await loadAllData();
+      navigate('dashboard');
     }
+  }
 
-    // ── All routes below require auth ────────────────────────
-    const [ctx, authError] = await requireAuth(request);
-    if (authError) return authError;
-
-    // /api/me
-    if (path === '/api/me') {
-      return json({
-        ok: true, isAdmin: ctx.isAdmin,
-        user: {
-          id:       ctx.user.id,
-          username: ctx.user.username,
-          avatar:   ctx.user.avatar
-            ? `https://cdn.discordapp.com/avatars/${ctx.user.id}/${ctx.user.avatar}.png`
-            : null,
-        },
-      });
-    }
-
-    // ── Officers ─────────────────────────────────────────────
-    if (path === '/api/officers') {
-      const officers = await kvGet(env, KEY.officers);
-      if (request.method === 'GET') return json({ ok: true, data: officers });
-
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-
-      if (request.method === 'POST') {
-        const officer = {
-          id: Date.now(), name: body.name || 'Unknown', badge: body.badge || '',
-          rank: body.rank || 'Cadet', dept: body.dept || 'LSPD',
-          section: body.section || '', discord: body.discord || '',
-          points: Number(body.points) || 0, status: body.status || 'active',
-        };
-        officers.push(officer);
-        await kvPut(env, KEY.officers, officers);
-        await addLog(env, `Officer added: ${officer.name}`, { by: ctx.user.id, type: 'officer_add' });
-        await sendWebhook(env, 'Officer Added', `${officer.name} (Badge #${officer.badge}) added by ${ctx.user.username}`, 0x2ecc71);
-        return json({ ok: true, data: officer });
-      }
-
-      if (request.method === 'PUT') {
-        const idx = officers.findIndex(o => o.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        officers[idx] = { ...officers[idx], ...body };
-        await kvPut(env, KEY.officers, officers);
-        await addLog(env, `Officer updated: ${officers[idx].name}`, { by: ctx.user.id, type: 'officer_update' });
-        return json({ ok: true, data: officers[idx] });
-      }
-
-      if (request.method === 'DELETE') {
-        const removed = officers.find(o => o.id === body.id);
-        const filtered = officers.filter(o => o.id !== body.id);
-        await kvPut(env, KEY.officers, filtered);
-        await addLog(env, `Officer deleted: ${removed?.name || body.id}`, { by: ctx.user.id, type: 'officer_delete' });
-        await sendWebhook(env, 'Officer Deleted', `${removed?.name || body.id} removed by ${ctx.user.username}`, 0xe74c3c);
-        return json({ ok: true });
-      }
-    }
-
-    // ── Points ───────────────────────────────────────────────
-    if (path === '/api/points' && request.method === 'PUT') {
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const { id, op, amount, reason } = await readBody(request);
-      const officers = await kvGet(env, KEY.officers);
-      const officer  = officers.find(o => o.id === id);
-      if (!officer) return json({ ok: false, reason: 'not_found' }, 404);
-
-      const old = Number(officer.points || 0);
-      const n   = Number(amount || 0);
-      if      (op === 'add') officer.points = Math.min(30, old + n);
-      else if (op === 'sub') officer.points = Math.max(0,  old - n);
-      else if (op === 'set') officer.points = Math.max(0, Math.min(30, n));
-
-      await kvPut(env, KEY.officers, officers);
-
-      const log = await kvGet(env, KEY.pointsLog);
-      const change = officer.points - old;
-      log.unshift({ id: Date.now(), officer: officer.name, officerId: id, change: change >= 0 ? `+${change}` : String(change), reason: reason || '', by: ctx.user.username, time: Date.now() });
-      if (log.length > 1000) log.length = 1000;
-      await kvPut(env, KEY.pointsLog, log);
-
-      await addLog(env, `Points: ${officer.name} ${old} → ${officer.points} (${reason || '-'})`, { by: ctx.user.id, type: 'points' });
-      await sendWebhook(env, 'Points Updated', `${officer.name}: ${old} → ${officer.points}\nReason: ${reason || 'N/A'}\nBy: ${ctx.user.username}`, 0x3498db);
-      return json({ ok: true, data: officer });
-    }
-
-    // ── Discipline ───────────────────────────────────────────
-    if (path === '/api/discipline') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.discipline);
-        return json({ ok: true, data });
-      }
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body     = await readBody(request);
-      const officers = await kvGet(env, KEY.officers);
-      const officer  = officers.find(o => o.id === body.officerId);
-      if (!officer) return json({ ok: false, reason: 'officer_not_found' }, 404);
-
-      const points = Number(body.points || 0);
-      officer.points = Math.max(0, Number(officer.points || 0) - points);
-      await kvPut(env, KEY.officers, officers);
-
-      const record = {
-        id: Date.now(), officerId: officer.id, officer: officer.name,
-        points, reason: body.reason || '', by: ctx.user.username, time: Date.now(),
-      };
-      const disc = await kvGet(env, KEY.discipline);
-      disc.unshift(record);
-      if (disc.length > 500) disc.length = 500;
-      await kvPut(env, KEY.discipline, disc);
-
-      await addLog(env, `Discipline: ${officer.name} -${points}pts`, { by: ctx.user.id, type: 'discipline' });
-      await sendWebhook(env, 'Discipline Record', `${officer.name} penalized ${points} pts\nReason: ${body.reason || 'N/A'}\nBy: ${ctx.user.username}`, 0xff6b35);
-      return json({ ok: true, data: record });
-    }
-
-    // ── Promotions ───────────────────────────────────────────
-    if (path === '/api/promote' && request.method === 'POST') {
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body     = await readBody(request);
-      const officers = await kvGet(env, KEY.officers);
-      const officer  = officers.find(o => o.id === body.officerId);
-      if (!officer) return json({ ok: false, reason: 'officer_not_found' }, 404);
-
-      const fromRank = officer.rank;
-      officer.rank   = body.toRank;
-      await kvPut(env, KEY.officers, officers);
-
-      const record = {
-        id: Date.now(), officer: officer.name, officerId: officer.id,
-        fromRank, toRank: body.toRank, reason: body.reason || '',
-        by: ctx.user.username, date: new Date().toLocaleDateString('ar-SA'), time: Date.now(),
-      };
-      const proms = await kvGet(env, KEY.promotions);
-      proms.unshift(record);
-      if (proms.length > 300) proms.length = 300;
-      await kvPut(env, KEY.promotions, proms);
-
-      await addLog(env, `Promotion: ${officer.name} → ${body.toRank}`, { by: ctx.user.id, type: 'promotion' });
-      await sendWebhook(env, 'Officer Promoted', `${officer.name}: ${fromRank} → ${body.toRank}\nBy: ${ctx.user.username}`, 0xf3c75a);
-      return json({ ok: true, data: record });
-    }
-
-    // ── Reports ──────────────────────────────────────────────
-    if (path === '/api/reports') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.reports);
-        return json({ ok: true, data });
-      }
-      const body = await readBody(request);
-      const record = {
-        id: Date.now(), title: body.title || 'Report',
-        body: body.body || '', by: ctx.user.username, time: Date.now(),
-      };
-      const reports = await kvGet(env, KEY.reports);
-      reports.unshift(record);
-      if (reports.length > 500) reports.length = 500;
-      await kvPut(env, KEY.reports, reports);
-      await addLog(env, `Report: ${record.title}`, { by: ctx.user.id, type: 'report' });
-      return json({ ok: true, data: record });
-    }
-
-    // ── Cases ────────────────────────────────────────────────
-    if (path === '/api/cases') {
-      const cases = await kvGet(env, KEY.cases);
-      if (request.method === 'GET') return json({ ok: true, data: cases });
-      const body   = await readBody(request);
-
-      if (request.method === 'POST') {
-        const record = {
-          id: Date.now(), title: body.title || 'Case', description: body.description || '',
-          status: body.status || 'open', officerId: body.officerId || null,
-          by: ctx.user.username, time: Date.now(),
-        };
-        cases.unshift(record);
-        if (cases.length > 300) cases.length = 300;
-        await kvPut(env, KEY.cases, cases);
-        await addLog(env, `Case opened: ${record.title}`, { by: ctx.user.id, type: 'case_open' });
-        return json({ ok: true, data: record });
-      }
-
-      if (request.method === 'PUT') {
-        const idx = cases.findIndex(c => c.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        cases[idx] = { ...cases[idx], ...body, updatedAt: Date.now() };
-        await kvPut(env, KEY.cases, cases);
-        await addLog(env, `Case updated: ${cases[idx].title}`, { by: ctx.user.id, type: 'case_update' });
-        return json({ ok: true, data: cases[idx] });
-      }
-
-      if (request.method === 'DELETE') {
-        const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-        const filtered = cases.filter(c => c.id !== body.id);
-        await kvPut(env, KEY.cases, filtered);
-        await addLog(env, `Case deleted: ${body.id}`, { by: ctx.user.id, type: 'case_delete' });
-        return json({ ok: true });
-      }
-    }
-
-    // ── Wanted ───────────────────────────────────────────────
-    if (path === '/api/wanted') {
-      const wanted = await kvGet(env, KEY.wanted);
-      if (request.method === 'GET') return json({ ok: true, data: wanted });
-      const body = await readBody(request);
-
-      if (request.method === 'POST') {
-        const record = {
-          id: Date.now(), name: body.name || 'Unknown', reason: body.reason || '',
-          plate: body.plate || '', level: body.level || 1,
-          by: ctx.user.username, time: Date.now(),
-        };
-        wanted.unshift(record);
-        await kvPut(env, KEY.wanted, wanted);
-        await addLog(env, `Wanted: ${record.name}`, { by: ctx.user.id, type: 'wanted_add' });
-        return json({ ok: true, data: record });
-      }
-
-      if (request.method === 'DELETE') {
-        const filtered = wanted.filter(w => w.id !== body.id);
-        await kvPut(env, KEY.wanted, filtered);
-        await addLog(env, `Wanted removed: ${body.id}`, { by: ctx.user.id, type: 'wanted_remove' });
-        return json({ ok: true });
-      }
-    }
-
-    // ── Impound ──────────────────────────────────────────────
-    if (path === '/api/impound') {
-      const impound = await kvGet(env, KEY.impound);
-      if (request.method === 'GET') return json({ ok: true, data: impound });
-      const body = await readBody(request);
-
-      if (request.method === 'POST') {
-        const record = {
-          id: Date.now(), plate: body.plate || '', model: body.model || '',
-          reason: body.reason || '', fee: Number(body.fee) || 0,
-          by: ctx.user.username, time: Date.now(),
-        };
-        impound.unshift(record);
-        await kvPut(env, KEY.impound, impound);
-        await addLog(env, `Impound: ${record.plate}`, { by: ctx.user.id, type: 'impound_add' });
-        return json({ ok: true, data: record });
-      }
-
-      if (request.method === 'DELETE') {
-        const filtered = impound.filter(i => i.id !== body.id);
-        await kvPut(env, KEY.impound, filtered);
-        await addLog(env, `Released: ${body.id}`, { by: ctx.user.id, type: 'impound_release' });
-        return json({ ok: true });
-      }
-    }
-
-    // ── Laws ─────────────────────────────────────────────────
-    if (path === '/api/laws') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.laws);
-        return json({ ok: true, data });
-      }
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      await kvPut(env, KEY.laws, body.laws || []);
-      await addLog(env, 'Laws updated', { by: ctx.user.id, type: 'laws_update' });
-      return json({ ok: true });
-    }
-
-    // ── Uniforms ─────────────────────────────────────────────
-    if (path === '/api/uniforms') {
-      const uniforms = await kvGet(env, KEY.uniforms);
-      if (request.method === 'GET') return json({ ok: true, data: uniforms });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), rank: body.rank || '', male: body.male || '', female: body.female || '' };
-        uniforms.push(record);
-        await kvPut(env, KEY.uniforms, uniforms);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'PUT') {
-        const idx = uniforms.findIndex(u => u.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        uniforms[idx] = { ...uniforms[idx], ...body };
-        await kvPut(env, KEY.uniforms, uniforms);
-        return json({ ok: true, data: uniforms[idx] });
-      }
-      if (request.method === 'DELETE') {
-        await kvPut(env, KEY.uniforms, uniforms.filter(u => u.id !== body.id));
-        return json({ ok: true });
-      }
-    }
-
-    // ── Codes ────────────────────────────────────────────────
-    if (path === '/api/codes') {
-      const codes = await kvGet(env, KEY.codes);
-      if (request.method === 'GET') return json({ ok: true, data: codes });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), code: body.code || '', description: body.description || '', priority: body.priority || 'info' };
-        codes.push(record);
-        await kvPut(env, KEY.codes, codes);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'PUT') {
-        const idx = codes.findIndex(c => c.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        codes[idx] = { ...codes[idx], ...body };
-        await kvPut(env, KEY.codes, codes);
-        return json({ ok: true, data: codes[idx] });
-      }
-      if (request.method === 'DELETE') {
-        await kvPut(env, KEY.codes, codes.filter(c => c.id !== body.id));
-        return json({ ok: true });
-      }
-    }
-
-    // ── Ranks ────────────────────────────────────────────────
-    if (path === '/api/ranks') {
-      const ranks = await kvGet(env, KEY.ranks);
-      if (request.method === 'GET') return json({ ok: true, data: ranks });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), name: body.name || '', pointsReq: Number(body.pointsReq) || 0 };
-        ranks.push(record);
-        await kvPut(env, KEY.ranks, ranks);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'PUT') {
-        const idx = ranks.findIndex(r => r.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        ranks[idx] = { ...ranks[idx], ...body };
-        await kvPut(env, KEY.ranks, ranks);
-        return json({ ok: true, data: ranks[idx] });
-      }
-      if (request.method === 'DELETE') {
-        await kvPut(env, KEY.ranks, ranks.filter(r => r.id !== body.id));
-        return json({ ok: true });
-      }
-    }
-
-    // ── Points Log ───────────────────────────────────────────
-    if (path === '/api/pointsLog' && request.method === 'GET') {
-      const data = await kvGet(env, KEY.pointsLog);
-      return json({ ok: true, data });
-    }
-
-    // ── Users (Discord) ──────────────────────────────────────
-    if (path === '/api/users' && request.method === 'GET') {
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const data = await kvGet(env, KEY.users);
-      return json({ ok: true, data });
-    }
-
-    // ── Activity / Logs ──────────────────────────────────────
-    if (path === '/api/activity' && request.method === 'GET') {
-      const data = await kvGet(env, KEY.activity);
-      return json({ ok: true, data });
-    }
-
-    // ── Settings ─────────────────────────────────────────────
-    if (path === '/api/settings') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.settings);
-        return json({ ok: true, data });
-      }
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      const current = await kvGet(env, KEY.settings);
-      const updated = { ...current, ...body };
-      await kvPut(env, KEY.settings, updated);
-      await addLog(env, 'Settings updated', { by: ctx.user.id, type: 'settings' });
-      return json({ ok: true, data: updated });
-    }
-
-    return json({ ok: false, reason: 'not_found' }, 404);
-  },
-};
+  window.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
