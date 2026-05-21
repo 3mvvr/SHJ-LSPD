@@ -109,12 +109,10 @@
       border:1px solid rgba(255,255,255,.1); border-radius:32px; padding:40px 32px;
       text-align:center; box-shadow:0 24px 48px rgba(0,0,0,.4); }
 
-    /* loading spinner */
     .spinner { display:inline-block; width:18px; height:18px; border:2px solid rgba(255,255,255,.2);
       border-top-color:white; border-radius:50%; animation:spin .6s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
 
-    /* status badges */
     .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
     .badge-active  { background:rgba(46,204,113,.15); color:#2ecc71; }
     .badge-inactive{ background:rgba(255,90,103,.15); color:#ff5a67; }
@@ -138,7 +136,6 @@
 </head>
 <body>
 
-<!-- LOGIN -->
 <div id="loginContainer" class="login-container">
   <div class="login-card">
     <div style="width:80px;height:80px;background:#0b1730;border:2px solid #f3c75a;border-radius:50%;display:grid;place-items:center;font-size:40px;margin:0 auto 20px">🛡️</div>
@@ -151,7 +148,6 @@
   </div>
 </div>
 
-<!-- APP -->
 <div id="appContainer" class="app" style="display:none">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
@@ -163,10 +159,10 @@
       <button class="active" data-page="dashboard"><i class="ti ti-dashboard"></i> Dashboard</button>
       <button data-page="officers"><i class="ti ti-users"></i> Officers</button>
       <button data-page="ranks"><i class="ti ti-stairs-up"></i> Ranks</button>
-      <button data-page="points"><i class="ti ti-chart-bar"></i> Points</button>
-      <button data-page="laws"><i class="ti ti-book"></i> Laws</button>
-      <button data-page="uniform"><i class="ti ti-shirt"></i> Uniform</button>
-      <button data-page="codes"><i class="ti ti-radio"></i> Codes</button>
+      <button data-page="points"><i class="ti ti-chart-bar"></i> Points Logs</button>
+      <button data-page="laws"><i class="ti ti-book"></i> Laws & Rules</button>
+      <button data-page="uniform"><i class="ti ti-shirt"></i> Uniform Guide</button>
+      <button data-page="codes"><i class="ti ti-radio"></i> Police Codes</button>
       <button data-page="wanted"><i class="ti ti-car"></i> Wanted & Impound</button>
       <button data-page="cases"><i class="ti ti-folder"></i> Cases</button>
       <button data-page="reports"><i class="ti ti-file-text"></i> Reports</button>
@@ -207,7 +203,6 @@
   </main>
 </div>
 
-<!-- MODAL -->
 <div id="globalModal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -251,9 +246,9 @@
     if(t){ t.textContent=msg; t.style.borderLeftColor=color; t.classList.add('show');
       setTimeout(()=>t.classList.remove('show'),3000); }
   }
-  function fmtTime(ts){ return new Date(ts).toLocaleString('en-US'); }
+  function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-US') : '-'; }
 
-  // ═══════════════════════════ API ══════════════════════════════
+  // ═══════════════════════════ API ENGINE ══════════════════════════
   async function api(method, path, body=null){
     const opts = { method, headers: { 'Content-Type':'application/json' } };
     if(accessToken) opts.headers['Authorization'] = 'Bearer '+accessToken;
@@ -313,7 +308,6 @@
     return true;
   }
 
-  // ═══════════════════════════ BOOT UI ══════════════════════════
   function bootApp(){
     qs('#loginContainer').style.display = 'none';
     qs('#appContainer').style.display   = 'grid';
@@ -325,11 +319,10 @@
     qs('#userRole').textContent = isAdmin ? 'Admin' : 'Officer';
   }
 
-  // ═══════════════════════════ MODALS ═══════════════════════════
   function openModal(){ qs('#globalModal').classList.add('open'); }
   window.closeModal = () => qs('#globalModal').classList.remove('open');
 
-  // ═══════════════════════════ NAV ══════════════════════════════
+  // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
   const PAGE_RENDERERS = {
     dashboard:    renderDashboard,
     officers:     renderOfficers,
@@ -353,15 +346,7 @@
     PAGE_RENDERERS[pageId]?.();
   }
 
-  function initNav(){
-    qsa('.nav button').forEach(btn=>{
-      btn.addEventListener('click', ()=>navigate(btn.dataset.page));
-    });
-  }
-
-  function renderAll(){ renderDashboard(); }
-
-  // ═══════════════════════════ DASHBOARD ════════════════════════
+  // ═══════════════════════════ RENDERERS ════════════════════════
   function renderDashboard(){
     const o = store.officers;
     const active = o.filter(x=>x.status==='active').length;
@@ -391,7 +376,6 @@
     `;
   }
 
-  // ═══════════════════════════ OFFICERS ═════════════════════════
   function renderOfficers(){
     const rows = store.officers.map(o=>`
       <tr>
@@ -429,7 +413,6 @@
     if(!confirm('Delete officer?')) return;
     const r = await api('DELETE','/api/officers',{ id });
     if(r.ok){ store.officers = store.officers.filter(o=>o.id!==id); renderOfficers(); renderDashboard(); toast('Officer deleted','#ff5a67'); }
-    else toast('Error: '+r.reason,'#ff5a67');
   };
 
   window.openOfficerModal = (id=null) => {
@@ -451,14 +434,10 @@
       </select></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
-        name:    qs('#offName').value,
-        badge:   qs('#offBadge').value,
-        rank:    qs('#offRank').value,
-        dept:    qs('#offDept').value,
-        section: qs('#offSection').value,
-        discord: qs('#offDiscord').value,
-        points:  parseInt(qs('#offPoints').value)||0,
-        status:  qs('#offStatus').value,
+        name:    qs('#offName').value, badge:   qs('#offBadge').value,
+        rank:    qs('#offRank').value, dept:    qs('#offDept').value,
+        section: qs('#offSection').value, discord: qs('#offDiscord').value,
+        points:  parseInt(qs('#offPoints').value)||0, status:  qs('#offStatus').value,
       };
       if(id){
         const r = await api('PUT','/api/officers',{ id, ...payload });
@@ -472,7 +451,6 @@
     openModal();
   };
 
-  // ═══════════════════════════ RANKS ════════════════════════════
   function renderRanks(){
     const rows = store.ranks.map(r=>`
       <tr><td><b>${esc(r.name)}</b></td><td>${r.pointsReq} pts</td><td>
@@ -489,6 +467,7 @@
   }
 
   window.deleteRank = async id => {
+    if(!confirm('Delete Rank?')) return;
     const r = await api('DELETE','/api/ranks',{ id });
     if(r.ok){ store.ranks = store.ranks.filter(x=>x.id!==id); renderRanks(); toast('Rank deleted','#ff5a67'); }
   };
@@ -512,7 +491,6 @@
     openModal();
   };
 
-  // ═══════════════════════════ POINTS ═══════════════════════════
   function renderPoints(){
     const rows = store.pointsLog.map(p=>`
       <tr><td>${esc(p.officer)}</td>
@@ -543,17 +521,14 @@
       const reason = qs('#ptsReason').value;
       const r = await api('PUT','/api/points',{ id, op, amount, reason });
       if(r.ok){
-        const idx = store.officers.findIndex(o=>o.id===id);
-        if(idx!==-1) store.officers[idx] = r.data;
-        const logR = await api('GET','/api/pointsLog');
-        if(logR.ok) store.pointsLog = logR.data;
+        const idx = store.officers.findIndex(o=>o.id===id); if(idx!==-1) store.officers[idx] = r.data;
+        const logR = await api('GET','/api/pointsLog'); if(logR.ok) store.pointsLog = logR.data;
         renderPoints(); renderDashboard(); closeModal(); toast('Points updated ✓');
-      } else toast('Error: '+r.reason,'#ff5a67');
+      }
     };
     openModal();
   };
 
-  // ═══════════════════════════ LAWS ═════════════════════════════
   function renderLaws(){
     qs('#laws').innerHTML = `
       <div class="card">
@@ -574,6 +549,7 @@
   }
 
   window.deleteLaw = async id => {
+    if(!confirm('Delete law?')) return;
     const laws = store.laws.filter(l=>l.id!==id);
     const r = await api('POST','/api/laws',{ laws });
     if(r.ok){ store.laws=laws; renderLaws(); toast('Law deleted','#ff5a67'); }
@@ -596,298 +572,231 @@
     openModal();
   };
 
-  // ═══════════════════════════ UNIFORMS ═════════════════════════
   function renderUniforms(){
     const rows = store.uniforms.map(u=>`
-      <tr><td>${esc(u.rank)}</td><td style="font-size:12px">${esc(u.male)}</td><td style="font-size:12px">${esc(u.female)}</td><td>
+      <tr><td><b>${esc(u.rank)}</b></td><td>${esc(u.male)}</td><td>${esc(u.female)}</td><td>
         ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
         <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
       </td></tr>`).join('');
     qs('#uniform').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Uniform</button>':''}
+          ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Rank</th><th>Male</th><th>Female</th><th>Actions</th></tr></thead>
+        <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>`;
   }
 
   window.deleteUniform = async id => {
+    if(!confirm('Delete Uniform configuration?')) return;
     const r = await api('DELETE','/api/uniforms',{ id });
-    if(r.ok){ store.uniforms=store.uniforms.filter(u=>u.id!==id); renderUniforms(); }
+    if(r.ok){ store.uniforms = store.uniforms.filter(x=>x.id!==id); renderUniforms(); toast('Deleted','#ff5a67'); }
   };
   window.openUniformModal = (id=null) => {
     const u = id ? store.uniforms.find(x=>x.id===id) : null;
     qs('#modalTitle').textContent = id ? 'Edit Uniform' : 'Add Uniform';
     qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Rank</label><input id="uniRank" value="${esc(u?.rank||'')}"></div>
-      <div class="form-group"><label>Male Outfit</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
-      <div class="form-group"><label>Female Outfit</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
+      <div class="form-group"><label>Rank Name</label><input id="uniRank" value="${esc(u?.rank||'')}"></div>
+      <div class="form-group"><label>Male Uniform Strings</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
+      <div class="form-group"><label>Female Uniform Strings</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
-      const payload = { rank:qs('#uniRank').value, male:qs('#uniMale').value, female:qs('#uniFemale').value };
-      if(id){ const r=await api('PUT','/api/uniforms',{id,...payload}); if(r.ok){ const idx=store.uniforms.findIndex(x=>x.id===id); if(idx!==-1) store.uniforms[idx]=r.data; } }
-      else { const r=await api('POST','/api/uniforms',payload); if(r.ok) store.uniforms.push(r.data); }
-      renderUniforms(); closeModal(); toast('Saved ✓');
+      const payload = { rank: qs('#uniRank').value, male: qs('#uniMale').value, female: qs('#uniFemale').value };
+      const res = await api(id ? 'PUT' : 'POST', '/api/uniforms', id ? { id, ...payload } : payload);
+      if(res.ok){ await loadAllData(); renderUniforms(); closeModal(); toast('Uniform Guard Updated ✓'); }
     };
     openModal();
   };
 
-  // ═══════════════════════════ CODES ════════════════════════════
   function renderCodes(){
-    const priorityColor = { info:'badge-info', warning:'badge-warning', danger:'badge-danger' };
     const rows = store.codes.map(c=>`
-      <tr><td><b>${esc(c.code)}</b></td><td>${esc(c.description)}</td>
-      <td><span class="badge ${priorityColor[c.priority]||'badge-info'}">${esc(c.priority)}</span></td>
-      <td>${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCodeModal(${c.id})"><i class="ti ti-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteCode(${c.id})"><i class="ti ti-trash"></i></button>`:''}</td></tr>`).join('');
+      <tr><td><span class="badge badge-${c.priority}">${esc(c.code)}</span></td><td>${esc(c.description)}</td><td>
+        ${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteCode(${c.id})"><i class="ti ti-trash"></i></button>`:''}
+      </td></tr>`).join('');
     qs('#codes').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-radio"></i> Police Radio Codes</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openCodeModal()"><i class="ti ti-plus"></i> Add Code</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
+        <div class="card-body"><table><thead><tr><th>Code</th><th>Description</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>`;
   }
 
   window.deleteCode = async id => {
-    const r=await api('DELETE','/api/codes',{id}); if(r.ok){store.codes=store.codes.filter(c=>c.id!==id);renderCodes();}
+    if(!confirm('Delete Code?')) return;
+    const r = await api('DELETE','/api/codes',{ id });
+    if(r.ok){ store.codes = store.codes.filter(x=>x.id!==id); renderCodes(); toast('Deleted','#ff5a67'); }
   };
-  window.openCodeModal = (id=null) => {
-    const c = id ? store.codes.find(x=>x.id===id) : null;
-    qs('#modalTitle').textContent = id ? 'Edit Code' : 'Add Code';
+  window.openCodeModal = () => {
+    qs('#modalTitle').textContent = 'Add Radio Code';
     qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Code</label><input id="codeCode" value="${esc(c?.code||'')}"></div>
-      <div class="form-group"><label>Description</label><input id="codeDesc" value="${esc(c?.description||'')}"></div>
-      <div class="form-group"><label>Priority</label><select id="codePri">
-        ${['info','warning','danger'].map(p=>`<option ${c?.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>`;
+      <div class="form-group"><label>Code (e.g. 10-4)</label><input id="cdCode"></div>
+      <div class="form-group"><label>Description</label><input id="cdDesc"></div>
+      <div class="form-group"><label>Priority</label><select id="cdPriority"><option>info</option><option>warning</option><option>danger</option></select></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
-      const payload={code:qs('#codeCode').value,description:qs('#codeDesc').value,priority:qs('#codePri').value};
-      if(id){const r=await api('PUT','/api/codes',{id,...payload});if(r.ok){const idx=store.codes.findIndex(x=>x.id===id);if(idx!==-1)store.codes[idx]=r.data;}}
-      else{const r=await api('POST','/api/codes',payload);if(r.ok)store.codes.push(r.data);}
-      renderCodes();closeModal();toast('Saved ✓');
+      const payload = { code: qs('#cdCode').value, description: qs('#cdDesc').value, priority: qs('#cdPriority').value };
+      const r = await api('POST','/api/codes', payload);
+      if(r.ok){ store.codes.push(r.data); renderCodes(); closeModal(); toast('Code Added'); }
     };
     openModal();
   };
 
-  // ═══════════════════════════ WANTED & IMPOUND ═════════════════
   function renderWanted(){
     const wRows = store.wanted.map(w=>`
-      <tr><td><b>${esc(w.name)}</b></td><td>${esc(w.plate)}</td><td>${esc(w.reason)}</td>
-      <td><span class="badge badge-danger">★${w.level||1}</span></td>
-      <td><button class="btn btn-sm btn-danger" onclick="removeWanted(${w.id})"><i class="ti ti-x"></i></button></td></tr>`).join('');
+      <tr><td><b>${esc(w.name)}</b></td><td>${esc(w.plate||'-')}</td><td>${esc(w.reason)}</td><td>${esc(w.by)}</td><td>
+        <button class="btn btn-sm btn-success" onclick="removeWanted(${w.id})">Clear</button>
+      </td></tr>`).join('');
     const iRows = store.impound.map(i=>`
-      <tr><td><b>${esc(i.plate)}</b></td><td>${esc(i.model)}</td><td>${esc(i.reason)}</td>
-      <td>$${i.fee||0}</td>
-      <td><button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})"><i class="ti ti-check"></i> Release</button></td></tr>`).join('');
+      <tr><td><b>${esc(i.plate)}</b></td><td>${esc(i.model)}</td><td>${esc(i.reason)}</td><td>${i.fee} AED</td><td>
+        <button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})">Release</button>
+      </td></tr>`).join('');
+
     qs('#wanted').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-alert-triangle"></i> Wanted List</h3>
-          <button class="btn btn-primary" onclick="addWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button></div>
-        <div class="card-body"><table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>Action</th></tr></thead>
-        <tbody>${wRows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No wanted suspects</td></tr>'}</tbody></table></div></div>
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-car"></i> Impound Lot</h3>
-          <button class="btn btn-primary" onclick="addImpoundModal()"><i class="ti ti-plus"></i> Impound Vehicle</button></div>
-        <div class="card-body"><table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>Action</th></tr></thead>
-        <tbody>${iRows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No impounded vehicles</td></tr>'}</tbody></table></div></div>`;
+      <div class="card"><div class="card-header"><h3>🚨 Active Wanted List</h3><button class="btn btn-danger" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button></div>
+      <div class="card-body"><table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Issued By</th><th>Actions</th></tr></thead><tbody>${wRows||'<tr><td colspan="5">No active alerts</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="card-header"><h3>🚧 Vehicle Impound Yard</h3><button class="btn btn-warning" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Impound Vehicle</button></div>
+      <div class="card-body"><table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fine Fee</th><th>Actions</th></tr></thead><tbody>${iRows||'<tr><td colspan="5">Yard Empty</td></tr>'}</tbody></table></div></div>`;
   }
 
   window.removeWanted = async id => {
-    const r=await api('DELETE','/api/wanted',{id}); if(r.ok){store.wanted=store.wanted.filter(w=>w.id!==id);renderWanted();}
+    const r = await api('DELETE','/api/wanted',{ id });
+    if(r.ok){ store.wanted=store.wanted.filter(x=>x.id!==id); renderWanted(); toast('Cleared ✓'); }
   };
-  window.releaseImpound = async id => {
-    const r=await api('DELETE','/api/impound',{id}); if(r.ok){store.impound=store.impound.filter(i=>i.id!==id);renderWanted();toast('Vehicle released ✓','#2ecc71');}
-  };
-  window.addWantedModal = () => {
-    qs('#modalTitle').textContent='Add Wanted Suspect';
-    qs('#modalBody').innerHTML=`
-      <div class="form-group"><label>Name</label><input id="wName"></div>
-      <div class="form-group"><label>Plate</label><input id="wPlate"></div>
-      <div class="form-group"><label>Reason</label><input id="wReason"></div>
-      <div class="form-group"><label>Level (1-5)</label><input id="wLevel" type="number" min="1" max="5" value="1"></div>`;
-    qs('#modalConfirmBtn').onclick=async()=>{
-      const r=await api('POST','/api/wanted',{name:qs('#wName').value,plate:qs('#wPlate').value,reason:qs('#wReason').value,level:parseInt(qs('#wLevel').value)||1});
-      if(r.ok){store.wanted.unshift(r.data);renderWanted();closeModal();toast('Added ✓');}
-    };
-    openModal();
-  };
-  window.addImpoundModal = () => {
-    qs('#modalTitle').textContent='Impound Vehicle';
-    qs('#modalBody').innerHTML=`
-      <div class="form-group"><label>Plate</label><input id="iPlate"></div>
-      <div class="form-group"><label>Model</label><input id="iModel"></div>
-      <div class="form-group"><label>Reason</label><input id="iReason"></div>
-      <div class="form-group"><label>Fee ($)</label><input id="iFee" type="number" value="500"></div>`;
-    qs('#modalConfirmBtn').onclick=async()=>{
-      const r=await api('POST','/api/impound',{plate:qs('#iPlate').value,model:qs('#iModel').value,reason:qs('#iReason').value,fee:parseInt(qs('#iFee').value)||0});
-      if(r.ok){store.impound.unshift(r.data);renderWanted();closeModal();toast('Impounded ✓');}
+  window.openWantedModal = () => {
+    qs('#modalTitle').textContent = 'Issue Wanted Alert';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Subject Name</label><input id="wName"></div>
+      <div class="form-group"><label>Vehicle Plate (Optional)</label><input id="wPlate"></div>
+      <div class="form-group"><label>Reason / Charges</label><textarea id="wReason"></textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = { name: qs('#wName').value, plate: qs('#wPlate').value, reason: qs('#wReason').value };
+      const r = await api('POST','/api/wanted', payload);
+      if(r.ok){ store.wanted.unshift(r.data); renderWanted(); closeModal(); toast('Alert Issued'); }
     };
     openModal();
   };
 
-  // ═══════════════════════════ CASES ════════════════════════════
+  window.releaseImpound = async id => {
+    const r = await api('DELETE','/api/impound',{ id });
+    if(r.ok){ store.impound=store.impound.filter(x=>x.id!==id); renderWanted(); toast('Released ✓'); }
+  };
+  window.openImpoundModal = () => {
+    qs('#modalTitle').textContent = 'Impound Vehicle';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Plate Number</label><input id="impPlate"></div>
+      <div class="form-group"><label>Vehicle Model</label><input id="impModel"></div>
+      <div class="form-group"><label>Seizure Reason</label><input id="impReason"></div>
+      <div class="form-group"><label>Release Fee (AED)</label><input id="impFee" type="number" value="1000"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = { plate: qs('#impPlate').value, model: qs('#impModel').value, reason: qs('#impReason').value, fee: parseInt(qs('#impFee').value)||0 };
+      const r = await api('POST','/api/impound', payload);
+      if(r.ok){ store.impound.unshift(r.data); renderWanted(); closeModal(); toast('Vehicle Registered'); }
+    };
+    openModal();
+  };
+
   function renderCases(){
     const rows = store.cases.map(c=>`
-      <tr><td><b>${esc(c.title)}</b></td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${esc(c.description)}</td>
-      <td><span class="badge badge-${c.status==='open'?'warning':'info'}">${esc(c.status)}</span></td>
-      <td>${esc(c.by)}</td><td>${fmtTime(c.time)}</td>
-      <td><button class="btn btn-sm btn-warning" onclick="toggleCase(${c.id},'${c.status==='open'?'closed':'open'}')">
-        ${c.status==='open'?'Close':'Reopen'}</button>
-        ${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteCase(${c.id})"><i class="ti ti-trash"></i></button>`:''}</td></tr>`).join('');
+      <tr><td><b>Case #${c.id.toString().slice(-4)}</b></td><td>${esc(c.title)}</td><td><span class="badge badge-info">${c.status}</span></td><td>${esc(c.by)}</td><td>${fmtTime(c.time)}</td><td>
+        <button class="btn btn-sm" onclick="viewCase(${c.id})"><i class="ti ti-eye"></i></button>
+      </td></tr>`).join('');
     qs('#cases').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-folder"></i> Cases</h3>
-          <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> Open Case</button></div>
-        <div class="card-body"><table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases</td></tr>'}</tbody></table></div></div>`;
+      <div class="card"><div class="card-header"><h3>📁 Criminal & Investigation Cases</h3><button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> File New Case</button></div>
+      <div class="card-body"><table><thead><tr><th>Case ID</th><th>Title</th><th>Status</th><th>Filer</th><th>Date</th><th>Actions</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No files filed</td></tr>'}</tbody></table></div></div>`;
   }
 
-  window.toggleCase = async (id,status) => {
-    const r=await api('PUT','/api/cases',{id,status}); if(r.ok){const idx=store.cases.findIndex(c=>c.id===id);if(idx!==-1)store.cases[idx]=r.data;renderCases();}
-  };
-  window.deleteCase = async id => {
-    if(!confirm('Delete case?')) return;
-    const r=await api('DELETE','/api/cases',{id}); if(r.ok){store.cases=store.cases.filter(c=>c.id!==id);renderCases();}
-  };
   window.openCaseModal = () => {
-    qs('#modalTitle').textContent='Open New Case';
-    qs('#modalBody').innerHTML=`
-      <div class="form-group"><label>Title</label><input id="caseTitle"></div>
-      <div class="form-group"><label>Description</label><textarea id="caseDesc"></textarea></div>`;
-    qs('#modalConfirmBtn').onclick=async()=>{
-      const r=await api('POST','/api/cases',{title:qs('#caseTitle').value,description:qs('#caseDesc').value});
-      if(r.ok){store.cases.unshift(r.data);renderCases();closeModal();toast('Case opened ✓');}
+    qs('#modalTitle').textContent = 'File Investigation Case';
+    qs('#modalBody').innerHTML = `<div class="form-group"><label>Case Title</label><input id="csTitle"></div><div class="form-group"><label>Full Incident Log & Details</label><textarea id="csDesc" style="min-height:200px"></textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('POST','/api/cases',{ title: qs('#csTitle').value, description: qs('#csDesc').value });
+      if(r.ok){ store.cases.unshift(r.data); renderCases(); closeModal(); toast('Case Filed'); }
     };
     openModal();
   };
+  window.viewCase = id => {
+    const c = store.cases.find(x=>x.id===id); if(!c) return;
+    qs('#modalTitle').textContent = `Case Details — By ${c.by}`;
+    qs('#modalBody').innerHTML = `<h4>${esc(c.title)}</h4><p style="margin-top:12px; white-space:pre-wrap; background:#070b13; padding:16px; border-radius:12px; color:#cdd9ed">${esc(c.description)}</p>`;
+    qs('#modalConfirmBtn').onclick = closeModal;
+    openModal();
+  };
 
-  // ═══════════════════════════ REPORTS ══════════════════════════
   function renderReports(){
     const rows = store.reports.map(r=>`
-      <tr><td><b>${esc(r.title)}</b></td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${esc(r.body)}</td>
-      <td>${esc(r.by)}</td><td>${fmtTime(r.time)}</td></tr>`).join('');
+      <div class="officer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <div style="display:flex;justify-content:space-between;width:100%"><b>${esc(r.title)}</b><span style="font-size:12px;color:#8fa0bd">${fmtTime(r.time)}</span></div>
+        <p style="color:#8fa0bd;font-size:13px;white-space:pre-wrap">${esc(r.body)}</p>
+        <div style="font-size:11px;color:#53617a">Submitted by: ${esc(r.by)}</div>
+      </div><div class="divider"></div>`).join('');
     qs('#reports').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-file-text"></i> Reports</h3>
-          <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button></div>
-        <div class="card-body"><table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports</td></tr>'}</tbody></table></div></div>`;
+      <div class="card"><div class="card-header"><h3>📝 Officer Daily Reports</h3><button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> Submit Report</button></div>
+      <div class="card-body">${rows||'<p style="color:#8fa0bd">No reports recorded today.</p>'}</div></div>`;
   }
 
   window.openReportModal = () => {
-    qs('#modalTitle').textContent='Submit Report';
-    qs('#modalBody').innerHTML=`
-      <div class="form-group"><label>Title</label><input id="repTitle"></div>
-      <div class="form-group"><label>Report Body</label><textarea id="repBody" style="min-height:120px"></textarea></div>`;
-    qs('#modalConfirmBtn').onclick=async()=>{
-      const r=await api('POST','/api/reports',{title:qs('#repTitle').value,body:qs('#repBody').value});
-      if(r.ok){store.reports.unshift(r.data);renderReports();closeModal();toast('Report submitted ✓');}
+    qs('#modalTitle').textContent = 'Submit Activity Report';
+    qs('#modalBody').innerHTML = `<div class="form-group"><label>Report Header</label><input id="rpTitle" placeholder="e.g. Patrol Shift Report"></div><div class="form-group"><label>Details</label><textarea id="rpBody" style="min-height:150px"></textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('POST','/api/reports',{ title: qs('#rpTitle').value, body: qs('#rpBody').value });
+      if(r.ok){ store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report Submitted ✓'); }
     };
     openModal();
   };
 
-  // ═══════════════════════════ DISCORD USERS ════════════════════
   function renderDiscordUsers(){
-    if(!isAdmin){ qs('#discordUsers').innerHTML='<div class="card"><div class="card-body" style="color:#8fa0bd;text-align:center">Admin only</div></div>'; return; }
-    const rows = store.users.map(u=>`
-      <tr><td><div style="display:flex;align-items:center;gap:10px">
-        ${u.avatar?`<img src="${u.avatar}" style="width:32px;height:32px;border-radius:50%;object-fit:cover">`:'<div style="width:32px;height:32px;background:#1b2942;border-radius:50%;display:grid;place-items:center">?</div>'}
-        <b>${esc(u.username)}</b></div></td>
-      <td><code style="font-size:11px;color:#8fa0bd">${esc(u.id)}</code></td>
-      <td><span class="badge badge-${u.isAdmin?'warning':'info'}">${u.isAdmin?'Admin':'Officer'}</span></td>
-      <td>${u.lastLogin?fmtTime(u.lastLogin):'-'}</td></tr>`).join('');
+    const rows = store.users.map(u=>`<tr><td><b>${esc(u.username)}</b></td><td><code>${u.id}</code></td><td>${u.isAdmin?'Admin':'Officer'}</td><td>${fmtTime(u.lastLogin)}</td></tr>`).join('');
     qs('#discordUsers').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-brand-discord"></i> Discord Users (${store.users.length})</h3></div>
-        <div class="card-body"><table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No users yet</td></tr>'}</tbody></table></div></div>`;
+      <div class="card"><div class="card-header"><h3>👥 Synchronized Discord Accounts</h3></div>
+      <div class="card-body"><table><thead><tr><th>Username</th><th>Discord Snowflake ID</th><th>System Role</th><th>Last Login</th></tr></thead><tbody>${rows||'<tr><td colspan="4">No users synced</td></tr>'}</tbody></table></div></div>`;
   }
 
-  // ═══════════════════════════ LOGS ═════════════════════════════
   function renderLogs(){
-    const rows = store.activity.map(l=>`
-      <tr><td>${esc(l.msg)}</td>
-      <td><code style="font-size:11px;color:#8fa0bd">${esc(l.userId||l.by||'-')}</code></td>
-      <td><span class="badge badge-info">${esc(l.type||'system')}</span></td>
-      <td>${fmtTime(l.time)}</td></tr>`).join('');
+    const rows = store.activity.map(a=>`<tr><td><code>${fmtTime(a.time)}</code></td><td>${esc(a.msg)}</td><td><span class="badge badge-info">${esc(a.type||'info')}</span></td></tr>`).join('');
     qs('#logs').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-history"></i> System Logs (${store.activity.length})</h3>
-          <button class="btn btn-sm" onclick="refreshLogs()"><i class="ti ti-refresh"></i> Refresh</button></div>
-        <div class="card-body"><table><thead><tr><th>Message</th><th>User</th><th>Type</th><th>Time</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No logs</td></tr>'}</tbody></table></div></div>`;
+      <div class="card"><div class="card-header"><h3>⚙️ Core System Activity Logs</h3></div>
+      <div class="card-body"><table><thead><tr><th>Timestamp</th><th>Log Message</th><th>Category</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }
 
-  window.refreshLogs = async () => {
-    const r=await api('GET','/api/activity'); if(r.ok){store.activity=r.data;renderLogs();toast('Logs refreshed ✓');}
-  };
-
-  // ═══════════════════════════ SETTINGS ═════════════════════════
   function renderSettings(){
-    const s = store.settings || {};
     qs('#settings').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-settings"></i> System Settings</h3></div>
-        <div class="card-body">
-          <div class="form-group"><label>Discord Webhook URL (for logs)</label>
-            <input id="settWebhook" value="${esc(s.webhookUrl||'')}" placeholder="https://discord.com/api/webhooks/..."></div>
-          <div class="form-group"><label>Enable Webhook Logs</label>
-            <select id="settLogs"><option value="true" ${s.logsEnabled?'selected':''}>Enabled</option><option value="false" ${!s.logsEnabled?'selected':''}>Disabled</option></select></div>
-          ${isAdmin?`<button class="btn btn-primary" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Settings</button>`:'<p style="color:#8fa0bd">Admin only</p>'}
-          ${isAdmin?`<button class="btn btn-danger" style="margin-left:12px" onclick="seedDatabase()"><i class="ti ti-database-import"></i> Reset DB to Defaults</button>`:''}
-        </div></div>`;
+      <div class="card"><div class="card-header"><h3>🔧 System Core Settings</h3></div>
+      <div class="card-body">
+        <div class="form-group"><label>Discord Audit Log Webhook URL</label><input id="stWebhook" value="${esc(store.settings?.webhookUrl)}"></div>
+        <div class="form-group" style="display:flex;align-items:center;gap:12px;margin-top:24px">
+          <input type="checkbox" id="stLogs" style="width:20px;height:20px" ${store.settings?.logsEnabled?'checked':''}>
+          <label for="stLogs" style="margin-bottom:0;cursor:pointer">Forward events and updates to Discord Webhook</label>
+        </div>
+        <button class="btn btn-primary" style="margin-top:24px" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Configurations</button>
+      </div></div>`;
   }
 
   window.saveSettings = async () => {
-    const payload = { webhookUrl: qs('#settWebhook').value, logsEnabled: qs('#settLogs').value==='true' };
-    const r=await api('PUT','/api/settings',payload);
-    if(r.ok){store.settings=r.data;toast('Settings saved ✓');}
-    else toast('Error: '+r.reason,'#ff5a67');
+    if(!isAdmin) return toast('Permission Denied','#ff5a67');
+    const payload = { webhookUrl: qs('#stWebhook').value, logsEnabled: qs('#stLogs').checked };
+    const r = await api('POST','/api/settings', payload);
+    if(r.ok){ store.settings = payload; toast('Settings Saved Systematically'); }
   };
 
-  window.seedDatabase = async () => {
-    if(!confirm('Reset database to defaults? All data will be lost!')) return;
-    const r=await api('POST','/api/seed');
-    if(r.ok){ await loadAllData(); renderAll(); toast('Database reset ✓','#f3c75a'); }
-  };
+  // ═══════════════════════════ CORE LOADER ═══════════════════════════
+  async function init(){
+    initNav();
+    qs('#closeModalBtn').onclick = closeModal;
+    qs('#modalCancelBtn').onclick = closeModal;
+    qs('#mobileMenuBtn').onclick = () => qs('#sidebar').classList.toggle('open');
+    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
+    qs('#discordLoginBtn').onclick = loginDiscord;
 
-  // ═══════════════════════════ STARTUP ══════════════════════════
-  window.addEventListener('DOMContentLoaded', async () => {
-    // Modal controls
-    qs('#closeModalBtn')?.addEventListener('click', closeModal);
-    qs('#modalCancelBtn')?.addEventListener('click', closeModal);
-    qs('#globalModal')?.addEventListener('click', e => { if(e.target===qs('#globalModal')) closeModal(); });
+    setInterval(()=>{ qs('#clock').textContent = new Date().toLocaleString(); },1000);
 
-    // Clock
-    setInterval(()=>{ const c=qs('#clock'); if(c) c.textContent=new Date().toLocaleString('en-US'); }, 1000);
-
-    // OAuth or session restore
-    const loggedIn = await handleOAuth() || loadSession();
-
-    if(loggedIn){
+    const hasCode = await handleOAuth();
+    if(hasCode || loadSession()){
       bootApp();
-      // Load all data from KV
-      const loadMsg = toast; // reuse toast for feedback
       await loadAllData();
       renderAll();
-      initNav();
-      navigate('dashboard');
-
-      qs('#logoutBtn')?.addEventListener('click', ()=>{ clearSession(); location.reload(); });
-      qs('#mobileMenuBtn')?.addEventListener('click', ()=>qs('#sidebar')?.classList.toggle('open'));
-
-      // Auto-refresh data every 60 seconds
-      setInterval(async()=>{
-        await loadAllData();
-        // Re-render current active page
-        const activePage = qs('.page.active')?.id;
-        if(activePage && PAGE_RENDERERS[activePage]) PAGE_RENDERERS[activePage]();
-      }, 60000);
-
-    } else {
-      qs('#discordLoginBtn')?.addEventListener('click', loginDiscord);
     }
-  });
+  }
+
+  window.addEventListener('DOMContentLoaded', init);
 })();
 </script>
 </body>
