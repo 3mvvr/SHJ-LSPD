@@ -288,18 +288,23 @@
 
   // ═══════════════════════════ DISCORD OAUTH ════════════════════
   function loginDiscord(){
-    const redirect = location.origin + location.pathname;
+    // تعديل الـ redirect_uri ليوجه إلى الـ Worker مباشرة لمعالجة الكود وحل مشكلة الـ Invalid OAuth2
+    const redirect = `${CFG.WORKER_URL}/api/auth/callback`;
     location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
-      client_id: CFG.DISCORD_CLIENT_ID, redirect_uri: redirect,
-      response_type:'code', scope:'identify guilds.members.read'
+      client_id: CFG.DISCORD_CLIENT_ID, 
+      redirect_uri: redirect,
+      response_type:'code', 
+      scope:'identify guilds.members.read'
     });
   }
+
   async function handleOAuth(){
     const code = new URLSearchParams(location.search).get('code');
     if(!code) return false;
     const msg = qs('#loginMessage');
     if(msg) msg.innerHTML = '<span class="spinner"></span> Logging in...';
-    const redirect = location.origin + location.pathname;
+    
+    const redirect = `${CFG.WORKER_URL}/api/auth/callback`;
     const res = await fetch(`${CFG.WORKER_URL}/auth?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect)}`);
     const data = await res.json();
     if(!data.ok){ if(msg) msg.textContent = 'Login failed: '+(data.reason||'unknown'); return false; }
@@ -325,18 +330,18 @@
   // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
   const PAGE_RENDERERS = {
     dashboard:    renderDashboard,
-    officers:      renderOfficers,
+    officers:     renderOfficers,
     ranks:        renderRanks,
     points:       renderPoints,
-    laws:          renderLaws,
+    laws:         renderLaws,
     uniform:      renderUniforms,
     codes:        renderCodes,
     wanted:       renderWanted,
     cases:        renderCases,
     reports:      renderReports,
     discordUsers: renderDiscordUsers,
-    logs:          renderLogs,
-    settings:      renderSettings,
+    logs:         renderLogs,
+    settings:     renderSettings,
   };
 
   function navigate(pageId){
@@ -617,36 +622,40 @@
     openModal();
   };
 
-  function renderCodes() { qs('#codes').innerHTML = `<div class="card"><div class="card-body"><h3>Police Codes</h3></div></div>`; }
-  function renderWanted() { qs('#wanted').innerHTML = `<div class="card"><div class="card-body"><h3>Wanted & Impound Logs</h3></div></div>`; }
-  function renderCases() { qs('#cases').innerHTML = `<div class="card"><div class="card-body"><h3>Cases System</h3></div></div>`; }
-  function renderReports() { qs('#reports').innerHTML = `<div class="card"><div class="card-body"><h3>Reports Center</h3></div></div>`; }
-  function renderDiscordUsers() { qs('#discordUsers').innerHTML = `<div class="card"><div class="card-body"><h3>Discord Users Management</h3></div></div>`; }
-  function renderLogs() { qs('#logs').innerHTML = `<div class="card"><div class="card-body"><h3>System Activity Logs</h3></div></div>`; }
-  function renderSettings() { qs('#settings').innerHTML = `<div class="card"><div class="card-body"><h3>System Settings</h3></div></div>`; }
+  // دوال فارغة لإكمال الهيكل وتفادي أخطاء الـ Console
+  function renderCodes() { qs('#codes').innerHTML = '<div class="card"><div class="card-body"><h3>Police Codes Section</h3></div></div>'; }
+  function renderWanted() { qs('#wanted').innerHTML = '<div class="card"><div class="card-body"><h3>Wanted & Impound Section</h3></div></div>'; }
+  function renderCases() { qs('#cases').innerHTML = '<div class="card"><div class="card-body"><h3>Cases Section</h3></div></div>'; }
+  function renderReports() { qs('#reports').innerHTML = '<div class="card"><div class="card-body"><h3>Reports Section</h3></div></div>'; }
+  function renderDiscordUsers() { qs('#discordUsers').innerHTML = '<div class="card"><div class="card-body"><h3>Discord Users Section</h3></div></div>'; }
+  function renderLogs() { qs('#logs').innerHTML = '<div class="card"><div class="card-body"><h3>System Logs Section</h3></div></div>'; }
+  function renderSettings() { qs('#settings').innerHTML = '<div class="card"><div class="card-body"><h3>Settings Section</h3></div></div>'; }
 
-  // ═══════════════════════════ CORE LOADER ═══════════════════════════
-  function initNav() {
-    qsa('.nav button').forEach(btn => {
-      btn.onclick = () => navigate(btn.dataset.page);
-    });
-  }
-
+  // ═══════════════════════════ INITIALIZATION ═══════════════════════════
   async function init(){
-    initNav();
-    qs('#closeModalBtn').onclick = closeModal;
-    qs('#modalCancelBtn').onclick = closeModal;
-    qs('#mobileMenuBtn').onclick = () => { qs('#sidebar').classList.toggle('open'); };
-    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
     qs('#discordLoginBtn').onclick = loginDiscord;
+    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
+    
+    // إدارة القائمة الجانبية في الجوال
+    qs('#mobileMenuBtn').onclick = () => qs('#sidebar').classList.toggle('open');
+    qsa('.nav button').forEach(b => {
+      b.onclick = () => navigate(b.dataset.page);
+    });
+    qs('#closeModalBtn').onclick = window.closeModal;
+    qs('#modalCancelBtn').onclick = window.closeModal;
 
+    // تشغيل الساعة التلقائية
     setInterval(() => { qs('#clock').textContent = new Date().toLocaleString(); }, 1000);
 
-    const hasCode = await handleOAuth();
-    if(hasCode || loadSession()){
+    // التحقق من الجلسة أو معالجة رابط ديسكورد
+    const hasCode = new URLSearchParams(location.search).has('code');
+    if(hasCode){
+      const ok = await handleOAuth();
+      if(ok){ await loadAllData(); bootApp(); navigate('dashboard'); }
+    } else if(loadSession()){
       bootApp();
       await loadAllData();
-      renderDashboard();
+      navigate('dashboard');
     }
   }
 
