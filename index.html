@@ -288,8 +288,6 @@
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
   // ═══════════════════════════ DISCORD OAUTH ════════════════════
-  // redirect_uri يجب أن يكون URL الصفحة الحالية (Pages URL) وليس Worker URL
-  // هذا مهم جداً لكي يتطابق مع ما هو مسجّل في Discord Developer Portal
   function getRedirectUri(){
     return window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
   }
@@ -312,7 +310,6 @@
     const msg = qs('#loginMessage');
     if(msg) msg.innerHTML = '<span class="spinner"></span> Logging in...';
 
-    // تنظيف الـ URL فوراً لمنع إعادة المعالجة عند الرجوع
     history.replaceState({}, '', location.pathname);
 
     const redirect = getRedirectUri();
@@ -433,7 +430,8 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td></tr>'}</tbody></table>
+          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td></tr>'}</tbody>
+        </table>
         </div>
       </div>`;
   }
@@ -541,9 +539,13 @@
   function renderPoints(){
     const log = store.pointsLog || [];
     const rows = log.map(p=>`
-      <tr><td>${esc(p.officer||'-')}</td>
-      <td style="color:${String(p.change||'').startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change||'0'))}</td>
-      <td>${esc(p.reason||'-')}</td><td>${esc(p.by||'-')}</td><td>${fmtTime(p.time)}</td></tr>`).join('');
+      <tr>
+        <td>${esc(p.officer||'-')}</td>
+        <td style="color:${String(p.change||'').startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change||'0'))}</td>
+        <td>${esc(p.reason||'-')}</td>
+        <td>${esc(p.by||'-')}</td>
+        <td>${fmtTime(p.time)}</td>
+      </tr>`).join('');
     qs('#points').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-chart-bar"></i> Points Management</h3>
@@ -573,7 +575,6 @@
       if(r.ok){
         const idx = (store.officers||[]).findIndex(o=>o.id===id);
         if(idx!==-1) store.officers[idx] = r.data;
-        // تحديث سجل النقاط من الـ store المحلي إذا أرجعه الـ Worker مباشرة
         const logR = await api('GET','/api/pointsLog');
         if(logR.ok) store.pointsLog = logR.data;
         renderPoints(); renderDashboard(); closeModal(); toast('Points updated ✓');
@@ -635,10 +636,15 @@
   function renderUniforms(){
     const uniforms = store.uniforms || [];
     const rows = uniforms.map(u=>`
-      <tr><td><b>${esc(u.rank||'')}</b></td><td>${esc(u.male||'')}</td><td>${esc(u.female||'')}</td><td>
-        ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
-      </td></tr>`).join('');
+      <tr>
+        <td><b>${esc(u.rank||'')}</b></td>
+        <td>${esc(u.male||'')}</td>
+        <td>${esc(u.female||'')}</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
     qs('#uniform').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
@@ -955,7 +961,7 @@
       <tr>
         <td>
           <div style="display:flex;align-items:center;gap:10px">
-            ${u.avatar?`<img src="${esc(u.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" alt="">`:'<div style="width:32px;height:32px;border-radius:50%;background:#1b2942;display:grid;place-items:center">${esc((u.username||'?')[0].toUpperCase())}</div>'}
+            ${u.avatar?`<img src="${esc(u.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" alt="">`:'<div style="width:32px;height:32px;border-radius:50%;background:#1b2942;display:grid;place-items:center">'+esc((u.username||'?')[0].toUpperCase())+'</div>'}
             <b>${esc(u.username||'Unknown')}</b>
           </div>
         </td>
@@ -1041,42 +1047,34 @@
 
   // ═══════════════════════════ INITIALIZATION ═══════════════════════════
   async function init(){
-    // زر تسجيل الدخول
     const loginBtn = qs('#discordLoginBtn');
     if(loginBtn) loginBtn.onclick = loginDiscord;
 
-    // زر تسجيل الخروج
     const logoutBtn = qs('#logoutBtn');
     if(logoutBtn) logoutBtn.onclick = () => { clearSession(); location.reload(); };
 
-    // قائمة الجانب للموبايل
     const mobileBtn = qs('#mobileMenuBtn');
     if(mobileBtn) mobileBtn.onclick = () => qs('#sidebar')?.classList.toggle('open');
 
-    // أزرار إغلاق المودال
     const closeBtn = qs('#closeModalBtn');
     if(closeBtn) closeBtn.onclick = window.closeModal;
     const cancelBtn = qs('#modalCancelBtn');
     if(cancelBtn) cancelBtn.onclick = window.closeModal;
 
-    // إغلاق المودال بالضغط خارجه
     const modal = qs('#globalModal');
     if(modal) modal.addEventListener('click', (e) => {
       if(e.target === modal) window.closeModal();
     });
 
-    // أزرار التنقل
     qsa('.nav button').forEach(b => {
       b.onclick = () => navigate(b.dataset.page);
     });
 
-    // ساعة لوحة التحكم
     setInterval(() => {
       const clockEl = qs('#clock');
       if(clockEl) clockEl.textContent = fmtTime(Date.now());
     }, 1000);
 
-    // معالجة OAuth أو استعادة الجلسة
     const loggedIn = await handleOAuth() || loadSession();
     if(loggedIn){
       bootApp();
@@ -1085,12 +1083,12 @@
     }
   }
 
-  // الانتظار حتى تكتمل الصفحة قبل تشغيل init
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
+} // ← هذا القوس المغلق للـ IIFE كان مفقوداً
 })();
 </script>
 </body>
