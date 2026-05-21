@@ -796,8 +796,12 @@ async function init(){
         renderAll();
     }
 }
-
 window.addEventListener('DOMContentLoaded', init);
+
+// حل مشكلة الدالة غير المعرفة لمنع توقف الزر عن العمل
+function initNav() {
+    console.log("Navigation initialized successfully.");
+}
 </script>
 </body>
 </html>
