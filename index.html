@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head>
-  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SHJ LSPD | Complete Police Command System</title>
@@ -256,7 +255,8 @@
     if(body) opts.body = JSON.stringify(body);
     try {
       const res = await fetch(CFG.WORKER_URL + path, opts);
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch(e) { return { ok:false, reason:'invalid_json_response' }; }
       if(!data.ok && data.reason) console.warn('API warn:', data.reason);
       return data;
     } catch(e){ console.error('API error:', e); return { ok:false, reason: e.message }; }
@@ -288,29 +288,51 @@
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
   // ═══════════════════════════ DISCORD OAUTH ════════════════════
+  // redirect_uri يجب أن يكون URL الصفحة الحالية (Pages URL) وليس Worker URL
+  // هذا مهم جداً لكي يتطابق مع ما هو مسجّل في Discord Developer Portal
+  function getRedirectUri(){
+    return window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
+  }
+
   function loginDiscord() {
-    // تعديل الرابط بالكامل وتمرير الـ Scopes الصحيحة لحل خطأ الـ Invalid OAuth2
-    const redirect = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
+    const redirect = getRedirectUri();
     location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
-      client_id: CFG.DISCORD_CLIENT_ID, 
+      client_id: CFG.DISCORD_CLIENT_ID,
       redirect_uri: redirect,
-      response_type: 'code', 
+      response_type: 'code',
       scope: 'identify guilds.members.read'
     });
   }
 
   async function handleOAuth(){
-    const code = new URLSearchParams(location.search).get('code');
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
     if(!code) return false;
+
     const msg = qs('#loginMessage');
     if(msg) msg.innerHTML = '<span class="spinner"></span> Logging in...';
-    
-    const redirect = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
-    const res = await fetch(`${CFG.WORKER_URL}/auth?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect)}`);
-    const data = await res.json();
-    if(!data.ok){ if(msg) msg.textContent = 'Login failed: '+(data.reason||'unknown'); return false; }
-    saveSession(data.user, data.isAdmin, data.access_token);
+
+    // تنظيف الـ URL فوراً لمنع إعادة المعالجة عند الرجوع
     history.replaceState({}, '', location.pathname);
+
+    const redirect = getRedirectUri();
+    let res, data;
+    try {
+      res = await fetch(
+        `${CFG.WORKER_URL}/auth?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect)}`,
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      data = await res.json();
+    } catch(e) {
+      if(msg) msg.textContent = 'Login failed: Network error - ' + e.message;
+      return false;
+    }
+
+    if(!data.ok){
+      if(msg) msg.textContent = 'Login failed: ' + (data.reason || 'unknown error');
+      return false;
+    }
+    saveSession(data.user, data.isAdmin, data.access_token);
     return true;
   }
 
@@ -319,7 +341,7 @@
     qs('#appContainer').style.display   = 'grid';
     document.body.classList.toggle('is-admin', isAdmin);
     const av = qs('#userAvatar');
-    if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}">`;
+    if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
     qs('#userName').textContent = currentUser?.username || 'User';
     qs('#userRole').textContent = isAdmin ? 'Admin' : 'Officer';
@@ -349,32 +371,33 @@
     qsa('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===pageId));
     qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
     qs('#sidebar')?.classList.remove('open');
-    PAGE_RENDERERS[pageId]?.();
+    if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
   }
 
   // ═══════════════════════════ RENDERERS ════════════════════════
   function renderDashboard(){
-    const o = store.officers;
+    const o = store.officers || [];
     const active = o.filter(x=>x.status==='active').length;
     qs('#dashboard').innerHTML = `
       <div class="stats-grid">
         <div class="stat-card"><i class="ti ti-users"></i><div class="value">${o.length}</div><div class="label">Total Officers</div></div>
         <div class="stat-card"><i class="ti ti-shield-check"></i><div class="value">${active}</div><div class="label">Active</div></div>
-        <div class="stat-card"><i class="ti ti-stairs-up"></i><div class="value">${store.ranks.length}</div><div class="label">Ranks</div></div>
-        <div class="stat-card"><i class="ti ti-file-text"></i><div class="value">${store.reports.length}</div><div class="label">Reports</div></div>
+        <div class="stat-card"><i class="ti ti-stairs-up"></i><div class="value">${(store.ranks||[]).length}</div><div class="label">Ranks</div></div>
+        <div class="stat-card"><i class="ti ti-file-text"></i><div class="value">${(store.reports||[]).length}</div><div class="label">Reports</div></div>
       </div>
       <div class="card"><div class="card-header"><h3><i class="ti ti-users"></i> Officers Overview</h3></div>
       <div class="card-body">
-        ${o.map(of=>`
+        ${o.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No officers found</p>' :
+          o.map(of=>`
           <div class="officer-row">
             <div>
-              <b>${esc(of.name)}</b> &nbsp;<span style="color:#8fa0bd;font-size:13px">#${of.badge}</span>
-              <div style="font-size:12px;color:#8fa0bd;margin-top:2px">${esc(of.rank)}</div>
-              <div class="points-bar" style="width:160px"><div class="points-bar-fill" style="width:${Math.min(100,(of.points/30)*100)}%"></div></div>
+              <b>${esc(of.name)}</b> &nbsp;<span style="color:#8fa0bd;font-size:13px">#${esc(String(of.badge||''))}</span>
+              <div style="font-size:12px;color:#8fa0bd;margin-top:2px">${esc(of.rank||'')}</div>
+              <div class="points-bar" style="width:160px"><div class="points-bar-fill" style="width:${Math.min(100,((of.points||0)/30)*100)}%"></div></div>
             </div>
             <div style="text-align:right">
-              <span class="badge badge-${of.status==='active'?'active':'inactive'}">${of.status}</span>
-              <div style="font-size:12px;color:#8fa0bd;margin-top:4px">${of.points}/30 pts</div>
+              <span class="badge badge-${of.status==='active'?'active':'inactive'}">${esc(of.status||'')}</span>
+              <div style="font-size:12px;color:#8fa0bd;margin-top:4px">${of.points||0}/30 pts</div>
             </div>
           </div>
         `).join('<div class="divider"></div>')}
@@ -383,19 +406,20 @@
   }
 
   function renderOfficers(){
-    const rows = store.officers.map(o=>`
+    const officers = store.officers || [];
+    const rows = officers.map(o=>`
       <tr>
         <td><b>${esc(o.name)}</b></td>
-        <td>#${esc(String(o.badge))}</td>
-        <td>${esc(o.rank)}</td>
+        <td>#${esc(String(o.badge||''))}</td>
+        <td>${esc(o.rank||'')}</td>
         <td>${esc(o.dept||'LSPD')}</td>
         <td>
           <div class="points-bar" style="width:80px;display:inline-block">
-            <div class="points-bar-fill" style="width:${Math.min(100,(o.points/30)*100)}%"></div>
+            <div class="points-bar-fill" style="width:${Math.min(100,((o.points||0)/30)*100)}%"></div>
           </div>
-          <span style="font-size:12px;color:#8fa0bd;margin-left:6px">${o.points}/30</span>
+          <span style="font-size:12px;color:#8fa0bd;margin-left:6px">${o.points||0}/30</span>
         </td>
-        <td><span class="badge badge-${o.status==='active'?'active':'inactive'}">${o.status}</span></td>
+        <td><span class="badge badge-${o.status==='active'?'active':'inactive'}">${esc(o.status||'')}</span></td>
         <td>
           ${isAdmin ? `<button class="btn btn-sm btn-warning" onclick="editOfficer(${o.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteOfficer(${o.id})"><i class="ti ti-trash"></i></button>` : ''}
@@ -409,7 +433,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows}</tbody></table>
+          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -418,39 +442,47 @@
   window.deleteOfficer = async id => {
     if(!confirm('Delete officer?')) return;
     const r = await api('DELETE','/api/officers',{ id });
-    if(r.ok){ store.officers = store.officers.filter(o=>o.id!==id); renderOfficers(); renderDashboard(); toast('Officer deleted','#ff5a67'); }
+    if(r.ok){ store.officers = (store.officers||[]).filter(o=>o.id!==id); renderOfficers(); renderDashboard(); toast('Officer deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
   };
 
   window.openOfficerModal = (id=null) => {
-    const o = id ? store.officers.find(x=>x.id===id) : null;
+    const o = id ? (store.officers||[]).find(x=>x.id===id) : null;
     qs('#modalTitle').textContent = id ? 'Edit Officer' : 'Add Officer';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Full Name</label><input id="offName" value="${esc(o?.name||'')}"></div>
       <div class="form-group"><label>Badge #</label><input id="offBadge" value="${esc(String(o?.badge||''))}"></div>
       <div class="form-group"><label>Rank</label><select id="offRank">
-        ${store.ranks.map(r=>`<option ${o?.rank===r.name?'selected':''}>${esc(r.name)}</option>`).join('')}
+        ${(store.ranks||[]).map(r=>`<option value="${esc(r.name)}" ${o?.rank===r.name?'selected':''}>${esc(r.name)}</option>`).join('')}
       </select></div>
       <div class="form-group"><label>Department</label><input id="offDept" value="${esc(o?.dept||'LSPD')}"></div>
       <div class="form-group"><label>Section</label><input id="offSection" value="${esc(o?.section||'')}"></div>
       <div class="form-group"><label>Discord ID</label><input id="offDiscord" value="${esc(o?.discord||'')}"></div>
       <div class="form-group"><label>Points (0-30)</label><input id="offPoints" type="number" min="0" max="30" value="${o?.points||0}"></div>
       <div class="form-group"><label>Status</label><select id="offStatus">
-        <option ${o?.status==='active'?'selected':''}>active</option>
-        <option ${o?.status==='inactive'?'selected':''}>inactive</option>
+        <option value="active" ${o?.status==='active'?'selected':''}>active</option>
+        <option value="inactive" ${o?.status==='inactive'?'selected':''}>inactive</option>
       </select></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
-        name:    qs('#offName').value, badge:   qs('#offBadge').value,
-        rank:    qs('#offRank').value, dept:    qs('#offDept').value,
-        section: qs('#offSection').value, discord: qs('#offDiscord').value,
-        points:  parseInt(qs('#offPoints').value)||0, status:  qs('#offStatus').value,
+        name:    qs('#offName').value.trim(),
+        badge:   qs('#offBadge').value.trim(),
+        rank:    qs('#offRank').value,
+        dept:    qs('#offDept').value.trim(),
+        section: qs('#offSection').value.trim(),
+        discord: qs('#offDiscord').value.trim(),
+        points:  parseInt(qs('#offPoints').value)||0,
+        status:  qs('#offStatus').value,
       };
+      if(!payload.name){ toast('Name is required','#ff5a67'); return; }
       if(id){
         const r = await api('PUT','/api/officers',{ id, ...payload });
-        if(r.ok){ const idx=store.officers.findIndex(x=>x.id===id); if(idx!==-1) store.officers[idx]=r.data; }
+        if(r.ok){ const idx=(store.officers||[]).findIndex(x=>x.id===id); if(idx!==-1) store.officers[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       } else {
         const r = await api('POST','/api/officers', payload);
         if(r.ok) store.officers.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
       renderOfficers(); renderDashboard(); closeModal(); toast('Saved ✓');
     };
@@ -458,10 +490,11 @@
   };
 
   function renderRanks(){
-    const rows = store.ranks.map(r=>`
+    const ranks = store.ranks || [];
+    const rows = ranks.map(r=>`
       <tr>
         <td><b>${esc(r.name)}</b></td>
-        <td>${r.pointsReq} pts</td>
+        <td>${r.pointsReq||0} pts</td>
         <td>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})"><i class="ti ti-trash"></i></button>`:''}
@@ -473,28 +506,32 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
         <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody>${rows}</tbody></table></div></div>`;
+        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td></tr>'}</tbody></table></div></div>`;
   }
 
   window.deleteRank = async id => {
     if(!confirm('Delete Rank?')) return;
     const r = await api('DELETE','/api/ranks',{ id });
-    if(r.ok){ store.ranks = store.ranks.filter(x=>x.id!==id); renderRanks(); toast('Rank deleted','#ff5a67'); }
+    if(r.ok){ store.ranks = (store.ranks||[]).filter(x=>x.id!==id); renderRanks(); toast('Rank deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
   };
   window.openRankModal = (id=null) => {
-    const rank = id ? store.ranks.find(r=>r.id===id) : null;
+    const rank = id ? (store.ranks||[]).find(r=>r.id===id) : null;
     qs('#modalTitle').textContent = id ? 'Edit Rank' : 'Add Rank';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Rank Name</label><input id="rankName" value="${esc(rank?.name||'')}"></div>
       <div class="form-group"><label>Required Points</label><input id="rankPts" type="number" value="${rank?.pointsReq||0}"></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
-      const payload = { name: qs('#rankName').value, pointsReq: parseInt(qs('#rankPts').value)||0 };
+      const payload = { name: qs('#rankName').value.trim(), pointsReq: parseInt(qs('#rankPts').value)||0 };
+      if(!payload.name){ toast('Rank name is required','#ff5a67'); return; }
       if(id){
         const r = await api('PUT','/api/ranks',{ id, ...payload });
-        if(r.ok){ const idx=store.ranks.findIndex(x=>x.id===id); if(idx!==-1) store.ranks[idx]=r.data; }
+        if(r.ok){ const idx=(store.ranks||[]).findIndex(x=>x.id===id); if(idx!==-1) store.ranks[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       } else {
         const r = await api('POST','/api/ranks', payload);
         if(r.ok) store.ranks.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
       renderRanks(); closeModal(); toast('Saved ✓');
     };
@@ -502,9 +539,10 @@
   };
 
   function renderPoints(){
-    const rows = store.pointsLog.map(p=>`
-      <tr><td>${esc(p.officer)}</td>
-      <td style="color:${String(p.change).startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change))}</td>
+    const log = store.pointsLog || [];
+    const rows = log.map(p=>`
+      <tr><td>${esc(p.officer||'-')}</td>
+      <td style="color:${String(p.change||'').startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change||'0'))}</td>
       <td>${esc(p.reason||'-')}</td><td>${esc(p.by||'-')}</td><td>${fmtTime(p.time)}</td></tr>`).join('');
     qs('#points').innerHTML = `
       <div class="card">
@@ -516,10 +554,12 @@
   }
 
   window.openPointsModal = () => {
+    const officers = store.officers || [];
+    if(officers.length === 0){ toast('No officers available','#f3c75a'); return; }
     qs('#modalTitle').textContent = 'Adjust Officer Points';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Officer</label><select id="ptsOfficer">
-        ${store.officers.map(o=>`<option value="${o.id}">${esc(o.name)} (${o.points} pts)</option>`).join('')}</select></div>
+        ${officers.map(o=>`<option value="${o.id}">${esc(o.name)} (${o.points||0} pts)</option>`).join('')}</select></div>
       <div class="form-group"><label>Operation</label><select id="ptsOp">
         <option value="add">Add Points</option><option value="sub">Remove Points</option><option value="set">Set Points</option></select></div>
       <div class="form-group"><label>Amount</label><input id="ptsAmount" type="number" value="1" min="0"></div>
@@ -528,63 +568,74 @@
       const id     = parseInt(qs('#ptsOfficer').value);
       const op     = qs('#ptsOp').value;
       const amount = parseInt(qs('#ptsAmount').value)||0;
-      const reason = qs('#ptsReason').value;
+      const reason = qs('#ptsReason').value.trim();
       const r = await api('PUT','/api/points',{ id, op, amount, reason });
       if(r.ok){
-        const idx = store.officers.findIndex(o=>o.id===id); if(idx!==-1) store.officers[idx] = r.data;
-        const logR = await api('GET','/api/pointsLog'); if(logR.ok) store.pointsLog = logR.data;
+        const idx = (store.officers||[]).findIndex(o=>o.id===id);
+        if(idx!==-1) store.officers[idx] = r.data;
+        // تحديث سجل النقاط من الـ store المحلي إذا أرجعه الـ Worker مباشرة
+        const logR = await api('GET','/api/pointsLog');
+        if(logR.ok) store.pointsLog = logR.data;
         renderPoints(); renderDashboard(); closeModal(); toast('Points updated ✓');
+      } else {
+        toast('Error: '+(r.reason||'failed'),'#ff5a67');
       }
     };
     openModal();
   };
 
   function renderLaws(){
+    const laws = store.laws || [];
     qs('#laws').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-book"></i> Laws & Regulations</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openLawModal()"><i class="ti ti-plus"></i> Add Law</button>':''}
         </div>
         <div class="card-body">
-          ${store.laws.map(l=>`
+          ${laws.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No laws found</p>' :
+            laws.map(l=>`
             <div class="officer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
               <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
                 <b>${esc(l.title)}</b>
                 ${isAdmin?`<div><button class="btn btn-sm btn-warning" onclick="openLawModal(${l.id})"><i class="ti ti-edit"></i></button>
                 <button class="btn btn-sm btn-danger" onclick="deleteLaw(${l.id})"><i class="ti ti-trash"></i></button></div>`:''}
               </div>
-              <p style="color:#8fa0bd;font-size:13px">${esc(l.content)}</p>
+              <p style="color:#8fa0bd;font-size:13px">${esc(l.content||'')}</p>
             </div><div class="divider"></div>`).join('')}
         </div></div>`;
   }
 
   window.deleteLaw = async id => {
     if(!confirm('Delete law?')) return;
-    const laws = store.laws.filter(l=>l.id!==id);
+    const laws = (store.laws||[]).filter(l=>l.id!==id);
     const r = await api('POST','/api/laws',{ laws });
     if(r.ok){ store.laws=laws; renderLaws(); toast('Law deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
   };
   window.openLawModal = (id=null) => {
-    const law = id ? store.laws.find(l=>l.id===id) : null;
+    const law = id ? (store.laws||[]).find(l=>l.id===id) : null;
     qs('#modalTitle').textContent = id ? 'Edit Law' : 'Add Law';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Title</label><input id="lawTitle" value="${esc(law?.title||'')}"></div>
       <div class="form-group"><label>Content</label><textarea id="lawContent">${esc(law?.content||'')}</textarea></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
-      const title   = qs('#lawTitle').value;
-      const content = qs('#lawContent').value;
-      let laws = [...store.laws];
+      const title   = qs('#lawTitle').value.trim();
+      const content = qs('#lawContent').value.trim();
+      if(!title){ toast('Title is required','#ff5a67'); return; }
+      let laws = [...(store.laws||[])];
       if(id){ const idx=laws.findIndex(l=>l.id===id); if(idx!==-1) laws[idx]={...laws[idx],title,content}; }
       else laws.push({ id:Date.now(), title, content });
       const r = await api('POST','/api/laws',{ laws });
       if(r.ok){ store.laws=laws; renderLaws(); closeModal(); toast('Saved ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
     openModal();
   };
 
   function renderUniforms(){
-    const rows = store.uniforms.map(u=>`
-      <tr><td><b>${esc(u.rank)}</b></td><td>${esc(u.male)}</td><td>${esc(u.female)}</td><td>
+    const uniforms = store.uniforms || [];
+    const rows = uniforms.map(u=>`
+      <tr><td><b>${esc(u.rank||'')}</b></td><td>${esc(u.male||'')}</td><td>${esc(u.female||'')}</td><td>
         ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
         <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
       </td></tr>`).join('');
@@ -594,109 +645,438 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
         <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody>${rows}</tbody></table></div></div>`;
+        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td></tr>'}</tbody></table></div></div>`;
   }
 
   window.deleteUniform = async id => {
     if(!confirm('Delete Uniform configuration?')) return;
     const r = await api('DELETE','/api/uniforms',{ id });
-    if(r.ok){ store.uniforms = store.uniforms.filter(x=>x.id!==id); renderUniforms(); toast('Deleted','#ff5a67'); }
+    if(r.ok){ store.uniforms = (store.uniforms||[]).filter(x=>x.id!==id); renderUniforms(); toast('Deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
   };
   window.openUniformModal = (id=null) => {
-    const u = id ? store.uniforms.find(x=>x.id===id) : null;
+    const u = id ? (store.uniforms||[]).find(x=>x.id===id) : null;
     qs('#modalTitle').textContent = id ? 'Edit Uniform' : 'Add Uniform';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Rank Name</label><input id="uniRank" value="${esc(u?.rank||'')}"></div>
       <div class="form-group"><label>Male Uniform</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
       <div class="form-group"><label>Female Uniform</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
-      const payload = { rank: qs('#uniRank').value, male: qs('#uniMale').value, female: qs('#uniFemale').value };
+      const payload = {
+        rank: qs('#uniRank').value.trim(),
+        male: qs('#uniMale').value.trim(),
+        female: qs('#uniFemale').value.trim()
+      };
+      if(!payload.rank){ toast('Rank is required','#ff5a67'); return; }
       if(id){
         const r = await api('PUT','/api/uniforms',{ id, ...payload });
-        if(r.ok){ const idx=store.uniforms.findIndex(x=>x.id===id); if(idx!==-1) store.uniforms[idx]=r.data; }
+        if(r.ok){ const idx=(store.uniforms||[]).findIndex(x=>x.id===id); if(idx!==-1) store.uniforms[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       } else {
         const r = await api('POST','/api/uniforms', payload);
         if(r.ok) store.uniforms.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
       renderUniforms(); closeModal(); toast('Saved ✓');
     };
     openModal();
   };
 
-
   function renderCodes(){
+    const codes = store.codes || [];
+    const rows = codes.map(c=>`
+      <tr>
+        <td><b>${esc(c.code||'')}</b></td>
+        <td>${esc(c.description||'')}</td>
+        <td><span class="badge badge-${c.priority==='danger'?'danger':c.priority==='warning'?'warning':'info'}">${esc(c.priority||'info')}</span></td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCodeModal(${c.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCode(${c.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
     qs('#codes').innerHTML = `
       <div class="card">
         <div class="card-header">
           <h3><i class="ti ti-radio"></i> Police Codes</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openCodeModal()"><i class="ti ti-plus"></i> Add Code</button>':''}
         </div>
         <div class="card-body">
           <table>
-            <thead>
-              <tr><th>Code</th><th>Description</th><th>Priority</th></tr>
-            </thead>
-            <tbody>
-              ${(store.codes || []).map(c => `
-                <tr>
-                  <td><b>${esc(c.code)}</b></td>
-                  <td>${esc(c.description)}</td>
-                  <td>${esc(c.priority || 'info')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
+            <thead><tr><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
   }
 
+  window.deleteCode = async id => {
+    if(!confirm('Delete code?')) return;
+    const r = await api('DELETE','/api/codes',{ id });
+    if(r.ok){ store.codes = (store.codes||[]).filter(c=>c.id!==id); renderCodes(); toast('Deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openCodeModal = (id=null) => {
+    const c = id ? (store.codes||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Code' : 'Add Code';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Code</label><input id="codeCode" value="${esc(c?.code||'')}"></div>
+      <div class="form-group"><label>Description</label><input id="codeDesc" value="${esc(c?.description||'')}"></div>
+      <div class="form-group"><label>Priority</label><select id="codePriority">
+        <option value="info" ${c?.priority==='info'?'selected':''}>info</option>
+        <option value="warning" ${c?.priority==='warning'?'selected':''}>warning</option>
+        <option value="danger" ${c?.priority==='danger'?'selected':''}>danger</option>
+      </select></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        code: qs('#codeCode').value.trim(),
+        description: qs('#codeDesc').value.trim(),
+        priority: qs('#codePriority').value
+      };
+      if(!payload.code){ toast('Code is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/codes',{ id, ...payload });
+        if(r.ok){ const idx=(store.codes||[]).findIndex(x=>x.id===id); if(idx!==-1) store.codes[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/codes', payload);
+        if(r.ok) store.codes.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      }
+      renderCodes(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
+
   function renderWanted(){
-    qs('#wanted').innerHTML = '<div class="card"><div class="card-header"><h3>Wanted & Impound</h3></div><div class="card-body">System Ready</div></div>';
+    const wanted = store.wanted || [];
+    const impound = store.impound || [];
+    const wRows = wanted.map(w=>`
+      <tr>
+        <td><b>${esc(w.name||'')}</b></td>
+        <td>${esc(w.plate||'-')}</td>
+        <td>${esc(w.reason||'-')}</td>
+        <td><span class="badge badge-danger">Level ${w.level||1}</span></td>
+        <td>${esc(w.by||'-')}</td>
+        <td>${fmtTime(w.time)}</td>
+        <td>${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteWanted(${w.id})"><i class="ti ti-trash"></i></button>`:''}</td>
+      </tr>`).join('');
+    const iRows = impound.map(i=>`
+      <tr>
+        <td><b>${esc(i.plate||'')}</b></td>
+        <td>${esc(i.model||'-')}</td>
+        <td>${esc(i.reason||'-')}</td>
+        <td>$${i.fee||0}</td>
+        <td>${esc(i.by||'-')}</td>
+        <td>${fmtTime(i.time)}</td>
+        <td>${isAdmin?`<button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})"><i class="ti ti-check"></i> Release</button>`:''}</td>
+      </tr>`).join('');
+    qs('#wanted').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-car"></i> Wanted List</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>':''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody>${wRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td></tr>'}</tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-car"></i> Impound List</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Add Impound</button>':''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td></tr>'}</tbody></table>
+        </div>
+      </div>`;
   }
+
+  window.deleteWanted = async id => {
+    if(!confirm('Remove from wanted list?')) return;
+    const r = await api('DELETE','/api/wanted',{ id });
+    if(r.ok){ store.wanted=(store.wanted||[]).filter(w=>w.id!==id); renderWanted(); toast('Removed','#2ecc71'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.releaseImpound = async id => {
+    if(!confirm('Release vehicle?')) return;
+    const r = await api('DELETE','/api/impound',{ id });
+    if(r.ok){ store.impound=(store.impound||[]).filter(i=>i.id!==id); renderWanted(); toast('Vehicle released','#2ecc71'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openWantedModal = () => {
+    qs('#modalTitle').textContent = 'Add Wanted';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Name</label><input id="wantedName" placeholder="Suspect name"></div>
+      <div class="form-group"><label>Plate</label><input id="wantedPlate" placeholder="License plate"></div>
+      <div class="form-group"><label>Reason</label><input id="wantedReason" placeholder="Reason"></div>
+      <div class="form-group"><label>Level (1-5)</label><input id="wantedLevel" type="number" min="1" max="5" value="1"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        name: qs('#wantedName').value.trim(),
+        plate: qs('#wantedPlate').value.trim(),
+        reason: qs('#wantedReason').value.trim(),
+        level: parseInt(qs('#wantedLevel').value)||1
+      };
+      if(!payload.name){ toast('Name is required','#ff5a67'); return; }
+      const r = await api('POST','/api/wanted', payload);
+      if(r.ok){ store.wanted = store.wanted||[]; store.wanted.unshift(r.data); renderWanted(); closeModal(); toast('Added ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+  window.openImpoundModal = () => {
+    qs('#modalTitle').textContent = 'Add Impound';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Plate</label><input id="impoundPlate" placeholder="License plate"></div>
+      <div class="form-group"><label>Model</label><input id="impoundModel" placeholder="Vehicle model"></div>
+      <div class="form-group"><label>Reason</label><input id="impoundReason" placeholder="Reason"></div>
+      <div class="form-group"><label>Fee ($)</label><input id="impoundFee" type="number" min="0" value="0"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        plate: qs('#impoundPlate').value.trim(),
+        model: qs('#impoundModel').value.trim(),
+        reason: qs('#impoundReason').value.trim(),
+        fee: parseInt(qs('#impoundFee').value)||0
+      };
+      if(!payload.plate){ toast('Plate is required','#ff5a67'); return; }
+      const r = await api('POST','/api/impound', payload);
+      if(r.ok){ store.impound = store.impound||[]; store.impound.unshift(r.data); renderWanted(); closeModal(); toast('Added ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
 
   function renderCases(){
-    qs('#cases').innerHTML = '<div class="card"><div class="card-header"><h3>Cases</h3></div><div class="card-body">Cases system ready</div></div>';
+    const cases = store.cases || [];
+    const rows = cases.map(c=>`
+      <tr>
+        <td><b>${esc(c.title||'')}</b></td>
+        <td>${esc(c.description||'-')}</td>
+        <td><span class="badge badge-${c.status==='open'?'active':c.status==='closed'?'inactive':'warning'}">${esc(c.status||'open')}</span></td>
+        <td>${esc(c.by||'-')}</td>
+        <td>${fmtTime(c.time)}</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCaseModal(${c.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCase(${c.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
+    qs('#cases').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-folder"></i> Cases</h3>
+          <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td></tr>'}</tbody></table>
+        </div>
+      </div>`;
   }
+
+  window.deleteCase = async id => {
+    if(!confirm('Delete case?')) return;
+    const r = await api('DELETE','/api/cases',{ id });
+    if(r.ok){ store.cases=(store.cases||[]).filter(c=>c.id!==id); renderCases(); toast('Deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openCaseModal = (id=null) => {
+    const c = id ? (store.cases||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Case' : 'New Case';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="caseTitle" value="${esc(c?.title||'')}"></div>
+      <div class="form-group"><label>Description</label><textarea id="caseDesc">${esc(c?.description||'')}</textarea></div>
+      <div class="form-group"><label>Status</label><select id="caseStatus">
+        <option value="open" ${c?.status==='open'||!c?'selected':''}>Open</option>
+        <option value="closed" ${c?.status==='closed'?'selected':''}>Closed</option>
+        <option value="pending" ${c?.status==='pending'?'selected':''}>Pending</option>
+      </select></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        title: qs('#caseTitle').value.trim(),
+        description: qs('#caseDesc').value.trim(),
+        status: qs('#caseStatus').value
+      };
+      if(!payload.title){ toast('Title is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/cases',{ id, ...payload });
+        if(r.ok){ const idx=(store.cases||[]).findIndex(x=>x.id===id); if(idx!==-1) store.cases[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/cases', payload);
+        if(r.ok){ store.cases = store.cases||[]; store.cases.unshift(r.data); }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      }
+      renderCases(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
 
   function renderReports(){
-    qs('#reports').innerHTML = '<div class="card"><div class="card-header"><h3>Reports</h3></div><div class="card-body">Reports system ready</div></div>';
+    const reports = store.reports || [];
+    const rows = reports.map(r=>`
+      <tr>
+        <td><b>${esc(r.title||'')}</b></td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.body||'-')}</td>
+        <td>${esc(r.by||'-')}</td>
+        <td>${fmtTime(r.time)}</td>
+      </tr>`).join('');
+    qs('#reports').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-file-text"></i> Reports</h3>
+          <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td></tr>'}</tbody></table>
+        </div>
+      </div>`;
   }
 
+  window.openReportModal = () => {
+    qs('#modalTitle').textContent = 'New Report';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="repTitle" placeholder="Report title"></div>
+      <div class="form-group"><label>Content</label><textarea id="repBody" style="min-height:120px" placeholder="Report details..."></textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        title: qs('#repTitle').value.trim(),
+        body: qs('#repBody').value.trim()
+      };
+      if(!payload.title){ toast('Title is required','#ff5a67'); return; }
+      const r = await api('POST','/api/reports', payload);
+      if(r.ok){ store.reports = store.reports||[]; store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report saved ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
   function renderDiscordUsers(){
-    qs('#discordUsers').innerHTML = '<div class="card"><div class="card-header"><h3>Discord Users</h3></div><div class="card-body">Users system ready</div></div>';
+    const users = store.users || [];
+    const rows = users.map(u=>`
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${u.avatar?`<img src="${esc(u.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" alt="">`:'<div style="width:32px;height:32px;border-radius:50%;background:#1b2942;display:grid;place-items:center">${esc((u.username||'?')[0].toUpperCase())}</div>'}
+            <b>${esc(u.username||'Unknown')}</b>
+          </div>
+        </td>
+        <td style="font-size:12px;color:#8fa0bd">${esc(u.id||'')}</td>
+        <td><span class="badge badge-${u.isAdmin?'warning':'info'}">${u.isAdmin?'Admin':'Officer'}</span></td>
+        <td>${fmtTime(u.lastLogin)}</td>
+        <td>${fmtTime(u.joinedAt)}</td>
+      </tr>`).join('');
+    qs('#discordUsers').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-brand-discord"></i> Discord Users</h3>
+          <span style="color:#8fa0bd;font-size:13px">${users.length} registered users</span>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td></tr>'}</tbody></table>
+        </div>
+      </div>`;
   }
 
   function renderLogs(){
-    qs('#logs').innerHTML = '<div class="card"><div class="card-header"><h3>System Logs</h3></div><div class="card-body">Logs system ready</div></div>';
+    const activity = store.activity || [];
+    const rows = activity.slice(0,100).map(a=>`
+      <tr>
+        <td>${esc(a.msg||'')}</td>
+        <td><span class="badge badge-info">${esc(a.type||'system')}</span></td>
+        <td>${fmtTime(a.time)}</td>
+      </tr>`).join('');
+    qs('#logs').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-history"></i> System Logs</h3>
+          <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td></tr>'}</tbody></table>
+        </div>
+      </div>`;
   }
 
   function renderSettings(){
-    qs('#settings').innerHTML = '<div class="card"><div class="card-header"><h3>Settings</h3></div><div class="card-body">Settings panel ready</div></div>';
+    const settings = store.settings || { webhookUrl:'', logsEnabled:true };
+    qs('#settings').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-settings"></i> Settings</h3></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Discord Webhook URL</label>
+            <input id="settingsWebhook" value="${esc(settings.webhookUrl||'')}" placeholder="https://discord.com/api/webhooks/...">
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label style="margin:0">Enable Activity Logs</label>
+            <input type="checkbox" id="settingsLogs" ${settings.logsEnabled?'checked':''} style="width:auto;padding:0;margin:0">
+          </div>
+          ${isAdmin?`<button class="btn btn-primary" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Settings</button>`:'<p style="color:#8fa0bd;font-size:13px">Only admins can change settings.</p>'}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-database"></i> Database</h3></div>
+        <div class="card-body">
+          <p style="color:#8fa0bd;margin-bottom:16px;font-size:13px">Reset the database to default seed data. This action cannot be undone.</p>
+          ${isAdmin?`<button class="btn btn-danger" onclick="seedDatabase()"><i class="ti ti-refresh"></i> Reset to Defaults</button>`:''}
+        </div>
+      </div>`;
   }
 
+  window.saveSettings = async () => {
+    const payload = {
+      webhookUrl: qs('#settingsWebhook').value.trim(),
+      logsEnabled: qs('#settingsLogs').checked
+    };
+    const r = await api('PUT','/api/settings', payload);
+    if(r.ok){ store.settings = r.data; toast('Settings saved ✓'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
 
+  window.seedDatabase = async () => {
+    if(!confirm('Reset ALL data to defaults? This cannot be undone!')) return;
+    const r = await api('POST','/api/seed');
+    if(r.ok){ await loadAllData(); navigate('dashboard'); toast('Database reset ✓','#f3c75a'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
 
   // ═══════════════════════════ INITIALIZATION ═══════════════════════════
   async function init(){
-    // إعداد مستمع الحدث لزر تسجيل الدخول
-    qs('#discordLoginBtn').onclick = loginDiscord;
-    
-    // مستمع تسجيل الخروج
-    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
+    // زر تسجيل الدخول
+    const loginBtn = qs('#discordLoginBtn');
+    if(loginBtn) loginBtn.onclick = loginDiscord;
 
-    // قائمة المتنقل للموبايل
-    qs('#mobileMenuBtn').onclick = () => qs('#sidebar').classList.toggle('open');
-    qs('#closeModalBtn').onclick = window.closeModal;
-    qs('#modalCancelBtn').onclick = window.closeModal;
+    // زر تسجيل الخروج
+    const logoutBtn = qs('#logoutBtn');
+    if(logoutBtn) logoutBtn.onclick = () => { clearSession(); location.reload(); };
 
-    // أزرار التنقل بين الصفحات
+    // قائمة الجانب للموبايل
+    const mobileBtn = qs('#mobileMenuBtn');
+    if(mobileBtn) mobileBtn.onclick = () => qs('#sidebar')?.classList.toggle('open');
+
+    // أزرار إغلاق المودال
+    const closeBtn = qs('#closeModalBtn');
+    if(closeBtn) closeBtn.onclick = window.closeModal;
+    const cancelBtn = qs('#modalCancelBtn');
+    if(cancelBtn) cancelBtn.onclick = window.closeModal;
+
+    // إغلاق المودال بالضغط خارجه
+    const modal = qs('#globalModal');
+    if(modal) modal.addEventListener('click', (e) => {
+      if(e.target === modal) window.closeModal();
+    });
+
+    // أزرار التنقل
     qsa('.nav button').forEach(b => {
       b.onclick = () => navigate(b.dataset.page);
     });
 
     // ساعة لوحة التحكم
-    setInterval(() => { qs('#clock').textContent = fmtTime(Date.now()); }, 1000);
+    setInterval(() => {
+      const clockEl = qs('#clock');
+      if(clockEl) clockEl.textContent = fmtTime(Date.now());
+    }, 1000);
 
-    // معالجة التحقق بعد العودة من ديسكورد أو استعادة الجلسة
+    // معالجة OAuth أو استعادة الجلسة
     const loggedIn = await handleOAuth() || loadSession();
     if(loggedIn){
       bootApp();
@@ -705,7 +1085,12 @@
     }
   }
 
-  window.addEventListener('DOMContentLoaded', init);
+  // الانتظار حتى تكتمل الصفحة قبل تشغيل init
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
 </script>
 </body>
