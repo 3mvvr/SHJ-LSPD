@@ -287,14 +287,14 @@
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
   // ═══════════════════════════ DISCORD OAUTH ════════════════════
-  function loginDiscord(){
-    // تعديل الـ redirect_uri ليوجه إلى الـ Worker مباشرة لمعالجة الكود وحل مشكلة الـ Invalid OAuth2
-    const redirect = `${CFG.WORKER_URL}/api/auth/callback`;
+  function loginDiscord() {
+    // تعديل الرابط بالكامل وتمرير الـ Scopes الصحيحة لحل خطأ الـ Invalid OAuth2
+    const redirect = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
     location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
       client_id: CFG.DISCORD_CLIENT_ID, 
       redirect_uri: redirect,
-      response_type:'code', 
-      scope:'identify guilds.members.read'
+      response_type: 'code', 
+      scope: 'identify guilds.members.read'
     });
   }
 
@@ -304,7 +304,7 @@
     const msg = qs('#loginMessage');
     if(msg) msg.innerHTML = '<span class="spinner"></span> Logging in...';
     
-    const redirect = `${CFG.WORKER_URL}/api/auth/callback`;
+    const redirect = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
     const res = await fetch(`${CFG.WORKER_URL}/auth?code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect)}`);
     const data = await res.json();
     if(!data.ok){ if(msg) msg.textContent = 'Login failed: '+(data.reason||'unknown'); return false; }
@@ -606,8 +606,8 @@
     qs('#modalTitle').textContent = id ? 'Edit Uniform' : 'Add Uniform';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Rank Name</label><input id="uniRank" value="${esc(u?.rank||'')}"></div>
-      <div class="form-group"><label>Male Uniform Strings</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
-      <div class="form-group"><label>Female Uniform Strings</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
+      <div class="form-group"><label>Male Uniform</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
+      <div class="form-group"><label>Female Uniform</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = { rank: qs('#uniRank').value, male: qs('#uniMale').value, female: qs('#uniFemale').value };
       if(id){
@@ -622,37 +622,30 @@
     openModal();
   };
 
-  // دوال فارغة لإكمال الهيكل وتفادي أخطاء الـ Console
-  function renderCodes() { qs('#codes').innerHTML = '<div class="card"><div class="card-body"><h3>Police Codes Section</h3></div></div>'; }
-  function renderWanted() { qs('#wanted').innerHTML = '<div class="card"><div class="card-body"><h3>Wanted & Impound Section</h3></div></div>'; }
-  function renderCases() { qs('#cases').innerHTML = '<div class="card"><div class="card-body"><h3>Cases Section</h3></div></div>'; }
-  function renderReports() { qs('#reports').innerHTML = '<div class="card"><div class="card-body"><h3>Reports Section</h3></div></div>'; }
-  function renderDiscordUsers() { qs('#discordUsers').innerHTML = '<div class="card"><div class="card-body"><h3>Discord Users Section</h3></div></div>'; }
-  function renderLogs() { qs('#logs').innerHTML = '<div class="card"><div class="card-body"><h3>System Logs Section</h3></div></div>'; }
-  function renderSettings() { qs('#settings').innerHTML = '<div class="card"><div class="card-body"><h3>Settings Section</h3></div></div>'; }
-
   // ═══════════════════════════ INITIALIZATION ═══════════════════════════
   async function init(){
+    // إعداد مستمع الحدث لزر تسجيل الدخول
     qs('#discordLoginBtn').onclick = loginDiscord;
-    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
     
-    // إدارة القائمة الجانبية في الجوال
+    // مستمع تسجيل الخروج
+    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
+
+    // قائمة المتنقل للموبايل
     qs('#mobileMenuBtn').onclick = () => qs('#sidebar').classList.toggle('open');
-    qsa('.nav button').forEach(b => {
-      b.onclick = () => navigate(b.dataset.page);
-    });
     qs('#closeModalBtn').onclick = window.closeModal;
     qs('#modalCancelBtn').onclick = window.closeModal;
 
-    // تشغيل الساعة التلقائية
-    setInterval(() => { qs('#clock').textContent = new Date().toLocaleString(); }, 1000);
+    // أزرار التنقل بين الصفحات
+    qsa('.nav button').forEach(b => {
+      b.onclick = () => navigate(b.dataset.page);
+    });
 
-    // التحقق من الجلسة أو معالجة رابط ديسكورد
-    const hasCode = new URLSearchParams(location.search).has('code');
-    if(hasCode){
-      const ok = await handleOAuth();
-      if(ok){ await loadAllData(); bootApp(); navigate('dashboard'); }
-    } else if(loadSession()){
+    // ساعة لوحة التحكم
+    setInterval(() => { qs('#clock').textContent = fmtTime(Date.now()); }, 1000);
+
+    // معالجة التحقق بعد العودة من ديسكورد أو استعادة الجلسة
+    const loggedIn = await handleOAuth() || loadSession();
+    if(loggedIn){
       bootApp();
       await loadAllData();
       navigate('dashboard');
