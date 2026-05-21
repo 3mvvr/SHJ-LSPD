@@ -359,6 +359,16 @@
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
     qs('#userName').textContent = currentUser?.username || 'User';
     qs('#userRole').textContent = isAdmin ? 'Admin' : 'Officer';
+    // Register/update user in KV on every login
+    if(currentUser?.id) {
+      api('POST','/api/users/register',{
+        id: currentUser.id,
+        username: currentUser.username,
+        avatar: currentUser.avatar,
+        isAdmin,
+        lastLogin: Date.now()
+      }).catch(()=>{});
+    }
   }
 
   function openModal(){ qs('#globalModal').classList.add('open'); }
@@ -507,12 +517,12 @@
   function renderRanks(){
     const ranks = store.ranks || [];
     const rows = ranks.map(r=>`
-      </table>
+      <tr>
         <td><b>${esc(r.name)}</b></td>
-        <td>${r.pointsReq||0} pts</td>
-        <td>
-          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})"><i class="ti ti-trash"></i></button>`:''}
+        <td><span class="badge badge-info">${r.pointsReq||0} pts</span></td>
+        <td style="white-space:nowrap">
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})" title="Edit"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})" title="Delete"><i class="ti ti-trash"></i></button>`:'—'}
         </td>
       </tr>`).join('');
     qs('#ranks').innerHTML = `
@@ -520,8 +530,13 @@
         <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td></tr>'}</tbody></table></div></div>`;
+        <div class="card-body">
+          <table>
+            <thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
   }
 
   window.deleteRank = async id => {
@@ -655,11 +670,11 @@
     const rows = uniforms.map(u=>`
       <tr>
         <td><b>${esc(u.rank||'')}</b></td>
-        <td>${esc(u.male||'')}</td>
-        <td>${esc(u.female||'')}</td>
-        <td>
-          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
+        <td style="font-size:13px;color:#c5d0e0;max-width:220px;white-space:pre-wrap;word-break:break-word">${esc(u.male||'—')}</td>
+        <td style="font-size:13px;color:#c5d0e0;max-width:220px;white-space:pre-wrap;word-break:break-word">${esc(u.female||'—')}</td>
+        <td style="white-space:nowrap">
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})" title="Edit"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})" title="Delete"><i class="ti ti-trash"></i></button>`:'—'}
         </td>
       </tr>`).join('');
     qs('#uniform').innerHTML = `
@@ -667,8 +682,13 @@
         <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
-        <div class="card-body"><tr><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td></tr>'}</tbody></table></div></div>`;
+        <div class="card-body">
+          <table>
+            <thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>`;
   }
 
   window.deleteUniform = async id => {
@@ -874,13 +894,15 @@
     const rows = cases.map(c=>`
       <tr>
         <td><b>${esc(c.title||'')}</b></td>
-        <td>${esc(c.description||'-')}</td>
+        <td>${esc(c.caseType||'-')}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.criminals||'-')}</td>
+        <td>${esc(c.location||'-')}</td>
         <td><span class="badge badge-${c.status==='open'?'active':c.status==='closed'?'inactive':'warning'}">${esc(c.status||'open')}</span></td>
         <td>${esc(c.by||'-')}</td>
         <td>${fmtTime(c.time)}</td>
-        <td>
-          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCaseModal(${c.id})"><i class="ti ti-edit"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteCase(${c.id})"><i class="ti ti-trash"></i></button>`:''}
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-warning" onclick="openCaseModal(${c.id})" title="Edit"><i class="ti ti-edit"></i></button>
+          ${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteCase(${c.id})" title="Delete"><i class="ti ti-trash"></i></button>`:''}
         </td>
       </tr>`).join('');
     qs('#cases').innerHTML = `
@@ -889,8 +911,8 @@
           <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td></tr>'}</tbody></table>
+          <table><thead><tr><th>Title</th><th>Type</th><th>Criminals</th><th>Location</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No cases found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -906,7 +928,19 @@
     qs('#modalTitle').textContent = id ? 'Edit Case' : 'New Case';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Title</label><input id="caseTitle" value="${esc(c?.title||'')}"></div>
+      <div class="form-group"><label>Case Type</label><select id="caseCaseType">
+        <option value="Patrol" ${c?.caseType==='Patrol'?'selected':''}>Patrol</option>
+        <option value="Arrest" ${c?.caseType==='Arrest'?'selected':''}>Arrest</option>
+        <option value="Investigation" ${c?.caseType==='Investigation'?'selected':''}>Investigation</option>
+        <option value="Pursuit" ${c?.caseType==='Pursuit'?'selected':''}>Pursuit</option>
+        <option value="Traffic" ${c?.caseType==='Traffic'?'selected':''}>Traffic</option>
+        <option value="Other" ${!c?.caseType||c?.caseType==='Other'?'selected':''}>Other</option>
+      </select></div>
+      <div class="form-group"><label>Criminals / Suspects</label><input id="caseCriminals" placeholder="Names separated by commas" value="${esc(c?.criminals||'')}"></div>
+      <div class="form-group"><label>Participating Officers</label><input id="caseOfficers" placeholder="Names separated by commas" value="${esc(c?.participatingOfficers||'')}"></div>
+      <div class="form-group"><label>Location</label><input id="caseLocation" placeholder="Location of incident" value="${esc(c?.location||'')}"></div>
       <div class="form-group"><label>Description</label><textarea id="caseDesc">${esc(c?.description||'')}</textarea></div>
+      <div class="form-group"><label>Evidence</label><textarea id="caseEvidence" style="min-height:80px">${esc(c?.evidence||'')}</textarea></div>
       <div class="form-group"><label>Status</label><select id="caseStatus">
         <option value="open" ${c?.status==='open'||!c?'selected':''}>Open</option>
         <option value="closed" ${c?.status==='closed'?'selected':''}>Closed</option>
@@ -915,7 +949,12 @@
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
         title: qs('#caseTitle').value.trim(),
+        caseType: qs('#caseCaseType').value,
+        criminals: qs('#caseCriminals').value.trim(),
+        participatingOfficers: qs('#caseOfficers').value.trim(),
+        location: qs('#caseLocation').value.trim(),
         description: qs('#caseDesc').value.trim(),
+        evidence: qs('#caseEvidence').value.trim(),
         status: qs('#caseStatus').value
       };
       if(!payload.title){ toast('Title is required','#ff5a67'); return; }
@@ -938,9 +977,15 @@
     const rows = reports.map(r=>`
       <tr>
         <td><b>${esc(r.title||'')}</b></td>
-        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.body||'-')}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.caseType||'-')}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.criminals||'-')}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.location||'-')}</td>
         <td>${esc(r.by||'-')}</td>
         <td>${fmtTime(r.time)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-warning" onclick="openReportModal('${r.id}')" title="Edit"><i class="ti ti-edit"></i></button>
+          ${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteReport('${r.id}')" title="Delete"><i class="ti ti-trash"></i></button>`:''}
+        </td>
       </tr>`).join('');
     qs('#reports').innerHTML = `
       <div class="card">
@@ -948,26 +993,57 @@
           <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td></tr>'}</tbody></table>
+          <table><thead><tr><th>Title</th><th>Case Type</th><th>Criminals</th><th>Location</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No reports found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
 
-  window.openReportModal = () => {
-    qs('#modalTitle').textContent = 'New Report';
+  window.deleteReport = async id => {
+    if(!confirm('Delete report?')) return;
+    const r = await api('DELETE','/api/reports',{ id });
+    if(r.ok){ store.reports=(store.reports||[]).filter(x=>x.id!=id); renderReports(); toast('Report deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.openReportModal = (id=null) => {
+    const rep = id ? (store.reports||[]).find(x=>x.id==id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Report' : 'New Report';
     qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Title</label><input id="repTitle" placeholder="Report title"></div>
-      <div class="form-group"><label>Content</label><textarea id="repBody" style="min-height:120px" placeholder="Report details..."></textarea></div>`;
+      <div class="form-group"><label>Title</label><input id="repTitle" placeholder="Report title" value="${esc(rep?.title||'')}"></div>
+      <div class="form-group"><label>Case Type</label><select id="repCaseType">
+        <option value="Patrol" ${rep?.caseType==='Patrol'?'selected':''}>Patrol</option>
+        <option value="Arrest" ${rep?.caseType==='Arrest'?'selected':''}>Arrest</option>
+        <option value="Investigation" ${rep?.caseType==='Investigation'?'selected':''}>Investigation</option>
+        <option value="Pursuit" ${rep?.caseType==='Pursuit'?'selected':''}>Pursuit</option>
+        <option value="Traffic" ${rep?.caseType==='Traffic'?'selected':''}>Traffic</option>
+        <option value="Other" ${rep?.caseType==='Other'||!rep?.caseType?'selected':''}>Other</option>
+      </select></div>
+      <div class="form-group"><label>Criminals / Suspects</label><input id="repCriminals" placeholder="Names separated by commas" value="${esc(rep?.criminals||'')}"></div>
+      <div class="form-group"><label>Participating Officers</label><input id="repOfficers" placeholder="Names separated by commas" value="${esc(rep?.participatingOfficers||'')}"></div>
+      <div class="form-group"><label>Location</label><input id="repLocation" placeholder="Location of incident" value="${esc(rep?.location||'')}"></div>
+      <div class="form-group"><label>Report Content</label><textarea id="repBody" style="min-height:100px" placeholder="Report details...">${esc(rep?.body||'')}</textarea></div>
+      <div class="form-group"><label>Evidence / Notes</label><textarea id="repEvidence" style="min-height:80px" placeholder="Evidence or additional notes...">${esc(rep?.evidence||'')}</textarea></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
         title: qs('#repTitle').value.trim(),
-        body: qs('#repBody').value.trim()
+        caseType: qs('#repCaseType').value,
+        criminals: qs('#repCriminals').value.trim(),
+        participatingOfficers: qs('#repOfficers').value.trim(),
+        location: qs('#repLocation').value.trim(),
+        body: qs('#repBody').value.trim(),
+        evidence: qs('#repEvidence').value.trim()
       };
       if(!payload.title){ toast('Title is required','#ff5a67'); return; }
-      const r = await api('POST','/api/reports', payload);
-      if(r.ok){ store.reports = store.reports||[]; store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report saved ✓'); }
-      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      if(id){
+        const r = await api('PUT','/api/reports',{ id, ...payload });
+        if(r.ok){ const idx=(store.reports||[]).findIndex(x=>x.id==id); if(idx!==-1) store.reports[idx]=r.data; renderReports(); closeModal(); toast('Report updated ✓'); }
+        else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      } else {
+        const r = await api('POST','/api/reports', payload);
+        if(r.ok){ store.reports = store.reports||[]; store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report saved ✓'); }
+        else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      }
     };
     openModal();
   };
@@ -985,12 +1061,12 @@
         <td style="font-size:12px;color:#8fa0bd">${esc(u.id||'')}</td>
         <td><span class="badge badge-${u.isAdmin?'warning':'info'}">${u.isAdmin?'Admin':'Officer'}</span></td>
         <td>${fmtTime(u.lastLogin)}</td>
-        <td>${fmtTime(u.joinedAt)}</td>
+        <td>${fmtTime(u.joinedAt||u.firstLogin)}</td>
       </tr>`).join('');
     qs('#discordUsers').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-brand-discord"></i> Discord Users</h3>
-          <span style="color:#8fa0bd;font-size:13px">${users.length} registered users</span>
+          <span style="color:#8fa0bd;font-size:13px">${users.length} registered user${users.length!==1?'s':''}</span>
         </div>
         <div class="card-body">
           <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
@@ -1001,10 +1077,12 @@
 
   function renderLogs(){
     const activity = store.activity || [];
+    const typeColor = { login:'active', logout:'inactive', add:'info', edit:'warning', delete:'danger', settings:'warning', system:'info' };
     const rows = activity.slice(0,100).map(a=>`
       <tr>
         <td>${esc(a.msg||'')}</td>
-        <td><span class="badge badge-info">${esc(a.type||'system')}</span></td>
+        <td><span class="badge badge-${typeColor[a.type]||'info'}">${esc(a.type||'system')}</span></td>
+        <td style="font-size:12px;color:#8fa0bd">${esc(a.user||'-')}</td>
         <td>${fmtTime(a.time)}</td>
       </tr>`).join('');
     qs('#logs').innerHTML = `
@@ -1013,18 +1091,23 @@
           <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td></tr>'}</tbody>｜｜DSML｜｜
+          <table><thead><tr><th>Message</th><th>Type</th><th>User</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No logs found</td></tr>'}</tbody></table>
         </div>
       </div>`;
   }
 
   function renderSettings(){
-    const settings = store.settings || { webhookUrl:'', logsEnabled:true };
+    const settings = store.settings || { webhookUrl:'', logsEnabled:true, siteName:'SHJ LSPD', allowedRoles:[] };
+    const adminOnly = isAdmin ? '' : ' style="pointer-events:none;opacity:.5"';
     qs('#settings').innerHTML = `
       <div class="card">
-        <div class="card-header"><h3><i class="ti ti-settings"></i> Settings</h3></div>
-        <div class="card-body">
+        <div class="card-header"><h3><i class="ti ti-settings"></i> General Settings</h3></div>
+        <div class="card-body" ${adminOnly}>
+          <div class="form-group">
+            <label>Site Name</label>
+            <input id="settingsSiteName" value="${esc(settings.siteName||'SHJ LSPD')}" placeholder="SHJ LSPD">
+          </div>
           <div class="form-group">
             <label>Discord Webhook URL</label>
             <input id="settingsWebhook" value="${esc(settings.webhookUrl||'')}" placeholder="https://discord.com/api/webhooks/...">
@@ -1033,9 +1116,37 @@
             <label style="margin:0">Enable Activity Logs</label>
             <input type="checkbox" id="settingsLogs" ${settings.logsEnabled?'checked':''} style="width:auto;padding:0;margin:0">
           </div>
-          ${isAdmin?`<button class="btn btn-primary" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Settings</button>`:'<p style="color:#8fa0bd;font-size:13px">Only admins can change settings.</p>'}
+          ${isAdmin?`<button class="btn btn-primary" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save General Settings</button>`:'<p style="color:#8fa0bd;font-size:13px">Only admins can change settings.</p>'}
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-shield-lock"></i> Discord Role Access (Whitelist)</h3></div>
+        <div class="card-body" ${adminOnly}>
+          <p style="color:#8fa0bd;font-size:13px;margin-bottom:16px">Add Discord Role IDs that are allowed to access this system. Leave empty to allow all roles. Separate with commas or newlines.</p>
+          <div class="form-group">
+            <label>Allowed Role IDs</label>
+            <textarea id="settingsRoles" style="min-height:100px;font-family:monospace;font-size:13px" placeholder="Enter Discord Role IDs, one per line or comma-separated">${esc((settings.allowedRoles||[]).join('\n'))}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Admin Role IDs</label>
+            <textarea id="settingsAdminRoles" style="min-height:70px;font-family:monospace;font-size:13px" placeholder="Role IDs that get Admin access">${esc((settings.adminRoles||[]).join('\n'))}</textarea>
+          </div>
+          ${isAdmin?`<button class="btn btn-primary" onclick="saveRoleSettings()"><i class="ti ti-device-floppy"></i> Save Role Settings</button>`:''}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-clock"></i> Session Settings</h3></div>
+        <div class="card-body" ${adminOnly}>
+          <div class="form-group">
+            <label>Session Timeout (hours)</label>
+            <input id="settingsTimeout" type="number" min="1" max="168" value="${settings.sessionTimeout||12}" style="max-width:200px">
+          </div>
+          ${isAdmin?`<button class="btn btn-primary" onclick="saveSessionSettings()"><i class="ti ti-device-floppy"></i> Save Session Settings</button>`:''}
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-database"></i> Database</h3></div>
         <div class="card-body">
@@ -1047,11 +1158,31 @@
 
   window.saveSettings = async () => {
     const payload = {
+      siteName: qs('#settingsSiteName')?.value.trim() || store.settings?.siteName || 'SHJ LSPD',
       webhookUrl: qs('#settingsWebhook').value.trim(),
       logsEnabled: qs('#settingsLogs').checked
     };
     const r = await api('PUT','/api/settings', payload);
-    if(r.ok){ store.settings = r.data; toast('Settings saved ✓'); }
+    if(r.ok){ store.settings = { ...store.settings, ...r.data }; toast('Settings saved ✓'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.saveRoleSettings = async () => {
+    const rolesRaw = qs('#settingsRoles')?.value || '';
+    const adminRolesRaw = qs('#settingsAdminRoles')?.value || '';
+    const allowedRoles = rolesRaw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+    const adminRoles = adminRolesRaw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+    const payload = { ...store.settings, allowedRoles, adminRoles };
+    const r = await api('PUT','/api/settings', payload);
+    if(r.ok){ store.settings = { ...store.settings, ...r.data }; toast('Role settings saved ✓'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.saveSessionSettings = async () => {
+    const sessionTimeout = parseInt(qs('#settingsTimeout')?.value)||12;
+    const payload = { ...store.settings, sessionTimeout };
+    const r = await api('PUT','/api/settings', payload);
+    if(r.ok){ store.settings = { ...store.settings, ...r.data }; toast('Session settings saved ✓'); }
     else toast('Error: '+(r.reason||'failed'),'#ff5a67');
   };
 
