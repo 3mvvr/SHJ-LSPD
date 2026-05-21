@@ -777,27 +777,29 @@
     if(r.ok){ store.settings = payload; toast('Settings Saved Systematically'); }
   };
 
-  // ═══════════════════════════ CORE LOADER ═══════════════════════════
-  async function init(){
-    initNav();
-    qs('#closeModalBtn').onclick = closeModal;
-    qs('#modalCancelBtn').onclick = closeModal;
-    qs('#mobileMenuBtn').onclick = () => qs('#sidebar').classList.toggle('open');
-    qs('#logoutBtn').onclick = () => { clearSession(); location.reload(); };
-    qs('#discordLoginBtn').onclick = loginDiscord;
+// ------------------ CORE LOADER ------------------
 
-    setInterval(()=>{ qs('#clock').textContent = new Date().toLocaleString(); },1000);
-
-    const hasCode = await handleOAuth();
-    if(hasCode || loadSession()){
-      bootApp();
-      await loadAllData();
-      renderAll();
+async function init(){
+    // initNav(); // تم تعطيل هذا السطر لحل مشكلة عدم استجابة زر الديسكورد
+    if (isNew()) {
+        qs('#closeModalBtn').onclick = closeModal;
+        qs('#modalCancelBtn').onclick = closeModal;
+        qs('#mobileMenuBtn').onclick = () => { qs('#sidebar').classList.toggle('open'); };
+        qs('#logoutBtn').onclick = () => { ClearSession(); location.reload(); };
+        qs('#discordLoginBtn').onclick = loginDiscord;
     }
-  }
 
-  window.addEventListener('DOMContentLoaded', init);
-})();
+    setInterval(() => { qs('#clock').textContent = new Date().toLocaleString(); }, 1000);
+
+    const hasCode = await handleAuth();
+    if(hasCode || LoadSession()){
+        hideApp();
+        await loadAllData();
+        renderAll();
+    }
+}
+
+window.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
