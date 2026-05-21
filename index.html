@@ -287,7 +287,6 @@
   }
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
-  // Re-validate roles from server on every boot
   async function validateSessionWithServer(){
     if(!accessToken) return false;
     try {
@@ -310,7 +309,7 @@
   function loginDiscord() {
     const redirectUri = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
     const clientId = '1505897669334138940';
-    const scope = 'identify';   // only basic info; role/guild check done server-side via Bot token
+    const scope = 'identify guilds guilds.members.read';
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -390,7 +389,7 @@
     if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
   }
 
-  // ═══════════════════════════ RENDERERS (full original) ════════════════════════
+  // ═══════════════════════════ RENDERERS ════════════════════════
   function renderDashboard(){
     const o = store.officers || [];
     const active = o.filter(x=>x.status==='active').length;
@@ -440,7 +439,7 @@
           ${isAdmin ? `<button class="btn btn-sm btn-warning" onclick="editOfficer(${o.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteOfficer(${o.id})"><i class="ti ti-trash"></i></button>` : ''}
         </td>
-      </tr>`).join('');
+      </td>`).join('');
     qs('#officers').innerHTML = `
       <div class="card">
         <div class="card-header">
@@ -449,7 +448,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td></tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
         </table>
         </div>
       </div>`;
@@ -523,7 +522,7 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
         <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td></tr>'}</tbody></table></div></div>`;
+        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
   }
 
   window.deleteRank = async id => {
@@ -570,8 +569,8 @@
         <div class="card-header"><h3><i class="ti ti-chart-bar"></i> Points Management</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openPointsModal()"><i class="ti ti-adjustments"></i> Adjust Points</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td></tr>'}</tbody></table></div></div>`;
+        <div class="card-body"></table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td>'}</tbody></table></div></div>`;
   }
 
   window.openPointsModal = () => {
@@ -662,15 +661,15 @@
         <td>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
-        </tr>
+        </td>
       </tr>`).join('');
     qs('#uniform').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td></tr>'}</tbody></table></div></div>`;
+        <div class="card-body"><tr><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
   }
 
   window.deleteUniform = async id => {
@@ -728,7 +727,7 @@
         <div class="card-body">
           <table>
             <thead><tr><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td>'}</tbody>
           </table>
         </div>
       </div>`;
@@ -794,15 +793,15 @@
         <td>${esc(i.by||'-')}</td>
         <td>${fmtTime(i.time)}</td>
         <td>${isAdmin?`<button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})"><i class="ti ti-check"></i> Release</button>`:''}</td>
-      </tr>`).join('');
+      <tr>`).join('');
     qs('#wanted').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-car"></i> Wanted List</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>':''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th><tr></thead>
-          <tbody>${wRows||'<td><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td></tr>'}</tbody></table>
+          <table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody>${wRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td>'}</tbody></table>
         </div>
       </div>
       <div class="card">
@@ -811,7 +810,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td></tr>'}</tbody></table>
+          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -891,8 +890,8 @@
           <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
         </div>
         <div class="card-body">
-          <tr><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td></tr>'}</tbody></tr>
+          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -951,7 +950,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td></tr>'}</tbody></table>
+          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -983,7 +982,7 @@
             ${u.avatar?`<img src="${esc(u.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" alt="">`:'<div style="width:32px;height:32px;border-radius:50%;background:#1b2942;display:grid;place-items:center">'+esc((u.username||'?')[0].toUpperCase())+'</div>'}
             <b>${esc(u.username||'Unknown')}</b>
           </div>
-        </td>
+         </td>
         <td style="font-size:12px;color:#8fa0bd">${esc(u.id||'')}</td>
         <td><span class="badge badge-${u.isAdmin?'warning':'info'}">${u.isAdmin?'Admin':'Officer'}</span></td>
         <td>${fmtTime(u.lastLogin)}</td>
@@ -996,7 +995,7 @@
         </div>
         <div class="card-body">
           <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td></tr>'}</tbody></table>
+          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -1015,8 +1014,8 @@
           <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
         </div>
         <div class="card-body">
-          <tr><thead><tr><th>Message</th><th>Type</th><th>Date</th></td></thead>
-          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td></tr>'}</tbody></table>
+          <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td>'}</tbody></table>
         </div>
       </div>`;
   }
