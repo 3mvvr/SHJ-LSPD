@@ -65,8 +65,12 @@
     .stat-card .label { color:#8fa0bd; font-size:13px; margin-top:4px; }
 
     table { width:100%; border-collapse:collapse; }
-    th,td { text-align:left; padding:14px 8px; border-bottom:1px solid rgba(255,255,255,.06); }
-    th { color:#8fa0bd; font-weight:600; font-size:12px; text-transform:uppercase; }
+    th,td { text-align:left; padding:14px 10px; border-bottom:1px solid rgba(255,255,255,.06); }
+    th { color:#8fa0bd; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+    /* Hover highlight for all data rows */
+    .data-row { transition:background .15s; }
+    .data-row:hover { background:rgba(47,124,255,.06); }
+    tr:hover td { background:rgba(47,124,255,.04); }
 
     .officer-row { display:flex; justify-content:space-between; align-items:center;
       padding:14px 0; border-bottom:1px solid rgba(255,255,255,.08); }
@@ -650,21 +654,69 @@
 
   function renderPoints(){
     const log = store.pointsLog || [];
-    const rows = log.map(p=>`
-      <tr>
-        <td>${esc(p.officer||'-')}</td>
-        <td style="color:${String(p.change||'').startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change||'0'))}</td>
-        <td>${esc(p.reason||'-')}</td>
-        <td>${esc(p.by||'-')}</td>
-        <td>${fmtTime(p.time)}</td>
-      </tr>`).join('');
+
+    // ✅ FIXED: Normalize legacy entries that might be malformed
+    const rows = log.map(p => {
+      const change = typeof p.change === 'number' ? p.change : Number(p.change) || 0;
+      const isPos  = change >= 0;
+      const dateStr = p.date || (p.time ? new Date(p.time).toISOString().slice(0,10) : '-');
+      return `
+      <tr class="data-row">
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07)">
+          <b>${esc(p.officer||'-')}</b>
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07)">
+          <span style="color:${isPos?'#2ecc71':'#ff5a67'};font-weight:700">
+            ${isPos?'+':''}${change}
+          </span>
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07);color:#cdd9ef">
+          ${esc(p.reason||'-')}
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07);color:#8fa0bd">
+          ${esc(p.by||'-')}
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07);color:#8fa0bd;font-size:12px">
+          ${esc(dateStr)}
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07)">
+          ${isAdmin ? `
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-warning" onclick="editPointsLog(${p.id})">
+              <i class="ti ti-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="deletePointsLog(${p.id})">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+
     qs('#points').innerHTML = `
       <div class="card">
-        <div class="card-header"><h3><i class="ti ti-chart-bar"></i> Points Management</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openPointsModal()"><i class="ti ti-adjustments"></i> Adjust Points</button>':''}
+        <div class="card-header">
+          <h3><i class="ti ti-chart-bar"></i> Points Management</h3>
+          ${isAdmin ? '<button class="btn btn-primary" onclick="openPointsModal()"><i class="ti ti-adjustments"></i> Adjust Points</button>' : ''}
         </div>
-        <div class="card-body"></table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td>'}</tbody></table></div></div>`;
+        <div class="card-body" style="padding:0">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="background:rgba(255,255,255,.03)">
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Officer</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Change</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Reason</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">By</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Date</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="6" style="padding:32px;color:#8fa0bd;text-align:center">No records found</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
   }
 
   window.openPointsModal = () => {
@@ -685,10 +737,14 @@
       const reason = qs('#ptsReason').value.trim();
       const r = await api('PUT','/api/points',{ id, op, amount, reason });
       if(r.ok){
+        // ✅ Update officer in store
         const idx = (store.officers||[]).findIndex(o=>o.id===id);
         if(idx!==-1) store.officers[idx] = r.data;
-        const logR = await api('GET','/api/pointsLog');
-        if(logR.ok) store.pointsLog = logR.data;
+        // ✅ Add new log entry to store directly (no reload needed)
+        if(r.logEntry) {
+          store.pointsLog = store.pointsLog || [];
+          store.pointsLog.unshift(r.logEntry);
+        }
         renderPoints(); renderDashboard(); closeModal(); toast('Points updated ✓');
       } else {
         toast('Error: '+(r.reason||'failed'),'#ff5a67');
@@ -697,7 +753,50 @@
     openModal();
   };
 
-  function renderLaws(){
+  window.editPointsLog = (id) => {
+    const entry = (store.pointsLog || []).find(e => e.id === id);
+    if (!entry) { toast('Entry not found', '#ff5a67'); return; }
+    qs('#modalTitle').textContent = 'Edit Points Log Entry';
+    qs('#modalBody').innerHTML = `
+      <p style="color:#8fa0bd;font-size:13px;margin-bottom:16px">Officer: <b style="color:white">${esc(entry.officer)}</b></p>
+      <div class="form-group">
+        <label>Change Amount</label>
+        <input id="editPtsChange" type="number" value="${entry.change || 0}">
+      </div>
+      <div class="form-group">
+        <label>Reason</label>
+        <input id="editPtsReason" value="${esc(entry.reason || '')}">
+      </div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const change = parseInt(qs('#editPtsChange').value);
+      const reason = qs('#editPtsReason').value.trim();
+      const r = await api('PUT', '/api/points', { _editLog: true, id, change, reason });
+      if (r.ok) {
+        const idx = (store.pointsLog || []).findIndex(e => e.id === id);
+        if (idx !== -1) store.pointsLog[idx] = r.data;
+        renderPoints();
+        closeModal();
+        toast('Log entry updated ✓');
+      } else {
+        toast('Error: ' + (r.reason || 'failed'), '#ff5a67');
+      }
+    };
+    openModal();
+  };
+
+  window.deletePointsLog = async (id) => {
+    if (!confirm('Delete this points log entry? This cannot be undone.')) return;
+    const r = await api('DELETE', '/api/points', { id });
+    if (r.ok) {
+      store.pointsLog = (store.pointsLog || []).filter(e => e.id !== id);
+      renderPoints();
+      toast('Log entry deleted', '#ff5a67');
+    } else {
+      toast('Error: ' + (r.reason || 'failed'), '#ff5a67');
+    }
+  };
+
+
     const laws = store.laws || [];
     qs('#laws').innerHTML = `
       <div class="card">
@@ -747,23 +846,58 @@
 
   function renderUniforms(){
     const uniforms = store.uniforms || [];
-    const rows = uniforms.map(u=>`
-      <tr>
-        <td><b>${esc(u.rank||'')}</b></td>
-        <td>${esc(u.male||'')}</td>
-        <td>${esc(u.female||'')}</td>
-        <td>
-          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
+    const rows = uniforms.map(u => {
+      // ✅ FIXED: always treat as object fields, never string concat
+      const rank   = typeof u.rank === 'object'   ? JSON.stringify(u.rank)   : esc(u.rank   || '');
+      const male   = typeof u.male === 'object'   ? JSON.stringify(u.male)   : esc(u.male   || '');
+      const female = typeof u.female === 'object' ? JSON.stringify(u.female) : esc(u.female || '');
+      return `
+      <tr class="data-row">
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07)">
+          <b>${rank}</b>
         </td>
-      </tr>`).join('');
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07);color:#cdd9ef;font-size:13px">
+          ${male}
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07);color:#cdd9ef;font-size:13px">
+          ${female}
+        </td>
+        <td style="padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07)">
+          ${isAdmin ? `
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})">
+              <i class="ti ti-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+
     qs('#uniform').innerHTML = `
       <div class="card">
-        <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
+        <div class="card-header">
+          <h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
+          ${isAdmin ? '<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>' : ''}
         </div>
-        <div class="card-body"><tr><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
+        <div class="card-body" style="padding:0">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="background:rgba(255,255,255,.03)">
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Rank</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Male Uniform</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Female Uniform</th>
+                <th style="padding:12px 10px;text-align:left;color:#8fa0bd;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,.1)">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="4" style="padding:32px;color:#8fa0bd;text-align:center">No uniforms found</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
   }
 
   window.deleteUniform = async id => {
