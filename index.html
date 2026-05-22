@@ -138,6 +138,7 @@
 
 <div id="loginContainer" class="login-container">
   <div class="login-card">
+    <img id="loginLogoImg" src="" alt="Logo" style="display:none;width:80px;height:80px;object-fit:contain;margin:0 auto 20px;border-radius:50%">
     <div style="width:80px;height:80px;background:#0b1730;border:2px solid #f3c75a;border-radius:50%;display:grid;place-items:center;font-size:40px;margin:0 auto 20px">🛡️</div>
     <h1 style="font-size:28px;font-weight:900">SHJ LSPD</h1>
     <p style="color:#8fa0bd;margin:8px 0 24px">Complete Police Management System</p>
@@ -177,7 +178,10 @@
   <main class="main">
     <div class="top-bar">
       <button class="btn mobile-menu" id="mobileMenuBtn"><i class="ti ti-menu-2"></i></button>
-      <div><b>Control Panel</b><div id="clock" style="font-size:12px;color:#8fa0bd"></div></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="topBarLogo"></div>
+        <div><b>Control Panel</b><div id="clock" style="font-size:12px;color:#8fa0bd"></div></div>
+      </div>
       <div class="user-info">
         <div class="avatar" id="userAvatar">U</div>
         <div><b id="userName">User</b><div id="userRole" class="role-badge">Officer</div></div>
@@ -234,10 +238,13 @@
   let isAdmin     = false;
   let isOwner     = false;
   let accessToken = null;
+  // PATCH: nickname & logo cache
+  let nicknameCache = {};   // {userId: nickname}
+  let siteLogoUrl   = '';   // logo URL from KV settings
   let store = {
     officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
     codes:[], wanted:[], impound:[], cases:[], reports:[],
-    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true },
+    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true, logoUrl:'' },
     adminRoles:[], webhooks:{}, permissions:[]
   };
 
@@ -245,6 +252,37 @@
   const qs  = (s,p=document) => p.querySelector(s);
   const qsa = (s,p=document) => [...p.querySelectorAll(s)];
   function esc(str){ return String(str??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]); }
+
+  // ═══ PATCH: Nickname System ════
+  // Returns display name: nickname if set, else Discord username
+  function displayName(userId, fallbackUsername){
+    return nicknameCache[userId] || fallbackUsername || 'Unknown';
+  }
+  async function loadNicknames(){
+    try {
+      const r = await api('GET','/api/settings/nicknames');
+      if(r.ok && r.data) nicknameCache = r.data;
+    } catch(e){ console.warn('[Nicknames] Load failed:', e.message); }
+  }
+  async function saveNickname(userId, nickname){
+    const r = await api('PUT','/api/settings/nicknames',{ userId, nickname });
+    if(r.ok){ nicknameCache[userId] = nickname || undefined; if(!nickname) delete nicknameCache[userId]; }
+    return r;
+  }
+
+  // ═══ PATCH: Logo System helpers ════
+  function applyLogo(url){
+    siteLogoUrl = url || '';
+    // Login page logo
+    const loginLogo = document.querySelector('#loginLogoImg');
+    if(loginLogo){ if(url){ loginLogo.src=url; loginLogo.style.display=''; loginLogo.nextElementSibling && (loginLogo.nextElementSibling.style.display='none'); } else { loginLogo.style.display='none'; } }
+    // Navbar brand logo
+    const brandIcon = document.querySelector('.brand-icon');
+    if(brandIcon){ brandIcon.innerHTML = url ? `<img src="${url}" style="width:40px;height:40px;object-fit:contain;border-radius:50%" alt="Logo">` : '🛡️'; }
+    // Top-bar logo (header)
+    const topLogo = document.querySelector('#topBarLogo');
+    if(topLogo){ topLogo.innerHTML = url ? `<img src="${url}" style="height:38px;object-fit:contain" alt="Logo">` : ''; }
+  }
   function toast(msg,color='#2f7cff'){
     const t=qs('#toastMessage');
     if(t){ t.textContent=msg; t.style.borderLeftColor=color; t.classList.add('show');
@@ -280,7 +318,11 @@
       ['officers','ranks','pointsLog','laws','uniforms','codes',
        'wanted','impound','cases','reports','users','activity','settings'
       ].forEach(k => { if(data[k] !== undefined) store[k] = data[k]; });
+      // PATCH: Apply logo from settings
+      if(store.settings?.logoUrl) applyLogo(store.settings.logoUrl);
     }
+    // PATCH: Load nicknames
+    await loadNicknames();
     // تحميل adminRoles إذا كان owner
     if(isOwner){
       const arRes = await api('GET','/api/admin-roles');
@@ -427,8 +469,12 @@
     const av = qs('#userAvatar');
     if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
-    qs('#userName').textContent = currentUser?.username || 'User';
+    // PATCH: use nickname if available
+    const dName = currentUser ? displayName(currentUser.id, currentUser.username) : 'User';
+    qs('#userName').textContent = dName;
     qs('#userRole').textContent = isOwner ? '👑 Ownership' : (isAdmin ? '⚡ Admin' : '👮 Officer');
+    // PATCH: apply logo from settings if loaded
+    if(store.settings?.logoUrl) applyLogo(store.settings.logoUrl);
     // إظهار/إخفاء أزرار الـ nav حسب الصلاحيات
     const ownerOnlyBtns = document.querySelectorAll('[data-owner-only]');
     ownerOnlyBtns.forEach(b => b.style.display = isOwner ? '' : 'none');
@@ -505,10 +551,17 @@
 
   function renderOfficers(){
     const officers = store.officers || [];
-    const rows = officers.map(o=>`
+    const rows = officers.map((o,idx)=>`
       <tr>
-        <td><b>${esc(o.name)}</b></td>
-        <td>#${esc(String(o.badge||''))}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,rgba(47,124,255,.18),rgba(114,88,255,.18));border:1px solid rgba(47,124,255,.3);display:grid;place-items:center;font-size:16px;flex-shrink:0">👮</div>
+            <div>
+              <b style="color:#edf3ff">${esc(o.name)}</b>
+              <div style="font-size:11px;color:#53617a">#${esc(String(o.badge||''))}</div>
+            </div>
+          </div>
+        </td>
         <td>${esc(o.rank||'')}</td>
         <td>${esc(o.dept||'LSPD')}</td>
         <td>
@@ -524,14 +577,22 @@
         </td>
       </td>`).join('');
     qs('#officers').innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <h3><i class="ti ti-users"></i> Officers Management</h3>
+      <div class="card" style="background:rgba(16,24,39,.8);border:1px solid rgba(255,255,255,.08)">
+        <div class="card-header" style="padding:20px 24px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:42px;height:42px;background:rgba(47,124,255,.12);border:1px solid rgba(47,124,255,.22);border-radius:13px;display:grid;place-items:center;flex-shrink:0">
+              <i class="ti ti-users" style="font-size:21px;color:#2f7cff"></i>
+            </div>
+            <div>
+              <h3 style="font-size:17px;font-weight:700;line-height:1.2">Officers Management</h3>
+              <div style="font-size:12px;color:#53617a;margin-top:3px">${officers.length} officer${officers.length!==1?'s':''} total</div>
+            </div>
+          </div>
           ${isAdmin ? '<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> Add Officer</button>' : ''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
+          <table><thead><tr><th>Officer</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="6" style="color:#8fa0bd;text-align:center;padding:32px">No officers found</td></tr>'}</tbody>
         </table>
         </div>
       </div>`;
@@ -590,9 +651,20 @@
 
   function renderRanks(){
     const ranks = store.ranks || [];
-    const rows = ranks.map(r=>`
+    const rows = ranks.map((r,idx)=>`
       <tr>
-        <td><b>${esc(r.name)}</b></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <button class="btn btn-sm" style="padding:2px 6px;font-size:11px;line-height:1" onclick="moveRank(${r.id},-1)" ${idx===0?'disabled':''} title="Move Up">⬆️</button>
+              <button class="btn btn-sm" style="padding:2px 6px;font-size:11px;line-height:1" onclick="moveRank(${r.id},1)" ${idx===ranks.length-1?'disabled':''} title="Move Down">⬇️</button>
+            </div>
+            <div>
+              <b>${esc(r.name)}</b>
+              <div style="font-size:11px;color:#53617a">#${idx+1}</div>
+            </div>
+          </div>
+        </td>
         <td>${r.pointsReq||0} pts</td>
         <td>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
@@ -600,13 +672,39 @@
         </td>
       </tr>`).join('');
     qs('#ranks').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
+      <div class="card" style="background:rgba(16,24,39,.8);border:1px solid rgba(255,255,255,.08)">
+        <div class="card-header" style="padding:20px 24px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="width:42px;height:42px;background:rgba(47,124,255,.12);border:1px solid rgba(47,124,255,.22);border-radius:13px;display:grid;place-items:center;flex-shrink:0">
+              <i class="ti ti-stairs-up" style="font-size:21px;color:#2f7cff"></i>
+            </div>
+            <div>
+              <h3 style="font-size:17px;font-weight:700;line-height:1.2">Ranks System</h3>
+              <div style="font-size:12px;color:#53617a;margin-top:3px">${ranks.length} rank${ranks.length!==1?'s':''} configured</div>
+            </div>
+          </div>
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
         <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
   }
+
+  window.moveRank = async (id, dir) => {
+    const ranks = [...(store.ranks||[])];
+    const idx = ranks.findIndex(r=>r.id===id);
+    if(idx < 0) return;
+    const newIdx = idx + dir;
+    if(newIdx < 0 || newIdx >= ranks.length) return;
+    [ranks[idx], ranks[newIdx]] = [ranks[newIdx], ranks[idx]];
+    // Save order via API - use PUT with ordered array
+    const r = await api('PUT','/api/ranks/order',{ order: ranks.map(x=>x.id) });
+    if(r.ok){ store.ranks = ranks; renderRanks(); toast('Order updated ✓'); }
+    else {
+      // Fallback: update locally only (server might not support order endpoint yet)
+      store.ranks = ranks; renderRanks();
+      toast('Order updated locally','#f3c75a');
+    }
+  };
 
   window.deleteRank = async id => {
     if(!confirm('Delete Rank?')) return;
@@ -1508,7 +1606,34 @@
   };
 
   // ═══════════════════════════ ADMIN ROLES (OWNER ONLY) ════════════════════════════
-  const ALL_PERMISSIONS = ['manage_users','manage_reports','manage_cases','manage_settings','manage_logs','manage_database','manage_webhooks','manage_roles'];
+  // ═══ PATCH: Expanded Professional Permission System ════
+  const ALL_PERMISSIONS = [
+    'access_panel','view_dashboard',
+    'create_reports','edit_reports','delete_reports',
+    'create_cases','edit_cases','delete_cases',
+    'manage_points','view_logs','manage_logs',
+    'manage_users','manage_settings','manage_database',
+    'manage_roles','manage_webhooks','full_access'
+  ];
+  const PERM_META = {
+    access_panel:    { icon:'ti-shield-check',   color:'#2f7cff', group:'General Access' },
+    view_dashboard:  { icon:'ti-dashboard',       color:'#2f7cff', group:'General Access' },
+    create_reports:  { icon:'ti-file-plus',       color:'#2ecc71', group:'Reports' },
+    edit_reports:    { icon:'ti-file-pencil',     color:'#2ecc71', group:'Reports' },
+    delete_reports:  { icon:'ti-file-minus',      color:'#ff5a67', group:'Reports' },
+    create_cases:    { icon:'ti-folder-plus',     color:'#f3c75a', group:'Cases' },
+    edit_cases:      { icon:'ti-folder-check',    color:'#f3c75a', group:'Cases' },
+    delete_cases:    { icon:'ti-folder-minus',    color:'#ff5a67', group:'Cases' },
+    manage_points:   { icon:'ti-chart-bar',       color:'#9c4dff', group:'Officers' },
+    view_logs:       { icon:'ti-history',         color:'#3498db', group:'System' },
+    manage_logs:     { icon:'ti-database-edit',   color:'#3498db', group:'System' },
+    manage_users:    { icon:'ti-users-group',     color:'#e67e22', group:'Administration' },
+    manage_settings: { icon:'ti-settings',        color:'#e67e22', group:'Administration' },
+    manage_database: { icon:'ti-database',        color:'#ff5a67', group:'Administration' },
+    manage_roles:    { icon:'ti-shield-lock',     color:'#ff5a67', group:'Administration' },
+    manage_webhooks: { icon:'ti-webhook',         color:'#e67e22', group:'Administration' },
+    full_access:     { icon:'ti-crown',           color:'#f3c75a', group:'Full Access' },
+  };
 
   function renderAdminRoles(){
     if(!isOwner){ qs('#adminRoles').innerHTML = '<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">Access denied — Owner only.</p></div></div>'; return; }
