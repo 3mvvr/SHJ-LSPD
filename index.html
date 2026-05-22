@@ -288,20 +288,32 @@
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
 
   async function validateSessionWithServer(){
-    if(!accessToken) return false;
+    if(!accessToken){
+      console.warn('[Auth] validateSessionWithServer: no accessToken — skipping');
+      return false;
+    }
+    console.log('[Auth] Validating session with server — user:', currentUser?.id);
     try {
       const r = await api('GET', '/api/me');
       if(!r.ok){
-        clearSession();
+        console.warn('[Auth] /api/me returned not ok:', r.error || r.reason);
+        // ✅ إذا الـ token انتهى من Discord — امسح الـ session
+        // لكن إذا خطأ مؤقت في الشبكة — لا تمسح (تجنب loop)
+        if(r.error === 'unauthorized' || r.reason === 'unauthorized') {
+          console.warn('[Auth] Token invalid — clearing session');
+          clearSession();
+        }
         return false;
       }
       isAdmin = r.isAdmin === true;
-      if(currentUser) currentUser = { ...currentUser, ...r.user };
+      if(currentUser) currentUser = { ...currentUser, ...(r.user || {}) };
       saveSession(currentUser, isAdmin, accessToken);
+      console.log('[Auth] Server validation OK — isAdmin:', isAdmin);
       return true;
     } catch(e){
-      console.error('Session validation failed:', e);
-      return false;
+      console.error('[Auth] Session validation network error (keeping session):', e.message);
+      // ✅ إذا الشبكة فشلت — اعتمد على الـ localStorage بدل مسح الـ session
+      return true;
     }
   }
 
@@ -323,23 +335,56 @@
 
   async function handleOAuth() {
     const params = new URLSearchParams(location.search);
-    const accessToken = params.get('access_token');
-    const userParam = params.get('user');
+    const token      = params.get('access_token');
+    const userParam  = params.get('user');
     const isAdminParam = params.get('isAdmin');
+    const authError  = params.get('auth_error');
+    const errorDesc  = params.get('error_desc');
 
-    if (!accessToken || !userParam) return false;
-
-    history.replaceState({}, '', location.pathname);
-
-    try {
-      const user = JSON.parse(decodeURIComponent(userParam));
-      const isAdmin = isAdminParam === 'true';
-      saveSession(user, isAdmin, accessToken);
-      return true;
-    } catch (e) {
-      console.error('Failed to parse user data from OAuth redirect', e);
+    // ✅ إذا رجع auth_error من الـ Worker — أظهره مباشرة
+    if (authError) {
+      console.warn('[Auth] OAuth returned error:', authError, '—', errorDesc);
+      history.replaceState({}, '', location.pathname);
+      const msgEl = qs('#loginMessage');
+      if (msgEl) {
+        const msgs = {
+          not_in_guild:        'You are not in the required Discord server.',
+          missing_role:        'You do not have the required role in the server.',
+          server_misconfigured: 'Server configuration error. Contact admin.',
+          invalid_bot_token:   'Bot token error. Contact admin.',
+          bot_permission_denied: 'Bot permission error. Contact admin.',
+          unauthorized:        'Access denied. Missing required role.',
+        };
+        msgEl.textContent = msgs[authError] || ('Access denied: ' + (errorDesc || authError));
+        msgEl.style.color = '#ff5a67';
+      }
       return false;
     }
+
+    if (!token || !userParam) return false;
+
+    // ✅ حفظ الـ session أولاً قبل أي شيء آخر
+    let user;
+    try {
+      user = JSON.parse(decodeURIComponent(userParam));
+    } catch (e) {
+      console.error('[Auth] Failed to parse user data from OAuth redirect:', e);
+      return false;
+    }
+
+    const admin = isAdminParam === 'true';
+    console.log('[Auth] OAuth success — User authenticated:', user.id, '|', user.username);
+    console.log('[Auth] isAdmin:', admin, '| token length:', token.length);
+
+    // ✅ حفظ الـ session في localStorage قبل history.replaceState
+    saveSession(user, admin, token);
+    console.log('[Auth] Session created and saved to localStorage');
+
+    // ✅ مسح الـ URL params بعد الحفظ
+    history.replaceState({}, '', location.pathname);
+    console.log('[Auth] URL cleaned up');
+
+    return true;
   }
 
   function bootApp(){
@@ -1093,18 +1138,35 @@
       if(clockEl) clockEl.textContent = fmtTime(Date.now());
     }, 1000);
 
-    const loggedIn = await handleOAuth() || loadSession();
-    if(loggedIn){
+    // ✅ Step 1: تحقق من OAuth callback أو session محفوظة
+    const oauthSuccess = await handleOAuth();
+    console.log('[Init] OAuth callback result:', oauthSuccess);
+
+    const sessionLoaded = oauthSuccess || loadSession();
+    console.log('[Init] Session loaded:', sessionLoaded, '| user:', currentUser?.id || 'none');
+
+    if(sessionLoaded){
+      console.log('[Init] Validating session with server...');
       const serverOk = await validateSessionWithServer();
+      console.log('[Init] Server validation result:', serverOk);
+
       if(!serverOk){
+        console.warn('[Init] Server rejected session — showing login page');
         qs('#loginContainer').style.display = 'grid';
         qs('#appContainer').style.display   = 'none';
-        qs('#loginMessage').textContent = 'Session expired or access revoked. Please login again.';
+        if(!qs('#loginMessage').textContent) {
+          qs('#loginMessage').textContent = 'Session expired or access revoked. Please login again.';
+        }
         return;
       }
+
+      console.log('[Init] ✅ Session valid — booting dashboard');
       bootApp();
       await loadAllData();
       navigate('dashboard');
+      console.log('[Init] ✅ Redirecting to dashboard complete');
+    } else {
+      console.log('[Init] No session — showing login page');
     }
   }
 
