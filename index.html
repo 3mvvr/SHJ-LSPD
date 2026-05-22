@@ -270,7 +270,7 @@
   // ═══════════════════════════ STATE ════════════════════════════
   let currentUser = null;
   let isAdmin     = false;
-  let isOwner     = false;   // ✅ NEW: separate ownership flag
+  let isOwner     = false;
   let accessToken = null;
   let userPermissions = [];
   let store = {
@@ -306,7 +306,9 @@
   }
 
   function hasPerm(perm) {
-    if (isAdmin) return true;
+    if (isOwner) return true;                           // ownership — wildcard
+    if (isAdmin) return true;                           // admin — full access
+    if (userPermissions.includes('*')) return true;
     if (userPermissions.includes('full_access')) return true;
     return userPermissions.includes(perm);
   }
@@ -324,50 +326,49 @@
   }
 
   // ═══════════════════════════ SESSION ══════════════════════════
-  function saveSession(user, admin, token, owner = false){
-    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin: admin, isOwner: owner, token, ts: Date.now() }));
-    currentUser = user; isAdmin = admin; isOwner = owner; accessToken = token;
+  function saveSession(user, admin, token, owner=false){
+    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, isOwner:owner, token, ts:Date.now() }));
+    currentUser=user; isAdmin=admin; isOwner=owner; accessToken=token;
   }
   function loadSession(){
     try {
-      const s = JSON.parse(localStorage.getItem('lspd_session') || 'null');
-      if (!s) return false;
-      if (Date.now() - s.ts > 12 * 3600 * 1000) { localStorage.removeItem('lspd_session'); return false; }
-      currentUser = s.user; isAdmin = s.isAdmin; isOwner = s.isOwner === true; accessToken = s.token;
+      const s = JSON.parse(localStorage.getItem('lspd_session')||'null');
+      if(!s) return false;
+      if(Date.now()-s.ts > 12*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
+      currentUser=s.user; isAdmin=s.isAdmin; isOwner=s.isOwner||false; accessToken=s.token;
       return true;
-    } catch { return false; }
+    } catch{ return false; }
   }
-  function clearSession(){
-    localStorage.removeItem('lspd_session');
-    currentUser = null; isAdmin = false; isOwner = false; accessToken = null;
-  }
+  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; isOwner=false; accessToken=null; userPermissions=[]; }
 
   async function validateSessionWithServer(){
-    if (!accessToken) {
+    if(!accessToken){
       console.warn('[Auth] validateSessionWithServer: no accessToken — skipping');
       return false;
     }
     console.log('[Auth] Validating session with server — user:', currentUser?.id);
     try {
       const r = await api('GET', '/api/me');
-      if (!r.ok) {
+      if(!r.ok){
         console.warn('[Auth] /api/me returned not ok:', r.error || r.reason);
-        if (r.error === 'unauthorized' || r.reason === 'unauthorized') {
+        // ✅ إذا الـ token انتهى من Discord — امسح الـ session
+        // لكن إذا خطأ مؤقت في الشبكة — لا تمسح (تجنب loop)
+        if(r.error === 'unauthorized' || r.reason === 'unauthorized') {
           console.warn('[Auth] Token invalid — clearing session');
           clearSession();
         }
         return false;
       }
-      // ✅ PRIORITY: ownership > admin — re-evaluate on every login, no cache
-      isOwner  = r.isOwner === true;
-      isAdmin  = r.isAdmin === true;
+      isAdmin = r.isAdmin === true;
+      isOwner = r.isOwner === true;
       userPermissions = r.permissions || [];
-      if (currentUser) currentUser = { ...currentUser, ...(r.user || {}), internalRank: r.internalRank };
+      if(currentUser) currentUser = { ...currentUser, ...(r.user || {}) };
       saveSession(currentUser, isAdmin, accessToken, isOwner);
-      console.log('[Auth] Server validation OK — isOwner:', isOwner, '| isAdmin:', isAdmin, '| rank:', r.internalRank);
+      console.log('[Auth] Server validation OK — isAdmin:', isAdmin, '| isOwner:', isOwner);
       return true;
-    } catch (e) {
+    } catch(e){
       console.error('[Auth] Session validation network error (keeping session):', e.message);
+      // ✅ إذا الشبكة فشلت — اعتمد على الـ localStorage بدل مسح الـ session
       return true;
     }
   }
@@ -389,26 +390,26 @@
   }
 
   async function handleOAuth() {
-    const params       = new URLSearchParams(location.search);
-    const token        = params.get('access_token');
-    const userParam    = params.get('user');
+    const params = new URLSearchParams(location.search);
+    const token      = params.get('access_token');
+    const userParam  = params.get('user');
     const isAdminParam = params.get('isAdmin');
-    const isOwnerParam = params.get('isOwner');   // ✅ NEW
-    const authError    = params.get('auth_error');
-    const errorDesc    = params.get('error_desc');
+    const authError  = params.get('auth_error');
+    const errorDesc  = params.get('error_desc');
 
+    // ✅ إذا رجع auth_error من الـ Worker — أظهره مباشرة
     if (authError) {
       console.warn('[Auth] OAuth returned error:', authError, '—', errorDesc);
       history.replaceState({}, '', location.pathname);
       const msgEl = qs('#loginMessage');
       if (msgEl) {
         const msgs = {
-          not_in_guild:          'You are not in the required Discord server.',
-          missing_role:          'You do not have the required role in the server.',
-          server_misconfigured:  'Server configuration error. Contact admin.',
-          invalid_bot_token:     'Bot token error. Contact admin.',
+          not_in_guild:        'You are not in the required Discord server.',
+          missing_role:        'You do not have the required role in the server.',
+          server_misconfigured: 'Server configuration error. Contact admin.',
+          invalid_bot_token:   'Bot token error. Contact admin.',
           bot_permission_denied: 'Bot permission error. Contact admin.',
-          unauthorized:          'Access denied. Missing required role.',
+          unauthorized:        'Access denied. Missing required role.',
         };
         msgEl.textContent = msgs[authError] || ('Access denied: ' + (errorDesc || authError));
         msgEl.style.color = '#ff5a67';
@@ -418,6 +419,7 @@
 
     if (!token || !userParam) return false;
 
+    // ✅ حفظ الـ session أولاً قبل أي شيء آخر
     let user;
     try {
       user = JSON.parse(decodeURIComponent(userParam));
@@ -426,60 +428,50 @@
       return false;
     }
 
-    // ✅ HARD CHECK: if user.internalRank === 'ownership' — force isOwner=true regardless of param
-    const owner = isOwnerParam === 'true' || user.internalRank === 'ownership';
-    const admin = isAdminParam === 'true' || owner; // ownership implies admin
-    console.log('[Auth] OAuth success — User:', user.id, '|', user.username);
-    console.log('[Auth] isOwner:', owner, '| isAdmin:', admin, '| rank:', user.internalRank);
+    const admin = isAdminParam === 'true';
+    const owner = params.get('isOwner') === 'true';
+    console.log('[Auth] OAuth success — User authenticated:', user.id, '|', user.username);
+    console.log('[Auth] isAdmin:', admin, '| isOwner:', owner, '| token length:', token.length);
 
     saveSession(user, admin, token, owner);
+    console.log('[Auth] Session created and saved to localStorage');
+
+    // ✅ مسح الـ URL params بعد الحفظ
     history.replaceState({}, '', location.pathname);
+    console.log('[Auth] URL cleaned up');
+
     return true;
   }
 
   function bootApp(){
     qs('#loginContainer').style.display = 'none';
     qs('#appContainer').style.display   = 'grid';
-    document.body.classList.toggle('is-admin', isAdmin);
+    document.body.classList.toggle('is-admin', isAdmin || isOwner);
     document.body.classList.toggle('is-owner', isOwner);
-
     const av = qs('#userAvatar');
-    if (currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
-    else av.textContent = (currentUser?.username?.[0] || 'U').toUpperCase();
+    if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
+    else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
     qs('#userName').textContent = currentUser?.username || 'User';
-
-    // ✅ PRIORITY: ownership > admin > officer — badge reflects true role
+    // ✅ عرض الرتبة الصحيحة — ownership > Admin > Officer
     const roleBadge = qs('#userRole');
-    if (isOwner) {
+    if(isOwner){
       roleBadge.textContent = '👑 Ownership';
-      roleBadge.style.background = 'rgba(243,199,90,.2)';
-      roleBadge.style.borderColor = 'rgba(243,199,90,.5)';
+      roleBadge.style.background = 'rgba(243,199,90,.25)';
+      roleBadge.style.borderColor = 'rgba(243,199,90,.6)';
       roleBadge.style.color = '#f3c75a';
-    } else if (isAdmin) {
+    } else if(isAdmin){
       roleBadge.textContent = 'Admin';
     } else {
       roleBadge.textContent = 'Officer';
     }
-
-    // ✅ RBAC: hide admin-restricted nav items from non-owners
-    // Ownership sees everything. Admin sees everything EXCEPT Role Management, Logs, Settings.
-    const ownerOnlyPages = ['adminRoles', 'logs', 'settings'];
-    qsa('.nav button[data-page]').forEach(btn => {
-      const page = btn.dataset.page;
-      if (ownerOnlyPages.includes(page)) {
-        // ✅ ownership can see — admin cannot
-        btn.style.display = isOwner ? '' : 'none';
-      }
-    });
-
-    if (currentUser?.id) {
-      api('POST', '/api/users/register', {
+    if(currentUser?.id) {
+      api('POST','/api/users/register',{
         id: currentUser.id,
         username: currentUser.username,
         avatar: currentUser.avatar,
         isAdmin,
         lastLogin: Date.now()
-      }).catch(() => {});
+      }).catch(()=>{});
     }
   }
 
@@ -504,19 +496,11 @@
     settings:     renderSettings,
   };
 
-  // ✅ RBAC: pages only ownership can access
-  const OWNER_ONLY_PAGES = new Set(['adminRoles', 'logs', 'settings']);
-
   function navigate(pageId){
-    // ✅ HARD GUARD: if not owner and trying to access restricted page — silently redirect to dashboard
-    if (OWNER_ONLY_PAGES.has(pageId) && !isOwner) {
-      console.warn('[RBAC] Blocked access to', pageId, '— ownership required');
-      pageId = 'dashboard';
-    }
-    qsa('.nav button').forEach(b => b.classList.toggle('active', b.dataset.page === pageId));
-    qsa('.page').forEach(p => p.classList.toggle('active', p.id === pageId));
+    qsa('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===pageId));
+    qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
     qs('#sidebar')?.classList.remove('open');
-    if (PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
+    if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
   }
 
   // ═══════════════════════════ RENDERERS ════════════════════════
