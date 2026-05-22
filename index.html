@@ -170,6 +170,7 @@
       <button data-page="discordUsers"><i class="ti ti-brand-discord"></i> Discord Users</button>
       <button data-page="logs"><i class="ti ti-history"></i> System Logs</button>
       <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
+      <button data-page="adminRoles" data-owner-only style="display:none"><i class="ti ti-shield-lock"></i> Admin Roles</button>
     </nav>
   </aside>
 
@@ -199,6 +200,7 @@
       <div id="discordUsers" class="page"></div>
       <div id="logs"         class="page"></div>
       <div id="settings"     class="page"></div>
+      <div id="adminRoles"   class="page"></div>
     </div>
   </main>
 </div>
@@ -230,11 +232,13 @@
   // ═══════════════════════════ STATE ════════════════════════════
   let currentUser = null;
   let isAdmin     = false;
+  let isOwner     = false;
   let accessToken = null;
   let store = {
     officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
     codes:[], wanted:[], impound:[], cases:[], reports:[],
-    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true }
+    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true },
+    adminRoles:[], webhooks:{}, permissions:[]
   };
 
   // ═══════════════════════════ UTILS ════════════════════════════
@@ -269,23 +273,33 @@
        'wanted','impound','cases','reports','users','activity','settings'
       ].forEach(k => { if(data[k] !== undefined) store[k] = data[k]; });
     }
+    // تحميل adminRoles إذا كان owner
+    if(isOwner){
+      const arRes = await api('GET','/api/admin-roles');
+      if(arRes.ok) store.adminRoles = arRes.data;
+      const whRes = await api('GET','/api/webhooks');
+      if(whRes.ok) store.webhooks = whRes.data;
+    } else if(isAdmin){
+      const whRes = await api('GET','/api/webhooks');
+      if(whRes.ok) store.webhooks = whRes.data;
+    }
   }
 
   // ═══════════════════════════ SESSION ══════════════════════════
-  function saveSession(user,admin,token){
-    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, token, ts:Date.now() }));
-    currentUser=user; isAdmin=admin; accessToken=token;
+  function saveSession(user,admin,token,owner=false){
+    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, isOwner:owner, token, ts:Date.now() }));
+    currentUser=user; isAdmin=admin; isOwner=owner; accessToken=token;
   }
   function loadSession(){
     try {
       const s = JSON.parse(localStorage.getItem('lspd_session')||'null');
       if(!s) return false;
       if(Date.now()-s.ts > 12*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
-      currentUser=s.user; isAdmin=s.isAdmin; accessToken=s.token;
+      currentUser=s.user; isAdmin=s.isAdmin; isOwner=s.isOwner||false; accessToken=s.token;
       return true;
     } catch{ return false; }
   }
-  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
+  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; isOwner=false; accessToken=null; }
 
   async function validateSessionWithServer(){
     if(!accessToken){
@@ -306,8 +320,9 @@
         return false;
       }
       isAdmin = r.isAdmin === true;
+      isOwner = r.isOwner === true;
       if(currentUser) currentUser = { ...currentUser, ...(r.user || {}) };
-      saveSession(currentUser, isAdmin, accessToken);
+      saveSession(currentUser, isAdmin, accessToken, isOwner);
       console.log('[Auth] Server validation OK — isAdmin:', isAdmin);
       return true;
     } catch(e){
@@ -338,6 +353,7 @@
     const token      = params.get('access_token');
     const userParam  = params.get('user');
     const isAdminParam = params.get('isAdmin');
+    const isOwnerParam = params.get('isOwner');
     const authError  = params.get('auth_error');
     const errorDesc  = params.get('error_desc');
 
@@ -373,11 +389,12 @@
     }
 
     const admin = isAdminParam === 'true';
+    const owner = isOwnerParam === 'true';
     console.log('[Auth] OAuth success — User authenticated:', user.id, '|', user.username);
-    console.log('[Auth] isAdmin:', admin, '| token length:', token.length);
+    console.log('[Auth] isAdmin:', admin, '| isOwner:', owner, '| token length:', token.length);
 
     // ✅ حفظ الـ session في localStorage قبل history.replaceState
-    saveSession(user, admin, token);
+    saveSession(user, admin, token, owner);
     console.log('[Auth] Session created and saved to localStorage');
 
     // ✅ مسح الـ URL params بعد الحفظ
@@ -391,17 +408,22 @@
     qs('#loginContainer').style.display = 'none';
     qs('#appContainer').style.display   = 'grid';
     document.body.classList.toggle('is-admin', isAdmin);
+    document.body.classList.toggle('is-owner', isOwner);
     const av = qs('#userAvatar');
     if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
     qs('#userName').textContent = currentUser?.username || 'User';
-    qs('#userRole').textContent = isAdmin ? 'Admin' : 'Officer';
+    qs('#userRole').textContent = isOwner ? '👑 Ownership' : (isAdmin ? '⚡ Admin' : '👮 Officer');
+    // إظهار/إخفاء أزرار الـ nav حسب الصلاحيات
+    const ownerOnlyBtns = document.querySelectorAll('[data-owner-only]');
+    ownerOnlyBtns.forEach(b => b.style.display = isOwner ? '' : 'none');
     if(currentUser?.id) {
       api('POST','/api/users/register',{
         id: currentUser.id,
         username: currentUser.username,
         avatar: currentUser.avatar,
         isAdmin,
+        isOwner,
         lastLogin: Date.now()
       }).catch(()=>{});
     }
@@ -425,6 +447,7 @@
     discordUsers: renderDiscordUsers,
     logs:         renderLogs,
     settings:     renderSettings,
+    adminRoles:   renderAdminRoles,
   };
 
   function navigate(pageId){
@@ -701,8 +724,8 @@
     const rows = uniforms.map(u=>`
       <tr>
         <td><b>${esc(u.rank||'')}</b></td>
-        <td>${esc(u.male||'')}</td>
-        <td>${esc(u.female||'')}</td>
+        <td><div style="line-height:1.8">${(u.male||'').split(',').map(s=>s.trim()).filter(Boolean).map(s=>`<div style="font-size:13px">${esc(s)}</div>`).join('')||esc(u.male||'-')}</div></td>
+        <td><div style="line-height:1.8"><div style="color:#8fa0bd;font-size:11px;font-weight:600;margin-bottom:2px">Female:</div>${(u.female||'').split(',').map(s=>s.trim()).filter(Boolean).map(s=>`<div style="font-size:13px">${esc(s)}</div>`).join('')||esc(u.female||'-')}</div></td>
         <td>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
@@ -713,7 +736,7 @@
         <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
-        <div class="card-body"><tr><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+        <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
   }
 
@@ -919,12 +942,19 @@
     const cases = store.cases || [];
     const rows = cases.map(c=>`
       <tr>
-        <td><b>${esc(c.title||'')}</b></td>
-        <td>${esc(c.description||'-')}</td>
+        <td>
+          <b>${esc(c.title||'')}</b>
+          ${c.caseType?`<div style="font-size:11px;color:#8fa0bd">${esc(c.caseType)}</div>`:''}
+        </td>
+        <td style="max-width:200px">
+          ${c.criminals?`<div style="font-size:12px"><span style="color:#f3c75a">👤</span> ${esc(c.criminals)}</div>`:''}
+          ${c.location?`<div style="font-size:12px"><span style="color:#3498db">📍</span> ${esc(c.location)}</div>`:''}
+        </td>
         <td><span class="badge badge-${c.status==='open'?'active':c.status==='closed'?'inactive':'warning'}">${esc(c.status||'open')}</span></td>
         <td>${esc(c.by||'-')}</td>
         <td>${fmtTime(c.time)}</td>
         <td>
+          <button class="btn btn-sm btn-warning" onclick="viewCase(${c.id})"><i class="ti ti-eye"></i></button>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCaseModal(${c.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteCase(${c.id})"><i class="ti ti-trash"></i></button>`:''}
         </td>
@@ -935,11 +965,38 @@
           <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <table><thead><tr><th>Title / Type</th><th>Criminals / Location</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
           <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td>'}</tbody></table>
         </div>
       </div>`;
   }
+
+  window.viewCase = id => {
+    const c = (store.cases||[]).find(x=>x.id===id);
+    if(!c) return;
+    qs('#modalTitle').textContent = 'Case Details';
+    qs('#modalBody').innerHTML = `
+      <div style="display:grid;gap:14px">
+        <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">TITLE</label><div style="font-size:16px;font-weight:700">${esc(c.title||'')}</div></div>
+        ${c.caseType?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CASE TYPE</label><div>${esc(c.caseType)}</div></div>`:''}
+        ${c.description?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">DESCRIPTION</label><div>${esc(c.description)}</div></div>`:''}
+        ${c.criminals?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CRIMINALS</label><div style="color:#f3c75a">${esc(c.criminals)}</div></div>`:''}
+        ${c.officers?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">OFFICERS INVOLVED</label><div style="color:#2ecc71">${esc(c.officers)}</div></div>`:''}
+        ${c.location?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">LOCATION</label><div style="color:#3498db">${esc(c.location)}</div></div>`:''}
+        ${c.evidence?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">EVIDENCE</label><div>${esc(c.evidence)}</div></div>`:''}
+        ${c.notes?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">NOTES</label><div>${esc(c.notes)}</div></div>`:''}
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">STATUS</label><div><span class="badge badge-${c.status==='open'?'active':c.status==='closed'?'inactive':'warning'}">${esc(c.status||'open')}</span></div></div>
+          <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">BY</label><div>${esc(c.by||'-')}</div></div>
+          <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">DATE</label><div>${fmtTime(c.time)}</div></div>
+        </div>
+      </div>`;
+    qs('#modalConfirmBtn').style.display = 'none';
+    qs('#modalCancelBtn').textContent = 'Close';
+    openModal();
+    qs('#modalConfirmBtn').style.display = '';
+    qs('#modalCancelBtn').textContent = 'Cancel';
+  };
 
   window.deleteCase = async id => {
     if(!confirm('Delete case?')) return;
@@ -953,6 +1010,12 @@
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Title</label><input id="caseTitle" value="${esc(c?.title||'')}"></div>
       <div class="form-group"><label>Description</label><textarea id="caseDesc">${esc(c?.description||'')}</textarea></div>
+      <div class="form-group"><label>Criminals Names</label><input id="caseCriminals" value="${esc(c?.criminals||'')}" placeholder="e.g. John Doe, Jane Smith"></div>
+      <div class="form-group"><label>Officers Involved</label><input id="caseOfficers" value="${esc(c?.officers||'')}" placeholder="e.g. Officer Kane, Sgt. Williams"></div>
+      <div class="form-group"><label>Location</label><input id="caseLocation" value="${esc(c?.location||'')}" placeholder="e.g. Downtown LS"></div>
+      <div class="form-group"><label>Case Type</label><input id="caseCaseType" value="${esc(c?.caseType||'')}" placeholder="e.g. Robbery, Murder"></div>
+      <div class="form-group"><label>Evidence</label><textarea id="caseEvidence">${esc(c?.evidence||'')}</textarea></div>
+      <div class="form-group"><label>Notes</label><textarea id="caseNotes">${esc(c?.notes||'')}</textarea></div>
       <div class="form-group"><label>Status</label><select id="caseStatus">
         <option value="open" ${c?.status==='open'||!c?'selected':''}>Open</option>
         <option value="closed" ${c?.status==='closed'?'selected':''}>Closed</option>
@@ -960,9 +1023,15 @@
       </select></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
-        title: qs('#caseTitle').value.trim(),
+        title:       qs('#caseTitle').value.trim(),
         description: qs('#caseDesc').value.trim(),
-        status: qs('#caseStatus').value
+        criminals:   qs('#caseCriminals').value.trim(),
+        officers:    qs('#caseOfficers').value.trim(),
+        location:    qs('#caseLocation').value.trim(),
+        caseType:    qs('#caseCaseType').value.trim(),
+        evidence:    qs('#caseEvidence').value.trim(),
+        notes:       qs('#caseNotes').value.trim(),
+        status:      qs('#caseStatus').value
       };
       if(!payload.title){ toast('Title is required','#ff5a67'); return; }
       if(id){
@@ -983,10 +1052,21 @@
     const reports = store.reports || [];
     const rows = reports.map(r=>`
       <tr>
-        <td><b>${esc(r.title||'')}</b></td>
-        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.body||'-')}</td>
+        <td>
+          <b>${esc(r.title||'')}</b>
+          ${r.caseType?`<div style="font-size:11px;color:#8fa0bd">${esc(r.caseType)}</div>`:''}
+        </td>
+        <td style="max-width:200px">
+          ${r.criminals?`<div style="font-size:12px"><span style="color:#f3c75a">👤</span> ${esc(r.criminals)}</div>`:''}
+          ${r.location?`<div style="font-size:12px"><span style="color:#3498db">📍</span> ${esc(r.location)}</div>`:''}
+        </td>
         <td>${esc(r.by||'-')}</td>
         <td>${fmtTime(r.time)}</td>
+        <td>
+          <button class="btn btn-sm btn-warning" onclick="viewReport(${r.id})"><i class="ti ti-eye"></i></button>
+          <button class="btn btn-sm btn-warning" onclick="openReportModal(${r.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteReport(${r.id})"><i class="ti ti-trash"></i></button>
+        </td>
       </tr>`).join('');
     qs('#reports').innerHTML = `
       <div class="card">
@@ -994,26 +1074,75 @@
           <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
+          <table><thead><tr><th>Title / Type</th><th>Criminals / Location</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
         </div>
       </div>`;
   }
 
-  window.openReportModal = () => {
-    qs('#modalTitle').textContent = 'New Report';
+  window.viewReport = id => {
+    const r = (store.reports||[]).find(x=>x.id===id);
+    if(!r) return;
+    qs('#modalTitle').textContent = 'Report Details';
     qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Title</label><input id="repTitle" placeholder="Report title"></div>
-      <div class="form-group"><label>Content</label><textarea id="repBody" style="min-height:120px" placeholder="Report details..."></textarea></div>`;
+      <div style="display:grid;gap:14px">
+        <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">TITLE</label><div style="font-size:16px;font-weight:700">${esc(r.title||'')}</div></div>
+        ${r.caseType?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CASE TYPE</label><div>${esc(r.caseType)}</div></div>`:''}
+        ${r.body?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CONTENT</label><div>${esc(r.body)}</div></div>`:''}
+        ${r.criminals?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CRIMINALS</label><div style="color:#f3c75a">${esc(r.criminals)}</div></div>`:''}
+        ${r.officers?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">OFFICERS INVOLVED</label><div style="color:#2ecc71">${esc(r.officers)}</div></div>`:''}
+        ${r.location?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">LOCATION</label><div style="color:#3498db">${esc(r.location)}</div></div>`:''}
+        ${r.evidence?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">EVIDENCE / NOTES</label><div>${esc(r.evidence)}</div></div>`:''}
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">BY</label><div>${esc(r.by||'-')}</div></div>
+          <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">DATE</label><div>${fmtTime(r.time)}</div></div>
+        </div>
+      </div>`;
+    qs('#modalConfirmBtn').style.display = 'none';
+    qs('#modalCancelBtn').textContent = 'Close';
+    openModal();
+    qs('#modalConfirmBtn').style.display = '';
+    qs('#modalCancelBtn').textContent = 'Cancel';
+  };
+
+  window.deleteReport = async id => {
+    if(!confirm('Delete report?')) return;
+    const r = await api('DELETE','/api/reports',{ id });
+    if(r.ok){ store.reports=(store.reports||[]).filter(x=>x.id!==id); renderReports(); toast('Report deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.openReportModal = (id=null) => {
+    const rep = id ? (store.reports||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Report' : 'New Report';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="repTitle" value="${esc(rep?.title||'')}" placeholder="Report title"></div>
+      <div class="form-group"><label>Content</label><textarea id="repBody" style="min-height:80px" placeholder="Report details...">${esc(rep?.body||'')}</textarea></div>
+      <div class="form-group"><label>Criminals Names</label><input id="repCriminals" value="${esc(rep?.criminals||'')}" placeholder="e.g. John Doe"></div>
+      <div class="form-group"><label>Officers Involved</label><input id="repOfficers" value="${esc(rep?.officers||'')}" placeholder="e.g. Officer Kane"></div>
+      <div class="form-group"><label>Location</label><input id="repLocation" value="${esc(rep?.location||'')}" placeholder="e.g. Downtown LS"></div>
+      <div class="form-group"><label>Case Type</label><input id="repCaseType" value="${esc(rep?.caseType||'')}" placeholder="e.g. Robbery"></div>
+      <div class="form-group"><label>Evidence / Notes</label><textarea id="repEvidence">${esc(rep?.evidence||rep?.notes||'')}</textarea></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
-        title: qs('#repTitle').value.trim(),
-        body: qs('#repBody').value.trim()
+        title:     qs('#repTitle').value.trim(),
+        body:      qs('#repBody').value.trim(),
+        criminals: qs('#repCriminals').value.trim(),
+        officers:  qs('#repOfficers').value.trim(),
+        location:  qs('#repLocation').value.trim(),
+        caseType:  qs('#repCaseType').value.trim(),
+        evidence:  qs('#repEvidence').value.trim(),
       };
       if(!payload.title){ toast('Title is required','#ff5a67'); return; }
-      const r = await api('POST','/api/reports', payload);
-      if(r.ok){ store.reports = store.reports||[]; store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report saved ✓'); }
-      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      if(id){
+        const r = await api('PUT','/api/reports',{ id, ...payload });
+        if(r.ok){ const idx=(store.reports||[]).findIndex(x=>x.id===id); if(idx!==-1) store.reports[idx]=r.data; renderReports(); closeModal(); toast('Report updated ✓'); }
+        else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      } else {
+        const r = await api('POST','/api/reports', payload);
+        if(r.ok){ store.reports = store.reports||[]; store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report saved ✓'); }
+        else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      }
     };
     openModal();
   };
@@ -1056,7 +1185,13 @@
     qs('#logs').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-history"></i> System Logs</h3>
-          <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
+            ${isOwner?`
+            <button class="btn btn-sm btn-success" onclick="exportLogs('json')"><i class="ti ti-download"></i> JSON</button>
+            <button class="btn btn-sm btn-success" onclick="exportLogs('txt')"><i class="ti ti-download"></i> TXT</button>
+            `:''}
+          </div>
         </div>
         <div class="card-body">
           <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
@@ -1065,14 +1200,36 @@
       </div>`;
   }
 
+  window.exportLogs = async (fmt) => {
+    const url = `${CFG.WORKER_URL}/api/logs/export?format=${fmt}`;
+    const res = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
+    if(!res.ok){ toast('Export failed','#ff5a67'); return; }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `logs.${fmt}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Logs exported ✓','#2ecc71');
+  };
+
   function renderSettings(){
     const settings = store.settings || { webhookUrl:'', logsEnabled:true };
+    const wh = store.webhooks || {};
+    const webhookTypes = [
+      { key:'login',    label:'Login Logs Webhook' },
+      { key:'logout',   label:'Logout Logs Webhook' },
+      { key:'reports',  label:'Reports Logs Webhook' },
+      { key:'cases',    label:'Cases Logs Webhook' },
+      { key:'admin',    label:'Admin Actions Webhook' },
+      { key:'database', label:'Database Logs Webhook' },
+    ];
     qs('#settings').innerHTML = `
       <div class="card">
-        <div class="card-header"><h3><i class="ti ti-settings"></i> Settings</h3></div>
+        <div class="card-header"><h3><i class="ti ti-settings"></i> General Settings</h3></div>
         <div class="card-body">
           <div class="form-group">
-            <label>Discord Webhook URL</label>
+            <label>Default Discord Webhook URL</label>
             <input id="settingsWebhook" value="${esc(settings.webhookUrl||'')}" placeholder="https://discord.com/api/webhooks/...">
           </div>
           <div class="form-group" style="display:flex;align-items:center;gap:12px">
@@ -1082,14 +1239,76 @@
           ${isAdmin?`<button class="btn btn-primary" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Settings</button>`:'<p style="color:#8fa0bd;font-size:13px">Only admins can change settings.</p>'}
         </div>
       </div>
+
+      ${isAdmin?`<div class="card">
+        <div class="card-header"><h3><i class="ti ti-webhook"></i> Webhook System</h3></div>
+        <div class="card-body">
+          ${webhookTypes.map(wt=>`
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px;margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+                <b style="font-size:14px">${esc(wt.label)}</b>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+                  <input type="checkbox" id="whEnabled_${wt.key}" ${(wh[wt.key]?.enabled!==false)?'checked':''} style="width:auto;padding:0;margin:0">
+                  Enabled
+                </label>
+              </div>
+              <input id="whUrl_${wt.key}" value="${esc(wh[wt.key]?.url||'')}" placeholder="https://discord.com/api/webhooks/...">
+            </div>`).join('')}
+          <button class="btn btn-primary" onclick="saveWebhooks()"><i class="ti ti-device-floppy"></i> Save Webhooks</button>
+        </div>
+      </div>`:''}
+
+      ${isOwner?`
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-database"></i> Database (Owner Only)</h3></div>
+        <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap">
+          <button class="btn btn-success" onclick="downloadBackup()"><i class="ti ti-download"></i> Download Backup</button>
+          <button class="btn btn-danger" onclick="resetDatabase()"><i class="ti ti-refresh"></i> Reset Database</button>
+        </div>
+      </div>
+      `:`
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-database"></i> Database</h3></div>
         <div class="card-body">
           <p style="color:#8fa0bd;margin-bottom:16px;font-size:13px">Reset the database to default seed data. This action cannot be undone.</p>
           ${isAdmin?`<button class="btn btn-danger" onclick="seedDatabase()"><i class="ti ti-refresh"></i> Reset to Defaults</button>`:''}
         </div>
-      </div>`;
+      </div>`}`;
   }
+
+  window.saveWebhooks = async () => {
+    const wh = store.webhooks || {};
+    const keys = ['login','logout','reports','cases','admin','database'];
+    const payload = {};
+    keys.forEach(k=>{
+      payload[k] = {
+        url: qs(`#whUrl_${k}`)?.value?.trim() || '',
+        enabled: qs(`#whEnabled_${k}`)?.checked !== false
+      };
+    });
+    const r = await api('PUT','/api/webhooks', payload);
+    if(r.ok){ store.webhooks = r.data; toast('Webhooks saved ✓'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.downloadBackup = async () => {
+    const res = await fetch(`${CFG.WORKER_URL}/api/database/backup`, { headers: { Authorization: 'Bearer '+accessToken } });
+    if(!res.ok){ toast('Backup failed','#ff5a67'); return; }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'database_backup.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Backup downloaded ✓','#2ecc71');
+  };
+
+  window.resetDatabase = async () => {
+    if(!confirm('Reset ALL database to defaults? This CANNOT be undone!')) return;
+    const r = await api('POST','/api/database/reset');
+    if(r.ok){ await loadAllData(); navigate('dashboard'); toast('Database reset ✓','#f3c75a'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
 
   window.saveSettings = async () => {
     const payload = {
@@ -1106,6 +1325,83 @@
     const r = await api('POST','/api/seed');
     if(r.ok){ await loadAllData(); navigate('dashboard'); toast('Database reset ✓','#f3c75a'); }
     else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  // ═══════════════════════════ ADMIN ROLES (OWNER ONLY) ════════════════════════════
+  const ALL_PERMISSIONS = ['manage_users','manage_reports','manage_cases','manage_settings','manage_logs','manage_database','manage_webhooks','manage_roles'];
+
+  function renderAdminRoles(){
+    if(!isOwner){ qs('#adminRoles').innerHTML = '<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">Access denied — Owner only.</p></div></div>'; return; }
+    const roles = store.adminRoles || [];
+    const rows = roles.map(r=>`
+      <div style="border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:16px 20px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div>
+            <b style="font-size:15px">${esc(r.name||'')}</b>
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
+              ${(r.permissions||[]).map(p=>`<span class="badge badge-info" style="font-size:10px">${esc(p)}</span>`).join('')}
+            </div>
+            ${r.members?.length?`<div style="margin-top:6px;color:#8fa0bd;font-size:12px">Members: ${esc(r.members.join(', '))}</div>`:''}
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-warning" onclick="openAdminRoleModal(${r.id})"><i class="ti ti-edit"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteAdminRole(${r.id})"><i class="ti ti-trash"></i></button>
+          </div>
+        </div>
+      </div>`).join('');
+    qs('#adminRoles').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-shield-lock"></i> Admin Roles Management</h3>
+          <button class="btn btn-primary" onclick="openAdminRoleModal()"><i class="ti ti-plus"></i> Create Role</button>
+        </div>
+        <div class="card-body">
+          ${rows||'<p style="color:#8fa0bd;text-align:center">No custom roles created yet.</p>'}
+        </div>
+      </div>`;
+  }
+
+  window.deleteAdminRole = async id => {
+    if(!confirm('Delete this admin role?')) return;
+    const r = await api('DELETE','/api/admin-roles',{ id });
+    if(r.ok){ store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id); renderAdminRoles(); toast('Role deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.openAdminRoleModal = (id=null) => {
+    if(!isOwner){ toast('Owner only','#ff5a67'); return; }
+    const role = id ? (store.adminRoles||[]).find(r=>r.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Admin Role' : 'Create Admin Role';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Role Name</label><input id="arName" value="${esc(role?.name||'')}" placeholder="e.g. Supervisor"></div>
+      <div class="form-group"><label>Members (Discord IDs, comma-separated)</label><input id="arMembers" value="${esc((role?.members||[]).join(', '))}" placeholder="123456, 789012"></div>
+      <div class="form-group"><label>Permissions</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          ${ALL_PERMISSIONS.map(p=>`
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" value="${p}" ${(role?.permissions||[]).includes(p)?'checked':''} class="ar-perm" style="width:auto;padding:0;margin:0">
+              ${p.replace(/_/g,' ')}
+            </label>`).join('')}
+        </div>
+      </div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const name = qs('#arName').value.trim();
+      if(!name){ toast('Name required','#ff5a67'); return; }
+      const members = qs('#arMembers').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const permissions = [...document.querySelectorAll('.ar-perm:checked')].map(c=>c.value);
+      const payload = { name, members, permissions };
+      if(id){
+        const r = await api('PUT','/api/admin-roles',{ id, ...payload });
+        if(r.ok){ const idx=(store.adminRoles||[]).findIndex(x=>x.id===id); if(idx!==-1) store.adminRoles[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/admin-roles', payload);
+        if(r.ok){ store.adminRoles=store.adminRoles||[]; store.adminRoles.push(r.data); }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      }
+      renderAdminRoles(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
   };
 
   // ═══════════════════════════ INITIALIZATION ═══════════════════════════
