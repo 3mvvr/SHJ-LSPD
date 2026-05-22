@@ -1,995 +1,1181 @@
-// ============================================================
-//  SHJ-LSPD Worker — النسخة المعدّلة (بدون secrets)
-// ============================================================
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHJ LSPD | Complete Police Command System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',system-ui,sans-serif; background:#070b13; color:#edf3ff; min-height:100vh; }
+    body::before { content:''; position:fixed; inset:0;
+      background: radial-gradient(circle at 20% 30%,rgba(47,124,255,.12),transparent 55%),
+                  radial-gradient(circle at 85% 70%,rgba(243,199,90,.08),transparent 50%);
+      pointer-events:none; z-index:-1; }
 
-const ROLE_OFFICER     = '1504910116804100337';
-const ROLE_ADMIN       = '1504903024794140672';
-const GUILD_ID_DEFAULT = '1154498662286770179';
+    .app { display:grid; grid-template-columns:280px 1fr; min-height:100vh; }
+    .sidebar { background:rgba(10,15,25,.92); backdrop-filter:blur(16px);
+      border-right:1px solid rgba(255,255,255,.08); padding:24px 16px;
+      position:sticky; top:0; height:100vh; overflow-y:auto; z-index:10; }
 
+    .brand { display:flex; align-items:center; gap:12px; margin-bottom:32px;
+      padding-bottom:16px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .brand-icon { width:48px; height:48px; background:#0b1730; border:2px solid #f3c75a;
+      border-radius:50%; display:grid; place-items:center; font-size:26px; }
+    .brand h1 { font-size:18px; font-weight:800; }
+    .brand p  { font-size:11px; color:#8fa0bd; }
 
+    .nav-title { font-size:11px; font-weight:800; text-transform:uppercase;
+      letter-spacing:1px; color:#53617a; margin:24px 0 12px 8px; }
+    .nav button { width:100%; text-align:left; background:transparent; border:none;
+      color:#8fa0bd; padding:12px 16px; border-radius:14px; font-weight:600;
+      display:flex; align-items:center; gap:12px; cursor:pointer; transition:.2s; margin-bottom:6px; }
+    .nav button i { font-size:20px; }
+    .nav button.active,.nav button:hover { background:rgba(47,124,255,.12); color:white; }
 
-const REDIRECT_URI     = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
-const FRONTEND_URL     = 'https://shj-lspd.pages.dev/';
+    .main { min-width:0; }
+    .top-bar { height:70px; background:rgba(7,11,19,.7); backdrop-filter:blur(12px);
+      border-bottom:1px solid rgba(255,255,255,.08); display:flex; align-items:center;
+      justify-content:space-between; padding:0 32px; position:sticky; top:0; z-index:10; }
+    .user-info { display:flex; align-items:center; gap:16px; }
+    .avatar { width:42px; height:42px; background:linear-gradient(135deg,#2f7cff,#9c4dff);
+      border-radius:50%; display:grid; place-items:center; font-weight:bold; overflow:hidden; }
+    .avatar img { width:100%; height:100%; object-fit:cover; }
+    .role-badge { background:rgba(243,199,90,.15); border:1px solid rgba(243,199,90,.3);
+      border-radius:40px; padding:4px 12px; font-size:12px; font-weight:600; color:#f3c75a; }
 
-// مفاتيح KV (ثابتة)
-const KEY = {
-  officers: 'officers', discipline: 'discipline', promotions: 'promotions',
-  reports: 'reports', cases: 'cases', wanted: 'wanted', impound: 'impound',
-  laws: 'laws', uniforms: 'uniforms', codes: 'codes', ranks: 'ranks',
-  pointsLog: 'pointsLog', users: 'users', activity: 'activity',
-  settings: 'settings', webhookQueue: 'webhookQueue', rateLimit: 'rateLimit', sessions: 'sessions',
-};
+    .content { padding:28px 32px; max-width:1600px; }
+    .page { display:none; animation:fadeIn .25s ease; }
+    .page.active { display:block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
 
-const DEFAULTS = {
-  officers: [
-    { id: 1, name: 'John Hartley', badge: 100, rank: 'Chief of Police', dept: 'LSPD', section: 'Command', discord: '', points: 30, status: 'active' },
-    { id: 2, name: 'Michael Kane', badge: 200, rank: 'Captain', dept: 'LSPD', section: 'Command', discord: '', points: 24, status: 'active' },
-    { id: 3, name: 'Sarah Williams', badge: 300, rank: 'Sergeant', dept: 'LSPD', section: 'Patrol', discord: '', points: 18, status: 'active' },
-  ],
-  ranks: [
-    { id: 1, name: 'Cadet', pointsReq: 0 }, { id: 2, name: 'Officer I', pointsReq: 5 },
-    { id: 3, name: 'Officer II', pointsReq: 10 }, { id: 4, name: 'Sergeant', pointsReq: 15 },
-    { id: 5, name: 'Captain', pointsReq: 20 }, { id: 6, name: 'Chief of Police', pointsReq: 30 },
-  ],
-  laws: [ { id: 1, title: 'General Conduct', content: 'Respect higher ranks and follow orders.' } ],
-  uniforms: [ { id: 1, rank: 'Cadet', male: 'Torso:55, Pants:35', female: 'Torso:60, Pants:40' } ],
-  codes: [
-    { id: 1, code: '10-4', description: 'Message received', priority: 'info' },
-    { id: 2, code: '10-7', description: 'Out of service', priority: 'warning' },
-  ],
-  settings: { webhookUrl: '', logsEnabled: true, sessionTimeout: 12, roleMapping: {} },
-  discipline: [], promotions: [], reports: [], cases: [], wanted: [], impound: [], pointsLog: [], users: [],
-  activity: [{ id: 'init', msg: 'System initialized (KV)', time: Date.now() }],
-  webhookQueue: [], rateLimit: {}, sessions: {},
-};
+    .card { background:rgba(16,24,39,.8); backdrop-filter:blur(4px);
+      border:1px solid rgba(255,255,255,.08); border-radius:24px; overflow:hidden; margin-bottom:28px; }
+    .card-header { padding:18px 24px; border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+    .card-header h3 { font-size:18px; font-weight:700; }
+    .card-body { padding:24px; }
 
-// ──────────────────────────────────────────────────────────────
-//  KV Helpers
-// ──────────────────────────────────────────────────────────────
-async function kvGet(env, key) {
-  const raw = await env.LSPD_DATA.get(key);
-  if (raw === null) return DEFAULTS[key] ?? null;
-  try { return JSON.parse(raw); } catch { return DEFAULTS[key] ?? null; }
-}
-async function kvPut(env, key, value) {
-  await env.LSPD_DATA.put(key, JSON.stringify(value));
-}
-async function kvGetAll(env) {
-  const keys = Object.values(KEY);
-  const results = await Promise.all(keys.map(k => kvGet(env, k)));
-  const out = {};
-  keys.forEach((k, i) => { out[k] = results[i]; });
-  return out;
-}
-async function addLog(env, message, meta = {}) {
-  const logs = await kvGet(env, KEY.activity);
-  logs.unshift({ id: crypto.randomUUID(), msg: message, time: Date.now(), ...meta });
-  if (logs.length > 500) logs.length = 500;
-  await kvPut(env, KEY.activity, logs);
-}
+    .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:32px; }
+    .stat-card { background:rgba(16,24,39,.6); border:1px solid rgba(255,255,255,.08);
+      border-radius:20px; padding:20px; text-align:center; transition:.2s; }
+    .stat-card i { font-size:32px; color:#2f7cff; margin-bottom:12px; }
+    .stat-card .value { font-size:32px; font-weight:800; }
+    .stat-card .label { color:#8fa0bd; font-size:13px; margin-top:4px; }
 
-// ──────────────────────────────────────────────────────────────
-//  HTTP Helpers
-// ──────────────────────────────────────────────────────────────
-function cors() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
-  };
-}
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...cors() },
-  });
-}
-async function discordFetch(path, token, isBot = false) {
-  return fetch('https://discord.com/api/v10' + path, {
-    headers: { Authorization: (isBot ? 'Bot ' : 'Bearer ') + token },
-  });
-}
+    table { width:100%; border-collapse:collapse; }
+    th,td { text-align:left; padding:14px 8px; border-bottom:1px solid rgba(255,255,255,.06); }
+    th { color:#8fa0bd; font-weight:600; font-size:12px; text-transform:uppercase; }
 
-// ──────────────────────────────────────────────────────────────
-//  Webhook Logs System
-// ──────────────────────────────────────────────────────────────
-const LOG_COLORS = {
-  login: 0x2ecc71, logout: 0xe67e22, create: 0x3498db, edit: 0xf1c40f,
-  delete: 0xe74c3c, admin: 0x9b59b6, security: 0xc0392b, unauthorized: 0xe74c3c,
-  settings: 0x1abc9c, database: 0x95a5a6, webhook: 0xff69b4, default: 0x34495e,
-};
+    .officer-row { display:flex; justify-content:space-between; align-items:center;
+      padding:14px 0; border-bottom:1px solid rgba(255,255,255,.08); }
+    .officer-row:last-child { border-bottom:none; }
+    .divider { height:1px; background:rgba(255,255,255,.06); margin:12px 0; }
 
-let webhookQueueProcessing = false;
-async function processWebhookQueue(env) {
-  if (webhookQueueProcessing) return;
-  webhookQueueProcessing = true;
-  try {
-    while (true) {
-      const queue = await kvGet(env, KEY.webhookQueue);
-      if (!queue.length) break;
-      const next = queue.shift();
-      await kvPut(env, KEY.webhookQueue, queue);
-      try {
-        await fetch(next.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next.payload) });
-      } catch (e) { console.error('Webhook send failed:', e); }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    .btn { border:none; border-radius:12px; padding:8px 16px; font-weight:600; cursor:pointer;
+      display:inline-flex; align-items:center; gap:8px; transition:.2s;
+      background:rgba(255,255,255,.05); color:white; }
+    .btn-primary { background:linear-gradient(135deg,#2f7cff,#7258ff); }
+    .btn-danger  { background:rgba(255,90,103,.2); color:#ff5a67; border:1px solid rgba(255,90,103,.3); }
+    .btn-warning { background:rgba(243,199,90,.15); color:#f3c75a; border:1px solid rgba(243,199,90,.3); }
+    .btn-success { background:rgba(46,204,113,.15); color:#2ecc71; border:1px solid rgba(46,204,113,.3); }
+    .btn-sm { padding:6px 12px; font-size:12px; }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    .form-group { margin-bottom:20px; }
+    .form-group label { display:block; margin-bottom:6px; font-size:13px; font-weight:600; color:#8fa0bd; }
+    input,select,textarea { width:100%; background:#0b1220; border:1px solid rgba(255,255,255,.12);
+      border-radius:14px; padding:12px 14px; color:white; font-family:inherit; }
+    textarea { resize:vertical; min-height:80px; }
+
+    .modal { position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(8px);
+      display:none; place-items:center; z-index:1000; }
+    .modal.open { display:grid; }
+    .modal-content { background:#101827; border:1px solid rgba(255,255,255,.1);
+      border-radius:28px; width:min(650px,90%); max-height:85vh; overflow-y:auto; }
+    .modal-header,.modal-footer { padding:18px 24px; border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; justify-content:space-between; align-items:center; }
+    .modal-footer { border-bottom:none; border-top:1px solid rgba(255,255,255,.08); justify-content:flex-end; gap:12px; }
+    .modal-body { padding:24px; }
+
+    .toast { position:fixed; bottom:24px; left:24px; background:#1b2942;
+      border-left:4px solid #2f7cff; padding:12px 20px; border-radius:12px;
+      display:none; z-index:1100; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+    .toast.show { display:block; }
+
+    .login-container { min-height:100vh; display:grid; place-items:center; padding:24px; }
+    .login-card { max-width:460px; background:linear-gradient(145deg,#101827,#070b13);
+      border:1px solid rgba(255,255,255,.1); border-radius:32px; padding:40px 32px;
+      text-align:center; box-shadow:0 24px 48px rgba(0,0,0,.4); }
+
+    .spinner { display:inline-block; width:18px; height:18px; border:2px solid rgba(255,255,255,.2);
+      border-top-color:white; border-radius:50%; animation:spin .6s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+    .badge-active  { background:rgba(46,204,113,.15); color:#2ecc71; }
+    .badge-inactive{ background:rgba(255,90,103,.15); color:#ff5a67; }
+    .badge-info    { background:rgba(52,152,219,.15); color:#3498db; }
+    .badge-warning { background:rgba(243,199,90,.15); color:#f3c75a; }
+    .badge-danger  { background:rgba(255,90,103,.15); color:#ff5a67; }
+
+    .points-bar { height:6px; background:#1b2942; border-radius:99px; overflow:hidden; margin-top:4px; }
+    .points-bar-fill { height:100%; background:linear-gradient(90deg,#2f7cff,#7258ff); border-radius:99px; }
+
+    .mobile-menu { display:none; }
+    @media(max-width:800px){
+      .app { grid-template-columns:1fr; }
+      .sidebar { position:fixed; right:-280px; transition:.2s; height:100vh; z-index:20; }
+      .sidebar.open { right:0; }
+      .mobile-menu { display:inline-flex; }
+      .stats-grid { grid-template-columns:1fr 1fr; }
+      .content { padding:20px; }
     }
-  } finally { webhookQueueProcessing = false; }
-}
-async function queueWebhook(env, webhookUrl, embedPayload) {
-  if (!webhookUrl) return;
-  const queue = await kvGet(env, KEY.webhookQueue);
-  queue.push({ url: webhookUrl, payload: { embeds: [embedPayload] } });
-  if (queue.length > 100) queue.shift();
-  await kvPut(env, KEY.webhookQueue, queue);
-  await processWebhookQueue(env);
-}
-async function checkRateLimit(env, userId, action, limitSec = 10, maxEvents = 5) {
-  const key = `${userId}:${action}`;
-  const now = Date.now();
-  const rateData = await kvGet(env, KEY.rateLimit) || {};
-  const events = rateData[key] || [];
-  const recent = events.filter(t => now - t < limitSec * 1000);
-  if (recent.length >= maxEvents) return false;
-  recent.push(now);
-  rateData[key] = recent.slice(-maxEvents);
-  await kvPut(env, KEY.rateLimit, rateData);
-  return true;
-}
-let lastEventCache = new Map();
-function isDuplicate(userId, action, dataHash) {
-  const key = `${userId}:${action}`;
-  const last = lastEventCache.get(key);
-  if (last && Date.now() - last.timestamp < 5000 && last.hash === dataHash) return true;
-  lastEventCache.set(key, { timestamp: Date.now(), hash: dataHash });
-  setTimeout(() => lastEventCache.delete(key), 6000);
-  return false;
-}
-function getClientInfo(request) {
-  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For')?.split(',')[0] || 'Unknown';
-  const userAgent = request.headers.get('User-Agent') || 'Unknown';
-  return { ip, userAgent };
-}
-async function getSessionId(env, userId, request) {
-  let sessions = await kvGet(env, KEY.sessions) || {};
-  if (sessions[userId] && Date.now() - sessions[userId].updated < 24 * 3600 * 1000) {
-    sessions[userId].updated = Date.now();
-    await kvPut(env, KEY.sessions, sessions);
-    return sessions[userId].id;
-  }
-  const sessionId = crypto.randomUUID();
-  sessions[userId] = { id: sessionId, updated: Date.now() };
-  await kvPut(env, KEY.sessions, sessions);
-  return sessionId;
-}
-async function sendWebhookEmbed(env, request, ctx, logType, title, description, fields = [], oldData = null, newData = null) {
-  const settings = await kvGet(env, KEY.settings);
-  if (!settings?.logsEnabled || !settings?.webhookUrl) return;
-  const userId = ctx?.user?.id || 'system';
-  if (!await checkRateLimit(env, userId, logType, 10, 8)) return;
-  const dataHash = `${title}|${description}|${JSON.stringify(fields)}`;
-  if (isDuplicate(userId, logType, dataHash)) return;
-  const { ip, userAgent } = getClientInfo(request);
-  const sessionId = ctx?.user?.id ? await getSessionId(env, userId, request) : 'N/A';
-  const color = LOG_COLORS[logType] || LOG_COLORS.default;
-  const embed = {
-    color, title: `📋 ${title}`, description: description.substring(0, 2000), fields: [],
-    footer: { text: `🛡️ SHJ LSPD • Session: ${sessionId.substring(0, 8)}` }, timestamp: new Date().toISOString(),
+  </style>
+</head>
+<body>
+
+<div id="loginContainer" class="login-container">
+  <div class="login-card">
+    <div style="width:80px;height:80px;background:#0b1730;border:2px solid #f3c75a;border-radius:50%;display:grid;place-items:center;font-size:40px;margin:0 auto 20px">🛡️</div>
+    <h1 style="font-size:28px;font-weight:900">SHJ LSPD</h1>
+    <p style="color:#8fa0bd;margin:8px 0 24px">Complete Police Management System</p>
+    <button id="discordLoginBtn" class="btn btn-primary" style="width:100%;justify-content:center">
+      <i class="ti ti-brand-discord"></i> Login with Discord
+    </button>
+    <p id="loginMessage" style="margin-top:16px;font-size:13px;color:#8fa0bd"></p>
+  </div>
+</div>
+
+<div id="appContainer" class="app" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div><h1>SHJ LSPD</h1><p>Command Center</p></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-title">Main</div>
+      <button class="active" data-page="dashboard"><i class="ti ti-dashboard"></i> Dashboard</button>
+      <button data-page="officers"><i class="ti ti-users"></i> Officers</button>
+      <button data-page="ranks"><i class="ti ti-stairs-up"></i> Ranks</button>
+      <button data-page="points"><i class="ti ti-chart-bar"></i> Points Logs</button>
+      <button data-page="laws"><i class="ti ti-book"></i> Laws & Rules</button>
+      <button data-page="uniform"><i class="ti ti-shirt"></i> Uniform Guide</button>
+      <button data-page="codes"><i class="ti ti-radio"></i> Police Codes</button>
+      <button data-page="wanted"><i class="ti ti-car"></i> Wanted & Impound</button>
+      <button data-page="cases"><i class="ti ti-folder"></i> Cases</button>
+      <button data-page="reports"><i class="ti ti-file-text"></i> Reports</button>
+      <div class="nav-title">Administration</div>
+      <button data-page="discordUsers"><i class="ti ti-brand-discord"></i> Discord Users</button>
+      <button data-page="logs"><i class="ti ti-history"></i> System Logs</button>
+      <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="top-bar">
+      <button class="btn mobile-menu" id="mobileMenuBtn"><i class="ti ti-menu-2"></i></button>
+      <div><b>Control Panel</b><div id="clock" style="font-size:12px;color:#8fa0bd"></div></div>
+      <div class="user-info">
+        <div class="avatar" id="userAvatar">U</div>
+        <div><b id="userName">User</b><div id="userRole" class="role-badge">Officer</div></div>
+        <button id="logoutBtn" class="btn" style="background:rgba(255,90,103,.15);color:#ff5a67">
+          <i class="ti ti-logout"></i> Logout
+        </button>
+      </div>
+    </div>
+    <div class="content">
+      <div id="dashboard"    class="page active"></div>
+      <div id="officers"     class="page"></div>
+      <div id="ranks"        class="page"></div>
+      <div id="points"       class="page"></div>
+      <div id="laws"         class="page"></div>
+      <div id="uniform"      class="page"></div>
+      <div id="codes"        class="page"></div>
+      <div id="wanted"       class="page"></div>
+      <div id="cases"        class="page"></div>
+      <div id="reports"      class="page"></div>
+      <div id="discordUsers" class="page"></div>
+      <div id="logs"         class="page"></div>
+      <div id="settings"     class="page"></div>
+    </div>
+  </main>
+</div>
+
+<div id="globalModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modalTitle">Modal</h3>
+      <button class="btn btn-sm" id="closeModalBtn">✕</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn" id="modalCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="modalConfirmBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+<div id="toastMessage" class="toast"></div>
+
+<script>
+(function(){
+  // ═══════════════════════════ CONFIG ═══════════════════════════
+  const CFG = {
+    WORKER_URL:        'https://lspd.oabbmb.workers.dev',
+    DISCORD_CLIENT_ID: '1505897669334138940',
+    GUILD_ID:          '1154498662286770179',
   };
-  if (ctx?.user) {
-    embed.author = { name: `${ctx.user.username} (${ctx.isAdmin ? '👑 Admin' : '👮 Officer'})`, icon_url: ctx.user.avatar ? `https://cdn.discordapp.com/avatars/${ctx.user.id}/${ctx.user.avatar}.png` : undefined };
-    embed.thumbnail = { url: ctx.user.avatar ? `https://cdn.discordapp.com/avatars/${ctx.user.id}/${ctx.user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' };
-    fields.push({ name: '👤 User', value: `${ctx.user.username} (${ctx.user.id})`, inline: true });
-    fields.push({ name: '🛡️ Role', value: ctx.isAdmin ? 'Admin' : 'Officer', inline: true });
+
+  // ═══════════════════════════ STATE ════════════════════════════
+  let currentUser = null;
+  let isAdmin     = false;
+  let accessToken = null;
+  let store = {
+    officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
+    codes:[], wanted:[], impound:[], cases:[], reports:[],
+    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true }
+  };
+
+  // ═══════════════════════════ UTILS ════════════════════════════
+  const qs  = (s,p=document) => p.querySelector(s);
+  const qsa = (s,p=document) => [...p.querySelectorAll(s)];
+  function esc(str){ return String(str??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]); }
+  function toast(msg,color='#2f7cff'){
+    const t=qs('#toastMessage');
+    if(t){ t.textContent=msg; t.style.borderLeftColor=color; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'),3000); }
   }
-  fields.push({ name: '🌐 IP', value: ip, inline: true }, { name: '💻 Device', value: userAgent.substring(0, 80), inline: true });
-  if (oldData) fields.push({ name: '📜 Old Value', value: `\`\`\`json\n${JSON.stringify(oldData, null, 2).substring(0, 500)}\`\`\``, inline: false });
-  if (newData) fields.push({ name: '✨ New Value', value: `\`\`\`json\n${JSON.stringify(newData, null, 2).substring(0, 500)}\`\`\``, inline: false });
-  for (const f of fields) embed.fields.push(f);
-  await queueWebhook(env, settings.webhookUrl, embed);
-}
-async function sendSystemWebhookEmbed(env, logType, title, description, fields = []) {
-  const settings = await kvGet(env, KEY.settings);
-  if (!settings?.logsEnabled || !settings?.webhookUrl) return;
-  const color = LOG_COLORS[logType] || LOG_COLORS.default;
-  const embed = { color, title: `🤖 SYSTEM: ${title}`, description: description.substring(0, 2000), fields, footer: { text: '🛡️ SHJ LSPD • System Event' }, timestamp: new Date().toISOString() };
-  await queueWebhook(env, settings.webhookUrl, embed);
-}
+  function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-US') : '-'; }
 
-// ──────────────────────────────────────────────────────────────
-//  Discord OAuth Token Exchange (المصلح النهائي)
-// ──────────────────────────────────────────────────────────────
-async function exchangeCodeForToken(code, env) {
-  // دعم كلا الاسمين: DISCORD_CLIENT_ID أو CLIENT_ID
-  const CLIENT_ID     = env.DISCORD_CLIENT_ID     || env.CLIENT_ID;
-  const CLIENT_SECRET = env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET;
-  // دعم DISCORD_REDIRECT_URI أو الثابت الافتراضي
-  const REDIRECT      = env.DISCORD_REDIRECT_URI  || REDIRECT_URI;
-
-  console.log('[OAuth] === Token Exchange Start ===');
-  console.log('[OAuth] OAuth callback started');
-  console.log('[OAuth] client_id:     ', CLIENT_ID   || '⚠️ MISSING');
-  console.log('[OAuth] redirect_uri:  ', REDIRECT);
-  console.log('[OAuth] code length:   ', code?.length || 0);
-
-  // Validation: تحقق من وجود المتغيرات الضرورية
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    console.error('[OAuth] ❌ DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET missing from env');
-    return { ok: false, status: 500, error: 'server_misconfigured', description: 'Missing DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET' };
-  }
-  if (!code) {
-    console.error('[OAuth] ❌ No authorization code provided');
-    return { ok: false, status: 400, error: 'missing_code', description: 'No authorization code in request' };
-  }
-
-  const params = new URLSearchParams({
-    client_id:     CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    grant_type:    'authorization_code',
-    code:          code,
-    redirect_uri:  REDIRECT,
-  });
-
-  console.log('[OAuth] body (redacted):', params.toString().replace(CLIENT_SECRET, '***'));
-
-  let response;
-  try {
-    response = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-  } catch (fetchErr) {
-    console.error('[OAuth] ❌ Network error reaching Discord:', fetchErr.message);
-    return { ok: false, status: 503, error: 'network_error', description: fetchErr.message };
-  }
-
-  console.log('[OAuth] Token exchange status:', response.status);
-
-  const responseText = await response.text();
-  console.log('[OAuth] Discord response:', responseText);
-
-  if (!response.ok) {
-    let parsed = {};
-    try { parsed = JSON.parse(responseText); } catch {}
-    const errorCode = parsed.error             || 'unknown_error';
-    const errorDesc = parsed.error_description || responseText || 'No description from Discord';
-    console.error(`[OAuth] ❌ Token exchange failed — error: ${errorCode} | desc: ${errorDesc}`);
-    if (errorCode === 'invalid_grant')   console.error('[OAuth] CAUSE: Code already used, expired, or redirect_uri mismatch');
-    if (errorCode === 'invalid_client')  console.error('[OAuth] CAUSE: CLIENT_ID or CLIENT_SECRET is incorrect');
-    if (errorCode === 'invalid_request') console.error('[OAuth] CAUSE: Missing or malformed parameter in request');
-    return { ok: false, status: response.status, error: 'token_exchange_failed', description: errorDesc, discordError: errorCode };
-  }
-
-  let data = {};
-  try { data = JSON.parse(responseText); } catch (parseErr) {
-    console.error('[OAuth] ❌ Failed to parse Discord JSON response:', parseErr.message);
-    return { ok: false, status: 500, error: 'parse_error', description: 'Discord returned non-JSON response' };
-  }
-
-  if (!data.access_token) {
-    console.error('[OAuth] ❌ No access_token in Discord response:', JSON.stringify(data));
-    return { ok: false, status: 500, error: 'no_access_token', description: 'Discord response missing access_token' };
-  }
-
-  console.log('[OAuth] ✅ SUCCESS — scope:', data.scope, '| expires_in:', data.expires_in, 'sec');
-  return { ok: true, data };
-}
-
-// ──────────────────────────────────────────────────────────────
-//  Login URL Builder
-// ──────────────────────────────────────────────────────────────
-function buildDiscordLoginUrl(env) {
-  const params = new URLSearchParams({
-    client_id:     env.CLIENT_ID,
-    redirect_uri:  REDIRECT_URI,
-    response_type: 'code',
-    scope:         'identify guilds guilds.members.read',
-    prompt:        'none',
-  });
-  return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
-}
-
-// ──────────────────────────────────────────────────────────────
-//  Discord Role Verification
-// ──────────────────────────────────────────────────────────────
-
-// ✅ Debug Mode — يطبع كل خطوات التحقق بالتفصيل
-const DEBUG_AUTH = true;
-
-function dbg(...args) {
-  if (DEBUG_AUTH) console.log('[DEBUG]', ...args);
-}
-
-async function getUserGuildMember(guildId, userId, env) {
-  // ✅ دعم كلا اسمي المتغير
-  const BOT_TOKEN = env.DISCORD_BOT_TOKEN || env.BOT_TOKEN;
-
-  dbg('=== getUserGuildMember ===');
-  dbg('Guild ID:', guildId);
-  dbg('User ID:', userId);
-  dbg('BOT_TOKEN present:', !!BOT_TOKEN);
-  dbg('BOT_TOKEN source:', env.DISCORD_BOT_TOKEN ? 'DISCORD_BOT_TOKEN' : (env.BOT_TOKEN ? 'BOT_TOKEN' : '❌ MISSING'));
-
-  if (!BOT_TOKEN) {
-    console.error('[Auth] ❌ BOT_TOKEN missing — cannot fetch guild member');
-    return { error: 'server_misconfigured', description: 'Missing BOT_TOKEN in environment' };
-  }
-
-  if (!guildId) {
-    console.error('[Auth] ❌ GUILD_ID is empty or undefined');
-    return { error: 'server_misconfigured', description: 'GUILD_ID_DEFAULT is not set' };
-  }
-
-  console.log(`[Auth] Fetching guild member — guild: ${guildId} | user: ${userId}`);
-  let memberRes;
-  try {
-    memberRes = await discordFetch(`/guilds/${guildId}/members/${userId}`, BOT_TOKEN, true);
-  } catch (fetchErr) {
-    console.error('[Auth] ❌ Network error fetching guild member:', fetchErr.message);
-    return { error: 'network_error', description: fetchErr.message };
-  }
-
-  console.log(`[Auth] Guild member status: ${memberRes.status}`);
-
-  if (memberRes.status === 404) {
-    console.warn(`[Auth] ⚠️ User ${userId} is NOT in guild ${guildId} (404)`);
-    return { error: 'not_in_guild', description: 'User is not a member of the required Discord server' };
-  }
-  if (memberRes.status === 403) {
-    console.error('[Auth] ❌ Bot does not have permission to view guild members (403) — check bot scopes/permissions');
-    return { error: 'bot_permission_denied', description: 'Bot lacks permission to fetch guild members' };
-  }
-  if (memberRes.status === 401) {
-    console.error('[Auth] ❌ BOT_TOKEN is invalid or expired (401)');
-    return { error: 'invalid_bot_token', description: 'BOT_TOKEN is invalid or expired' };
-  }
-  if (!memberRes.ok) {
-    const body = await memberRes.text();
-    console.error(`[Auth] ❌ Guild member fetch failed (${memberRes.status}): ${body}`);
-    return { error: 'guild_fetch_failed', description: `Discord returned ${memberRes.status}: ${body}` };
-  }
-
-  const memberData = await memberRes.json();
-  dbg('Guild Member Data:', JSON.stringify(memberData));
-  dbg('Member roles:', memberData.roles);
-  dbg('Member nick:', memberData.nick);
-
-  return { ok: true, data: memberData };
-}
-
-async function verifyToken(request, env) {
-  const auth = request.headers.get('Authorization') || '';
-  if (!auth.startsWith('Bearer ')) {
-    dbg('verifyToken: No Bearer token in Authorization header');
-    return null;
-  }
-
-  const accessToken = auth.slice(7);
-  dbg('verifyToken: Fetching /users/@me...');
-
-  const userRes = await discordFetch('/users/@me', accessToken, false);
-  if (!userRes.ok) {
-    console.warn('[Auth] /users/@me failed:', userRes.status);
-    return null;
-  }
-
-  const user = await userRes.json();
-  if (!user?.id) {
-    console.warn('[Auth] /users/@me returned no user ID');
-    return null;
-  }
-
-  dbg('User ID:', user.id);
-  dbg('Username:', user.username);
-  dbg('Required Guild ID:', GUILD_ID_DEFAULT);
-  dbg('Required Officer Role:', ROLE_OFFICER);
-  dbg('Required Admin Role:', ROLE_ADMIN);
-
-  // ✅ تحقق من وجود Guild ID
-  if (!GUILD_ID_DEFAULT) {
-    console.error('[Auth] ❌ GUILD_ID_DEFAULT is not set in code');
-    return { __error: 'server_misconfigured', description: 'GUILD_ID_DEFAULT missing' };
-  }
-
-  const memberResult = await getUserGuildMember(GUILD_ID_DEFAULT, user.id, env);
-
-  // ✅ إذا كان هناك خطأ — أرجع الخطأ للـ OAuth handler بدل null مبهم
-  if (!memberResult || memberResult.error) {
-    const err = memberResult?.error || 'unknown_guild_error';
-    const desc = memberResult?.description || 'Unknown error fetching guild member';
-    console.warn(`[Auth] ⚠️ Guild check failed: ${err} — ${desc}`);
-    return { __error: err, description: desc };
-  }
-
-  const member = memberResult.data;
-  const memberRoles = member.roles || [];
-
-  dbg('Member roles list:', memberRoles);
-  dbg('Has ROLE_OFFICER:', memberRoles.includes(ROLE_OFFICER));
-  dbg('Has ROLE_ADMIN:', memberRoles.includes(ROLE_ADMIN));
-
-  const hasOfficerRole = memberRoles.includes(ROLE_OFFICER);
-  const hasAdminRole   = memberRoles.includes(ROLE_ADMIN);
-  const isAdmin   = hasAdminRole;
-  const isOfficer = hasOfficerRole || hasAdminRole;
-
-  if (!isOfficer) {
-    console.warn(`[Auth] ⚠️ User ${user.username} (${user.id}) is in guild but has NO required role`);
-    dbg('User roles in guild:', memberRoles);
-    dbg('Officer role required:', ROLE_OFFICER);
-    dbg('Admin role required:', ROLE_ADMIN);
-    return { __error: 'missing_role', description: `User is in guild but missing required role. Has: [${memberRoles.join(', ')}]` };
-  }
-
-  const internalRank = isAdmin ? 'Admin' : 'Officer';
-  dbg('✅ Auth success — rank:', internalRank);
-  return { user, roles: memberRoles, isAdmin, isOfficer, internalRank, guildMember: member, joinedAt: member.joined_at };
-}
-async function requireAuth(request, env) {
-  const ctx = await verifyToken(request, env);
-  if (!ctx) return [null, json({ ok: false, error: 'unauthorized', reason: 'unauthorized' }, 401)];
-  // ✅ إذا كان verifyToken أرجع خطأ واضح — مرره مباشرة
-  if (ctx.__error) {
-    const status = ctx.__error === 'server_misconfigured' ? 500 : 403;
-    return [null, json({ ok: false, error: ctx.__error, description: ctx.description }, status)];
-  }
-  return [ctx, null];
-}
-function requireAdmin(ctx) {
-  if (!ctx?.isAdmin) return json({ ok: false, reason: 'forbidden_admin_only' }, 403);
-  return null;
-}
-async function readBody(request) {
-  try { return await request.json(); } catch { return {}; }
-}
-
-// ──────────────────────────────────────────────────────────────
-//  MAIN HANDLER
-// ──────────────────────────────────────────────────────────────
-export default {
-  async fetch(request, env) {
+  // ═══════════════════════════ API ENGINE ══════════════════════════
+  async function api(method, path, body=null){
+    const opts = { method, headers: { 'Content-Type':'application/json' } };
+    if(accessToken) opts.headers['Authorization'] = 'Bearer '+accessToken;
+    if(body) opts.body = JSON.stringify(body);
     try {
-    const url  = new URL(request.url);
-    const path = url.pathname.replace(/\/+$/, '') || '/';
+      const res = await fetch(CFG.WORKER_URL + path, opts);
+      let data;
+      try { data = await res.json(); } catch(e) { return { ok:false, reason:'invalid_json_response' }; }
+      if(!data.ok && data.reason) console.warn('API warn:', data.reason);
+      return data;
+    } catch(e){ console.error('API error:', e); return { ok:false, reason: e.message }; }
+  }
 
-    // ✅ أولاً: الملفات الثابتة (قبل أي شيء)
-    if (path === '/favicon.ico') return new Response(null, { status: 204, headers: cors() });
-    if (path === '/robots.txt') return new Response('User-agent: *\nDisallow: /', { headers: { 'Content-Type': 'text/plain', ...cors() } });
-    if (request.method === 'OPTIONS') return new Response(null, { headers: cors() });
-    if (path === '/' || path === '/health') return json({ ok: true, service: 'SHJ-LSPD API (KV)', time: Date.now() });
-
-    // رابط تسجيل الدخول — ينشئ OAuth URL ديناميكياً
-    if (path === '/api/auth/url' && request.method === 'GET') {
-      const clientIdForUrl = env.DISCORD_CLIENT_ID || env.CLIENT_ID;
-      if (!clientIdForUrl) return json({ ok: false, error: 'server_misconfigured', reason: 'DISCORD_CLIENT_ID not set in env' }, 500);
-      const loginParams = new URLSearchParams({
-        client_id:     clientIdForUrl,
-        redirect_uri:  REDIRECT_URI,
-        response_type: 'code',
-        scope:         'identify guilds guilds.members.read',
-        prompt:        'none',
-      });
-      return json({ ok: true, url: 'https://discord.com/api/oauth2/authorize?' + loginParams.toString() });
+  async function loadAllData(){
+    const data = await api('GET', '/api/data');
+    if(data.ok){
+      ['officers','ranks','pointsLog','laws','uniforms','codes',
+       'wanted','impound','cases','reports','users','activity','settings'
+      ].forEach(k => { if(data[k] !== undefined) store[k] = data[k]; });
     }
+  }
 
-    // Seed
-    if (path === '/api/seed' && request.method === 'POST') {
-      await Promise.all(Object.keys(DEFAULTS).map(k => kvPut(env, k, DEFAULTS[k])));
-      await addLog(env, 'Database seeded/reset', { by: 'system_init', type: 'seed' });
-      await sendSystemWebhookEmbed(env, 'database', 'Database Reset', 'All data has been reset to defaults.');
-      return json({ ok: true, message: 'Database reset' });
+  // ═══════════════════════════ SESSION ══════════════════════════
+  function saveSession(user,admin,token){
+    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, token, ts:Date.now() }));
+    currentUser=user; isAdmin=admin; accessToken=token;
+  }
+  function loadSession(){
+    try {
+      const s = JSON.parse(localStorage.getItem('lspd_session')||'null');
+      if(!s) return false;
+      if(Date.now()-s.ts > 12*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
+      currentUser=s.user; isAdmin=s.isAdmin; accessToken=s.token;
+      return true;
+    } catch{ return false; }
+  }
+  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; accessToken=null; }
+
+  async function validateSessionWithServer(){
+    if(!accessToken){
+      console.warn('[Auth] validateSessionWithServer: no accessToken — skipping');
+      return false;
     }
-
-    // بيانات كاملة (للتصحيح)
-    if (path === '/api/data' && request.method === 'GET') {
-      const data = await kvGetAll(env);
-      return json({ ok: true, ...data });
-    }
-
-    // ─────────────── Auth Debug Endpoint ───────────────
-    if (path === '/api/auth/debug' && request.method === 'GET') {
-      const authHeader = request.headers.get('Authorization') || '';
-      const hasBearer  = authHeader.startsWith('Bearer ');
-      const token      = hasBearer ? authHeader.slice(7) : null;
-
-      if (!token) {
-        return json({ logged_in: false, has_token: false, error: 'missing_session', description: 'No Bearer token in Authorization header' });
-      }
-
-      // تحقق من صحة الـ token مع Discord
-      let user = null;
-      let userFetchOk = false;
-      try {
-        const r = await discordFetch('/users/@me', token, false);
-        userFetchOk = r.ok;
-        if (r.ok) user = await r.json();
-      } catch (e) {
-        console.error('[Debug] /users/@me error:', e.message);
-      }
-
-      if (!userFetchOk || !user?.id) {
-        return json({ logged_in: false, has_token: true, token_valid: false, error: 'invalid_token', description: 'Discord rejected the access token' });
-      }
-
-      // تحقق من guild membership
-      const BOT_TOKEN = env.DISCORD_BOT_TOKEN || env.BOT_TOKEN;
-      let memberData = null;
-      let memberError = null;
-      if (BOT_TOKEN) {
-        const memberResult = await getUserGuildMember(GUILD_ID_DEFAULT, user.id, env);
-        if (memberResult?.ok) memberData = memberResult.data;
-        else memberError = memberResult?.error || 'unknown';
-      }
-
-      return json({
-        logged_in:    !!memberData,
-        has_token:    true,
-        token_valid:  true,
-        user_id:      user.id,
-        username:     user.username,
-        guild_id:     GUILD_ID_DEFAULT,
-        session_valid: !!memberData,
-        in_guild:     !!memberData,
-        guild_error:  memberError || null,
-        roles:        memberData?.roles || [],
-        has_officer_role: memberData?.roles?.includes(ROLE_OFFICER) || false,
-        has_admin_role:   memberData?.roles?.includes(ROLE_ADMIN)   || false,
-        bot_token_present: !!BOT_TOKEN,
-      });
-    }
-
-    // ─────────────── OAuth Callback (Fixed) ───────────────
-    if ((path === '/auth' || path === '/api/auth/callback') && request.method === 'GET') {
-      console.log('[OAuth] OAuth callback started — path:', path);
-
-      const code        = url.searchParams.get('code');
-      const oauthError  = url.searchParams.get('error');
-      const oauthErrDesc = url.searchParams.get('error_description');
-
-      // المستخدم ضغط Cancel في Discord
-      if (oauthError) {
-        console.warn('[OAuth] Discord returned error:', oauthError, '|', oauthErrDesc);
-        return json({ ok: false, error: oauthError, description: oauthErrDesc || 'User cancelled or denied access' }, 400);
-      }
-
-      if (!code) {
-        console.error('[OAuth] No code in callback URL');
-        return json({ ok: false, error: 'missing_code', description: 'No authorization code in callback URL' }, 400);
-      }
-
-      // دعم كلا الصيغتين لأسماء المتغيرات
-      const clientId     = env.DISCORD_CLIENT_ID     || env.CLIENT_ID;
-      const clientSecret = env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET;
-
-      if (!clientId || !clientSecret) {
-        console.error('[OAuth] ❌ Missing DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET in env');
-        return json({ ok: false, error: 'server_misconfigured', description: 'Missing DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET in Worker environment' }, 500);
-      }
-
-      // ✅ تحقق من BOT_TOKEN بكلا الاسمين
-      if (!env.DISCORD_BOT_TOKEN && !env.BOT_TOKEN) {
-        console.error('[OAuth] ❌ BOT_TOKEN missing — add DISCORD_BOT_TOKEN to Worker secrets');
-        return json({ ok: false, error: 'server_misconfigured', description: 'Missing DISCORD_BOT_TOKEN in Worker environment' }, 500);
-      }
-      dbg('BOT_TOKEN source:', env.DISCORD_BOT_TOKEN ? 'DISCORD_BOT_TOKEN ✅' : 'BOT_TOKEN ✅');
-
-      // تبادل الكود بالتوكن
-      let tokenResult;
-      try {
-        tokenResult = await exchangeCodeForToken(code, env);
-      } catch (err) {
-        console.error('[OAuth] ❌ Unexpected error in exchangeCodeForToken:', err.message, err.stack);
-        return json({ ok: false, error: 'internal_error', description: err.message }, 500);
-      }
-
-      if (!tokenResult.ok) {
-        console.error('[OAuth] ❌ Token exchange failed:', tokenResult.error, '|', tokenResult.description);
-        return json({
-          ok: false,
-          error: 'token_exchange_failed',
-          details: tokenResult.description || 'Discord did not return a valid token',
-          discordError: tokenResult.discordError || tokenResult.error,
-          status: tokenResult.status,
-        }, 400);
-      }
-
-      const access_token = tokenResult.data.access_token;
-
-      // التحقق من الصلاحيات في Discord
-      let auth;
-      try {
-        const fakeReq = new Request(request.url, { headers: { Authorization: 'Bearer ' + access_token } });
-        auth = await verifyToken(fakeReq, env);
-      } catch (verifyErr) {
-        console.error('[OAuth] ❌ Error during role verification:', verifyErr.message);
-        return json({ ok: false, error: 'verification_error', details: verifyErr.message }, 500);
-      }
-
-      // ✅ إذا كان الخطأ محدد (not_in_guild, missing_role...) — redirect مع error code
-      if (!auth || auth.__error) {
-        const errCode = auth?.__error || 'unauthorized';
-        const errDesc = auth?.description || 'User failed guild/role verification';
-        console.warn('[OAuth] ⚠️ Auth failed:', errCode, '—', errDesc);
-        try { await sendSystemWebhookEmbed(env, 'unauthorized', 'Unauthorized Access Attempt', 'Error: ' + errCode + ' | IP: ' + getClientInfo(request).ip); } catch {}
-        const errorRedirect = FRONTEND_URL + '?auth_error=' + encodeURIComponent(errCode) + '&error_desc=' + encodeURIComponent(errDesc);
-        return Response.redirect(errorRedirect, 302);
-      }
-
-      console.log('[OAuth] ✅ OAuth success — User authenticated:', auth.user.id, '|', auth.user.username);
-      console.log('[OAuth] Session created — isAdmin:', auth.isAdmin, '| rank:', auth.internalRank);
-
-      const avatar = auth.user.avatar
-        ? 'https://cdn.discordapp.com/avatars/' + auth.user.id + '/' + auth.user.avatar + '.png'
-        : null;
-
-      try {
-        const users = await kvGet(env, KEY.users);
-        const existingIdx = users.findIndex(u => u.id === auth.user.id);
-        const userRecord = {
-          id: auth.user.id,
-          username: auth.user.username,
-          avatar,
-          isAdmin: auth.isAdmin,
-          internalRank: auth.internalRank,
-          lastLogin: Date.now(),
-        };
-        if (existingIdx === -1) {
-          users.push({ ...userRecord, joinedAt: Date.now() });
-          await addLog(env, 'New user registered: ' + auth.user.username, { userId: auth.user.id, type: 'register' });
-          await sendWebhookEmbed(env, request, auth, 'create', 'New User Registered', auth.user.username + ' joined the system.', [], null, userRecord);
-        } else {
-          users[existingIdx] = { ...users[existingIdx], ...userRecord };
-          await addLog(env, 'Login: ' + auth.user.username, { userId: auth.user.id, type: 'login' });
-          await sendWebhookEmbed(env, request, auth, 'login', 'User Login', auth.user.username + ' logged in.', [], null, userRecord);
+    console.log('[Auth] Validating session with server — user:', currentUser?.id);
+    try {
+      const r = await api('GET', '/api/me');
+      if(!r.ok){
+        console.warn('[Auth] /api/me returned not ok:', r.error || r.reason);
+        // ✅ إذا الـ token انتهى من Discord — امسح الـ session
+        // لكن إذا خطأ مؤقت في الشبكة — لا تمسح (تجنب loop)
+        if(r.error === 'unauthorized' || r.reason === 'unauthorized') {
+          console.warn('[Auth] Token invalid — clearing session');
+          clearSession();
         }
-        await kvPut(env, KEY.users, users);
-      } catch (kvErr) {
-        // لا نوقف العملية بسبب خطأ في KV — المستخدم سيكمل الـ login
-        console.error('[OAuth] ⚠️ KV save error (non-fatal):', kvErr.message);
+        return false;
       }
+      isAdmin = r.isAdmin === true;
+      if(currentUser) currentUser = { ...currentUser, ...(r.user || {}) };
+      saveSession(currentUser, isAdmin, accessToken);
+      console.log('[Auth] Server validation OK — isAdmin:', isAdmin);
+      return true;
+    } catch(e){
+      console.error('[Auth] Session validation network error (keeping session):', e.message);
+      // ✅ إذا الشبكة فشلت — اعتمد على الـ localStorage بدل مسح الـ session
+      return true;
+    }
+  }
 
-      const userPayload = JSON.stringify({
-        id: auth.user.id,
-        username: auth.user.username,
-        avatar,
-        internalRank: auth.internalRank,
-      });
-      const redirectTo = FRONTEND_URL + '?access_token=' + access_token +
-        '&user=' + encodeURIComponent(userPayload) +
-        '&isAdmin=' + auth.isAdmin;
+  // ═══════════════════════════ DISCORD OAUTH ════════════════════
+  function loginDiscord() {
+    const redirectUri = 'https://lspd.oabbmb.workers.dev/api/auth/callback';
+    const clientId = '1505897669334138940';
+    const scope = 'identify guilds guilds.members.read';
 
-      console.log('[OAuth] ✅ Login complete for ' + auth.user.username + ' — Redirecting to dashboard:', redirectTo);
-      return Response.redirect(redirectTo, 302);
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: scope,
+    });
+
+    location.href = 'https://discord.com/oauth2/authorize?' + params.toString();
+  }
+
+  async function handleOAuth() {
+    const params = new URLSearchParams(location.search);
+    const token      = params.get('access_token');
+    const userParam  = params.get('user');
+    const isAdminParam = params.get('isAdmin');
+    const authError  = params.get('auth_error');
+    const errorDesc  = params.get('error_desc');
+
+    // ✅ إذا رجع auth_error من الـ Worker — أظهره مباشرة
+    if (authError) {
+      console.warn('[Auth] OAuth returned error:', authError, '—', errorDesc);
+      history.replaceState({}, '', location.pathname);
+      const msgEl = qs('#loginMessage');
+      if (msgEl) {
+        const msgs = {
+          not_in_guild:        'You are not in the required Discord server.',
+          missing_role:        'You do not have the required role in the server.',
+          server_misconfigured: 'Server configuration error. Contact admin.',
+          invalid_bot_token:   'Bot token error. Contact admin.',
+          bot_permission_denied: 'Bot permission error. Contact admin.',
+          unauthorized:        'Access denied. Missing required role.',
+        };
+        msgEl.textContent = msgs[authError] || ('Access denied: ' + (errorDesc || authError));
+        msgEl.style.color = '#ff5a67';
+      }
+      return false;
     }
 
-    // ─────────────── Protected Routes ───────────────
-    const [ctx, authError] = await requireAuth(request, env);
-    if (authError) return authError;
+    if (!token || !userParam) return false;
 
-    if (path === '/api/me') {
-      return json({
-        ok: true,
-        isAdmin: ctx.isAdmin,
-        isOfficer: true,
-        internalRank: ctx.internalRank,
-        roles: ctx.roles,
-        user: {
-          id: ctx.user.id,
-          username: ctx.user.username,
-          avatar: ctx.user.avatar ? `https://cdn.discordapp.com/avatars/${ctx.user.id}/${ctx.user.avatar}.png` : null,
-        },
-      });
+    // ✅ حفظ الـ session أولاً قبل أي شيء آخر
+    let user;
+    try {
+      user = JSON.parse(decodeURIComponent(userParam));
+    } catch (e) {
+      console.error('[Auth] Failed to parse user data from OAuth redirect:', e);
+      return false;
     }
 
-    // ─────────────── Officers API ───────────────
-    if (path === '/api/officers') {
-      const officers = await kvGet(env, KEY.officers);
-      if (request.method === 'GET') return json({ ok: true, data: officers });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const officer = { id: Date.now(), name: body.name, badge: body.badge, rank: body.rank, dept: body.dept, section: body.section, discord: body.discord, points: Number(body.points) || 0, status: body.status || 'active' };
-        officers.push(officer);
-        await kvPut(env, KEY.officers, officers);
-        await addLog(env, `Officer added: ${officer.name}`, { by: ctx.user.id, type: 'officer_add' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Officer Created', `New officer **${officer.name}** added.`, [], null, officer);
-        return json({ ok: true, data: officer });
-      }
-      if (request.method === 'PUT') {
-        const idx = officers.findIndex(o => o.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        const old = { ...officers[idx] };
-        officers[idx] = { ...officers[idx], ...body };
-        await kvPut(env, KEY.officers, officers);
-        await addLog(env, `Officer updated: ${officers[idx].name}`, { by: ctx.user.id, type: 'officer_update' });
-        await sendWebhookEmbed(env, request, ctx, 'edit', 'Officer Updated', `Officer **${officers[idx].name}** changed.`, [], old, officers[idx]);
-        return json({ ok: true, data: officers[idx] });
-      }
-      if (request.method === 'DELETE') {
-        const removed = officers.find(o => o.id === body.id);
-        const filtered = officers.filter(o => o.id !== body.id);
-        await kvPut(env, KEY.officers, filtered);
-        await addLog(env, `Officer deleted: ${removed?.name}`, { by: ctx.user.id, type: 'officer_delete' });
-        await sendWebhookEmbed(env, request, ctx, 'delete', 'Officer Deleted', `Officer **${removed?.name}** removed.`, [], removed, null);
-        return json({ ok: true });
-      }
-    }
+    const admin = isAdminParam === 'true';
+    console.log('[Auth] OAuth success — User authenticated:', user.id, '|', user.username);
+    console.log('[Auth] isAdmin:', admin, '| token length:', token.length);
 
-    // ─────────────── Points API ───────────────
-    if (path === '/api/points' && request.method === 'PUT') {
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const { id, op, amount, reason } = await readBody(request);
-      const officers = await kvGet(env, KEY.officers);
-      const officer = officers.find(o => o.id === id);
-      if (!officer) return json({ ok: false, reason: 'not_found' }, 404);
-      const old = officer.points;
-      if (op === 'add') officer.points = Math.min(30, old + amount);
-      else if (op === 'sub') officer.points = Math.max(0, old - amount);
-      else if (op === 'set') officer.points = Math.max(0, Math.min(30, amount));
-      await kvPut(env, KEY.officers, officers);
-      const log = await kvGet(env, KEY.pointsLog);
-      log.unshift({ id: Date.now(), officer: officer.name, change: officer.points - old, reason, by: ctx.user.username, time: Date.now() });
-      if (log.length > 1000) log.length = 1000;
-      await kvPut(env, KEY.pointsLog, log);
-      await addLog(env, `Points: ${officer.name} ${old} → ${officer.points}`, { by: ctx.user.id, type: 'points' });
-      await sendWebhookEmbed(env, request, ctx, 'edit', 'Points Adjustment', `Points for **${officer.name}** changed.`, [], { points: old }, { points: officer.points });
-      return json({ ok: true, data: officer });
-    }
+    // ✅ حفظ الـ session في localStorage قبل history.replaceState
+    saveSession(user, admin, token);
+    console.log('[Auth] Session created and saved to localStorage');
 
-    // ─────────────── Ranks API ───────────────
-    if (path === '/api/ranks') {
-      const ranks = await kvGet(env, KEY.ranks);
-      if (request.method === 'GET') return json({ ok: true, data: ranks });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const newRank = { id: Date.now(), name: body.name, pointsReq: Number(body.pointsReq) || 0 };
-        ranks.push(newRank);
-        await kvPut(env, KEY.ranks, ranks);
-        await addLog(env, `Rank added: ${newRank.name}`, { by: ctx.user.id, type: 'rank_add' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Rank Created', `New rank **${newRank.name}** added.`, [], null, newRank);
-        return json({ ok: true, data: newRank });
-      }
-      if (request.method === 'PUT') {
-        const idx = ranks.findIndex(r => r.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        const old = { ...ranks[idx] };
-        ranks[idx] = { ...ranks[idx], ...body };
-        await kvPut(env, KEY.ranks, ranks);
-        await addLog(env, `Rank updated: ${ranks[idx].name}`, { by: ctx.user.id, type: 'rank_update' });
-        await sendWebhookEmbed(env, request, ctx, 'edit', 'Rank Updated', `Rank **${ranks[idx].name}** modified.`, [], old, ranks[idx]);
-        return json({ ok: true, data: ranks[idx] });
-      }
-      if (request.method === 'DELETE') {
-        const removed = ranks.find(r => r.id === body.id);
-        const filtered = ranks.filter(r => r.id !== body.id);
-        await kvPut(env, KEY.ranks, filtered);
-        await addLog(env, `Rank deleted: ${removed?.name}`, { by: ctx.user.id, type: 'rank_delete' });
-        await sendWebhookEmbed(env, request, ctx, 'delete', 'Rank Deleted', `Rank **${removed?.name}** removed.`, [], removed, null);
-        return json({ ok: true });
-      }
-    }
+    // ✅ مسح الـ URL params بعد الحفظ
+    history.replaceState({}, '', location.pathname);
+    console.log('[Auth] URL cleaned up');
 
-    // ─────────────── Laws API ───────────────
-    if (path === '/api/laws') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.laws);
-        return json({ ok: true, data });
-      }
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      const oldLaws = await kvGet(env, KEY.laws);
-      await kvPut(env, KEY.laws, body.laws || []);
-      await addLog(env, 'Laws updated', { by: ctx.user.id, type: 'laws_update' });
-      await sendWebhookEmbed(env, request, ctx, 'edit', 'Laws & Regulations Updated', `Legal framework updated by ${ctx.user.username}.`, [], { count: oldLaws.length }, { count: body.laws.length });
-      return json({ ok: true });
-    }
+    return true;
+  }
 
-    // ─────────────── Uniforms API ───────────────
-    if (path === '/api/uniforms') {
-      const uniforms = await kvGet(env, KEY.uniforms);
-      if (request.method === 'GET') return json({ ok: true, data: uniforms });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), rank: body.rank, male: body.male, female: body.female };
-        uniforms.push(record);
-        await kvPut(env, KEY.uniforms, uniforms);
-        await addLog(env, `Uniform added: ${record.rank}`, { by: ctx.user.id, type: 'uniform_add' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Uniform Guide Added', `Uniform for **${record.rank}** created.`, [], null, record);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'PUT') {
-        const idx = uniforms.findIndex(u => u.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        const old = { ...uniforms[idx] };
-        uniforms[idx] = { ...uniforms[idx], ...body };
-        await kvPut(env, KEY.uniforms, uniforms);
-        await addLog(env, `Uniform updated: ${uniforms[idx].rank}`, { by: ctx.user.id, type: 'uniform_update' });
-        await sendWebhookEmbed(env, request, ctx, 'edit', 'Uniform Guide Updated', `Uniform for **${uniforms[idx].rank}** changed.`, [], old, uniforms[idx]);
-        return json({ ok: true, data: uniforms[idx] });
-      }
-      if (request.method === 'DELETE') {
-        const removed = uniforms.find(u => u.id === body.id);
-        await kvPut(env, KEY.uniforms, uniforms.filter(u => u.id !== body.id));
-        await addLog(env, `Uniform deleted: ${removed?.rank}`, { by: ctx.user.id, type: 'uniform_delete' });
-        await sendWebhookEmbed(env, request, ctx, 'delete', 'Uniform Guide Deleted', `Uniform for **${removed?.rank}** removed.`, [], removed, null);
-        return json({ ok: true });
-      }
+  function bootApp(){
+    qs('#loginContainer').style.display = 'none';
+    qs('#appContainer').style.display   = 'grid';
+    document.body.classList.toggle('is-admin', isAdmin);
+    const av = qs('#userAvatar');
+    if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
+    else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
+    qs('#userName').textContent = currentUser?.username || 'User';
+    qs('#userRole').textContent = isAdmin ? 'Admin' : 'Officer';
+    if(currentUser?.id) {
+      api('POST','/api/users/register',{
+        id: currentUser.id,
+        username: currentUser.username,
+        avatar: currentUser.avatar,
+        isAdmin,
+        lastLogin: Date.now()
+      }).catch(()=>{});
     }
+  }
 
-    // ─────────────── Codes API ───────────────
-    if (path === '/api/codes') {
-      const codes = await kvGet(env, KEY.codes);
-      if (request.method === 'GET') return json({ ok: true, data: codes });
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), code: body.code, description: body.description, priority: body.priority || 'info' };
-        codes.push(record);
-        await kvPut(env, KEY.codes, codes);
-        await addLog(env, `Code added: ${record.code}`, { by: ctx.user.id, type: 'code_add' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Police Code Added', `Code **${record.code}** added.`, [], null, record);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'PUT') {
-        const idx = codes.findIndex(c => c.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        const old = { ...codes[idx] };
-        codes[idx] = { ...codes[idx], ...body };
-        await kvPut(env, KEY.codes, codes);
-        await addLog(env, `Code updated: ${codes[idx].code}`, { by: ctx.user.id, type: 'code_update' });
-        await sendWebhookEmbed(env, request, ctx, 'edit', 'Police Code Updated', `Code **${codes[idx].code}** modified.`, [], old, codes[idx]);
-        return json({ ok: true, data: codes[idx] });
-      }
-      if (request.method === 'DELETE') {
-        const removed = codes.find(c => c.id === body.id);
-        await kvPut(env, KEY.codes, codes.filter(c => c.id !== body.id));
-        await addLog(env, `Code deleted: ${removed?.code}`, { by: ctx.user.id, type: 'code_delete' });
-        await sendWebhookEmbed(env, request, ctx, 'delete', 'Police Code Deleted', `Code **${removed?.code}** removed.`, [], removed, null);
-        return json({ ok: true });
-      }
-    }
+  function openModal(){ qs('#globalModal').classList.add('open'); }
+  window.closeModal = () => qs('#globalModal').classList.remove('open');
 
-    // ─────────────── Wanted API ───────────────
-    if (path === '/api/wanted') {
-      const wanted = await kvGet(env, KEY.wanted);
-      if (request.method === 'GET') return json({ ok: true, data: wanted });
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), name: body.name, reason: body.reason, plate: body.plate, level: body.level || 1, by: ctx.user.username, time: Date.now() };
-        wanted.unshift(record);
-        await kvPut(env, KEY.wanted, wanted);
-        await addLog(env, `Wanted: ${record.name}`, { by: ctx.user.id, type: 'wanted_add' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Wanted Person Added', `**${record.name}** added to wanted list.`, [], null, record);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'DELETE') {
-        const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-        const removed = wanted.find(w => w.id === body.id);
-        await kvPut(env, KEY.wanted, wanted.filter(w => w.id !== body.id));
-        await addLog(env, `Wanted removed: ${removed?.name}`, { by: ctx.user.id, type: 'wanted_remove' });
-        await sendWebhookEmbed(env, request, ctx, 'delete', 'Wanted Person Removed', `**${removed?.name}** removed from wanted list.`, [], removed, null);
-        return json({ ok: true });
-      }
-    }
+  // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
+  const PAGE_RENDERERS = {
+    dashboard:    renderDashboard,
+    officers:     renderOfficers,
+    ranks:        renderRanks,
+    points:       renderPoints,
+    laws:         renderLaws,
+    uniform:      renderUniforms,
+    codes:        renderCodes,
+    wanted:       renderWanted,
+    cases:        renderCases,
+    reports:      renderReports,
+    discordUsers: renderDiscordUsers,
+    logs:         renderLogs,
+    settings:     renderSettings,
+  };
 
-    // ─────────────── Impound API ───────────────
-    if (path === '/api/impound') {
-      const impound = await kvGet(env, KEY.impound);
-      if (request.method === 'GET') return json({ ok: true, data: impound });
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), plate: body.plate, model: body.model, reason: body.reason, fee: Number(body.fee) || 0, by: ctx.user.username, time: Date.now() };
-        impound.unshift(record);
-        await kvPut(env, KEY.impound, impound);
-        await addLog(env, `Impound: ${record.plate}`, { by: ctx.user.id, type: 'impound_add' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Vehicle Impounded', `Vehicle **${record.plate}** impounded.`, [], null, record);
-        return json({ ok: true, data: record });
-      }
-      if (request.method === 'DELETE') {
-        const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-        const removed = impound.find(i => i.id === body.id);
-        await kvPut(env, KEY.impound, impound.filter(i => i.id !== body.id));
-        await addLog(env, `Impound released: ${removed?.plate}`, { by: ctx.user.id, type: 'impound_release' });
-        await sendWebhookEmbed(env, request, ctx, 'edit', 'Vehicle Released', `Vehicle **${removed?.plate}** released from impound.`, [], removed, null);
-        return json({ ok: true });
-      }
-    }
+  function navigate(pageId){
+    qsa('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.page===pageId));
+    qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
+    qs('#sidebar')?.classList.remove('open');
+    if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
+  }
 
-    // ─────────────── Cases API ───────────────
-    if (path === '/api/cases') {
-      const cases = await kvGet(env, KEY.cases);
-      if (request.method === 'GET') return json({ ok: true, data: cases });
-      const body = await readBody(request);
-      if (request.method === 'POST') {
-        const record = { id: Date.now(), title: body.title, description: body.description, status: body.status || 'open', officerId: body.officerId || null, by: ctx.user.username, time: Date.now() };
-        cases.unshift(record);
-        if (cases.length > 300) cases.length = 300;
-        await kvPut(env, KEY.cases, cases);
-        await addLog(env, `Case opened: ${record.title}`, { by: ctx.user.id, type: 'case_open' });
-        await sendWebhookEmbed(env, request, ctx, 'create', 'Case Opened', `Case **${record.title}** created.`, [], null, record);
-        return json({ ok: true, data: record });
+  // ═══════════════════════════ RENDERERS ════════════════════════
+  function renderDashboard(){
+    const o = store.officers || [];
+    const active = o.filter(x=>x.status==='active').length;
+    qs('#dashboard').innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><i class="ti ti-users"></i><div class="value">${o.length}</div><div class="label">Total Officers</div></div>
+        <div class="stat-card"><i class="ti ti-shield-check"></i><div class="value">${active}</div><div class="label">Active</div></div>
+        <div class="stat-card"><i class="ti ti-stairs-up"></i><div class="value">${(store.ranks||[]).length}</div><div class="label">Ranks</div></div>
+        <div class="stat-card"><i class="ti ti-file-text"></i><div class="value">${(store.reports||[]).length}</div><div class="label">Reports</div></div>
+      </div>
+      <div class="card"><div class="card-header"><h3><i class="ti ti-users"></i> Officers Overview</h3></div>
+      <div class="card-body">
+        ${o.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No officers found</p>' :
+          o.map(of=>`
+          <div class="officer-row">
+            <div>
+              <b>${esc(of.name)}</b> &nbsp;<span style="color:#8fa0bd;font-size:13px">#${esc(String(of.badge||''))}</span>
+              <div style="font-size:12px;color:#8fa0bd;margin-top:2px">${esc(of.rank||'')}</div>
+              <div class="points-bar" style="width:160px"><div class="points-bar-fill" style="width:${Math.min(100,((of.points||0)/30)*100)}%"></div></div>
+            </div>
+            <div style="text-align:right">
+              <span class="badge badge-${of.status==='active'?'active':'inactive'}">${esc(of.status||'')}</span>
+              <div style="font-size:12px;color:#8fa0bd;margin-top:4px">${of.points||0}/30 pts</div>
+            </div>
+          </div>
+        `).join('<div class="divider"></div>')}
+      </div></div>
+    `;
+  }
+
+  function renderOfficers(){
+    const officers = store.officers || [];
+    const rows = officers.map(o=>`
+      <tr>
+        <td><b>${esc(o.name)}</b></td>
+        <td>#${esc(String(o.badge||''))}</td>
+        <td>${esc(o.rank||'')}</td>
+        <td>${esc(o.dept||'LSPD')}</td>
+        <td>
+          <div class="points-bar" style="width:80px;display:inline-block">
+            <div class="points-bar-fill" style="width:${Math.min(100,((o.points||0)/30)*100)}%"></div>
+          </div>
+          <span style="font-size:12px;color:#8fa0bd;margin-left:6px">${o.points||0}/30</span>
+        </td>
+        <td><span class="badge badge-${o.status==='active'?'active':'inactive'}">${esc(o.status||'')}</span></td>
+        <td>
+          ${isAdmin ? `<button class="btn btn-sm btn-warning" onclick="editOfficer(${o.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteOfficer(${o.id})"><i class="ti ti-trash"></i></button>` : ''}
+        </td>
+      </td>`).join('');
+    qs('#officers').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-users"></i> Officers Management</h3>
+          ${isAdmin ? '<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> Add Officer</button>' : ''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
+        </table>
+        </div>
+      </div>`;
+  }
+
+  window.editOfficer = id => openOfficerModal(id);
+  window.deleteOfficer = async id => {
+    if(!confirm('Delete officer?')) return;
+    const r = await api('DELETE','/api/officers',{ id });
+    if(r.ok){ store.officers = (store.officers||[]).filter(o=>o.id!==id); renderOfficers(); renderDashboard(); toast('Officer deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.openOfficerModal = (id=null) => {
+    const o = id ? (store.officers||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Officer' : 'Add Officer';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Full Name</label><input id="offName" value="${esc(o?.name||'')}"></div>
+      <div class="form-group"><label>Badge #</label><input id="offBadge" value="${esc(String(o?.badge||''))}"></div>
+      <div class="form-group"><label>Rank</label><select id="offRank">
+        ${(store.ranks||[]).map(r=>`<option value="${esc(r.name)}" ${o?.rank===r.name?'selected':''}>${esc(r.name)}</option>`).join('')}
+      </select></div>
+      <div class="form-group"><label>Department</label><input id="offDept" value="${esc(o?.dept||'LSPD')}"></div>
+      <div class="form-group"><label>Section</label><input id="offSection" value="${esc(o?.section||'')}"></div>
+      <div class="form-group"><label>Discord ID</label><input id="offDiscord" value="${esc(o?.discord||'')}"></div>
+      <div class="form-group"><label>Points (0-30)</label><input id="offPoints" type="number" min="0" max="30" value="${o?.points||0}"></div>
+      <div class="form-group"><label>Status</label><select id="offStatus">
+        <option value="active" ${o?.status==='active'?'selected':''}>active</option>
+        <option value="inactive" ${o?.status==='inactive'?'selected':''}>inactive</option>
+      </select></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        name:    qs('#offName').value.trim(),
+        badge:   qs('#offBadge').value.trim(),
+        rank:    qs('#offRank').value,
+        dept:    qs('#offDept').value.trim(),
+        section: qs('#offSection').value.trim(),
+        discord: qs('#offDiscord').value.trim(),
+        points:  parseInt(qs('#offPoints').value)||0,
+        status:  qs('#offStatus').value,
+      };
+      if(!payload.name){ toast('Name is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/officers',{ id, ...payload });
+        if(r.ok){ const idx=(store.officers||[]).findIndex(x=>x.id===id); if(idx!==-1) store.officers[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/officers', payload);
+        if(r.ok) store.officers.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
-      if (request.method === 'PUT') {
-        const idx = cases.findIndex(c => c.id === body.id);
-        if (idx === -1) return json({ ok: false, reason: 'not_found' }, 404);
-        const old = { ...cases[idx] };
-        cases[idx] = { ...cases[idx], ...body, updatedAt: Date.now() };
-        await kvPut(env, KEY.cases, cases);
-        await addLog(env, `Case updated: ${cases[idx].title}`, { by: ctx.user.id, type: 'case_update' });
-        await sendWebhookEmbed(env, request, ctx, 'edit', 'Case Updated', `Case **${cases[idx].title}** modified.`, [], old, cases[idx]);
-        return json({ ok: true, data: cases[idx] });
+      renderOfficers(); renderDashboard(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
+
+  function renderRanks(){
+    const ranks = store.ranks || [];
+    const rows = ranks.map(r=>`
+      <tr>
+        <td><b>${esc(r.name)}</b></td>
+        <td>${r.pointsReq||0} pts</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRank(${r.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
+    qs('#ranks').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
+        </div>
+        <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
+  }
+
+  window.deleteRank = async id => {
+    if(!confirm('Delete Rank?')) return;
+    const r = await api('DELETE','/api/ranks',{ id });
+    if(r.ok){ store.ranks = (store.ranks||[]).filter(x=>x.id!==id); renderRanks(); toast('Rank deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openRankModal = (id=null) => {
+    const rank = id ? (store.ranks||[]).find(r=>r.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Rank' : 'Add Rank';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Rank Name</label><input id="rankName" value="${esc(rank?.name||'')}"></div>
+      <div class="form-group"><label>Required Points</label><input id="rankPts" type="number" value="${rank?.pointsReq||0}"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = { name: qs('#rankName').value.trim(), pointsReq: parseInt(qs('#rankPts').value)||0 };
+      if(!payload.name){ toast('Rank name is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/ranks',{ id, ...payload });
+        if(r.ok){ const idx=(store.ranks||[]).findIndex(x=>x.id===id); if(idx!==-1) store.ranks[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/ranks', payload);
+        if(r.ok) store.ranks.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
-      if (request.method === 'DELETE') {
-        const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-        const removed = cases.find(c => c.id === body.id);
-        await kvPut(env, KEY.cases, cases.filter(c => c.id !== body.id));
-        await addLog(env, `Case deleted: ${removed?.title}`, { by: ctx.user.id, type: 'case_delete' });
-        await sendWebhookEmbed(env, request, ctx, 'delete', 'Case Deleted', `Case **${removed?.title}** deleted.`, [], removed, null);
-        return json({ ok: true });
+      renderRanks(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
+
+  function renderPoints(){
+    const log = store.pointsLog || [];
+    const rows = log.map(p=>`
+      <tr>
+        <td>${esc(p.officer||'-')}</td>
+        <td style="color:${String(p.change||'').startsWith('-')?'#ff5a67':'#2ecc71'}">${esc(String(p.change||'0'))}</td>
+        <td>${esc(p.reason||'-')}</td>
+        <td>${esc(p.by||'-')}</td>
+        <td>${fmtTime(p.time)}</td>
+      </tr>`).join('');
+    qs('#points').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-chart-bar"></i> Points Management</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openPointsModal()"><i class="ti ti-adjustments"></i> Adjust Points</button>':''}
+        </div>
+        <div class="card-body"></table><thead><tr><th>Officer</th><th>Change</th><th>Reason</th><th>By</th><th>Date</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No records</td>'}</tbody></table></div></div>`;
+  }
+
+  window.openPointsModal = () => {
+    const officers = store.officers || [];
+    if(officers.length === 0){ toast('No officers available','#f3c75a'); return; }
+    qs('#modalTitle').textContent = 'Adjust Officer Points';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Officer</label><select id="ptsOfficer">
+        ${officers.map(o=>`<option value="${o.id}">${esc(o.name)} (${o.points||0} pts)</option>`).join('')}</select></div>
+      <div class="form-group"><label>Operation</label><select id="ptsOp">
+        <option value="add">Add Points</option><option value="sub">Remove Points</option><option value="set">Set Points</option></select></div>
+      <div class="form-group"><label>Amount</label><input id="ptsAmount" type="number" value="1" min="0"></div>
+      <div class="form-group"><label>Reason</label><input id="ptsReason" placeholder="Reason..."></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const id     = parseInt(qs('#ptsOfficer').value);
+      const op     = qs('#ptsOp').value;
+      const amount = parseInt(qs('#ptsAmount').value)||0;
+      const reason = qs('#ptsReason').value.trim();
+      const r = await api('PUT','/api/points',{ id, op, amount, reason });
+      if(r.ok){
+        const idx = (store.officers||[]).findIndex(o=>o.id===id);
+        if(idx!==-1) store.officers[idx] = r.data;
+        const logR = await api('GET','/api/pointsLog');
+        if(logR.ok) store.pointsLog = logR.data;
+        renderPoints(); renderDashboard(); closeModal(); toast('Points updated ✓');
+      } else {
+        toast('Error: '+(r.reason||'failed'),'#ff5a67');
       }
-    }
+    };
+    openModal();
+  };
 
-    // ─────────────── Reports API ───────────────
-    if (path === '/api/reports') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.reports);
-        return json({ ok: true, data });
+  function renderLaws(){
+    const laws = store.laws || [];
+    qs('#laws').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-book"></i> Laws & Regulations</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openLawModal()"><i class="ti ti-plus"></i> Add Law</button>':''}
+        </div>
+        <div class="card-body">
+          ${laws.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No laws found</p>' :
+            laws.map(l=>`
+            <div class="officer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+              <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+                <b>${esc(l.title)}</b>
+                ${isAdmin?`<div><button class="btn btn-sm btn-warning" onclick="openLawModal(${l.id})"><i class="ti ti-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteLaw(${l.id})"><i class="ti ti-trash"></i></button></div>`:''}
+              </div>
+              <p style="color:#8fa0bd;font-size:13px">${esc(l.content||'')}</p>
+            </div><div class="divider"></div>`).join('')}
+        </div></div>`;
+  }
+
+  window.deleteLaw = async id => {
+    if(!confirm('Delete law?')) return;
+    const laws = (store.laws||[]).filter(l=>l.id!==id);
+    const r = await api('POST','/api/laws',{ laws });
+    if(r.ok){ store.laws=laws; renderLaws(); toast('Law deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openLawModal = (id=null) => {
+    const law = id ? (store.laws||[]).find(l=>l.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Law' : 'Add Law';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="lawTitle" value="${esc(law?.title||'')}"></div>
+      <div class="form-group"><label>Content</label><textarea id="lawContent">${esc(law?.content||'')}</textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const title   = qs('#lawTitle').value.trim();
+      const content = qs('#lawContent').value.trim();
+      if(!title){ toast('Title is required','#ff5a67'); return; }
+      let laws = [...(store.laws||[])];
+      if(id){ const idx=laws.findIndex(l=>l.id===id); if(idx!==-1) laws[idx]={...laws[idx],title,content}; }
+      else laws.push({ id:Date.now(), title, content });
+      const r = await api('POST','/api/laws',{ laws });
+      if(r.ok){ store.laws=laws; renderLaws(); closeModal(); toast('Saved ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  function renderUniforms(){
+    const uniforms = store.uniforms || [];
+    const rows = uniforms.map(u=>`
+      <tr>
+        <td><b>${esc(u.rank||'')}</b></td>
+        <td>${esc(u.male||'')}</td>
+        <td>${esc(u.female||'')}</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
+    qs('#uniform').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
+        </div>
+        <div class="card-body"><tr><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
+  }
+
+  window.deleteUniform = async id => {
+    if(!confirm('Delete Uniform configuration?')) return;
+    const r = await api('DELETE','/api/uniforms',{ id });
+    if(r.ok){ store.uniforms = (store.uniforms||[]).filter(x=>x.id!==id); renderUniforms(); toast('Deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openUniformModal = (id=null) => {
+    const u = id ? (store.uniforms||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Uniform' : 'Add Uniform';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Rank Name</label><input id="uniRank" value="${esc(u?.rank||'')}"></div>
+      <div class="form-group"><label>Male Uniform</label><input id="uniMale" value="${esc(u?.male||'')}"></div>
+      <div class="form-group"><label>Female Uniform</label><input id="uniFemale" value="${esc(u?.female||'')}"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        rank: qs('#uniRank').value.trim(),
+        male: qs('#uniMale').value.trim(),
+        female: qs('#uniFemale').value.trim()
+      };
+      if(!payload.rank){ toast('Rank is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/uniforms',{ id, ...payload });
+        if(r.ok){ const idx=(store.uniforms||[]).findIndex(x=>x.id===id); if(idx!==-1) store.uniforms[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/uniforms', payload);
+        if(r.ok) store.uniforms.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
-      const body = await readBody(request);
-      const record = { id: Date.now(), title: body.title, body: body.body, by: ctx.user.username, time: Date.now() };
-      const reports = await kvGet(env, KEY.reports);
-      reports.unshift(record);
-      if (reports.length > 500) reports.length = 500;
-      await kvPut(env, KEY.reports, reports);
-      await addLog(env, `Report: ${record.title}`, { by: ctx.user.id, type: 'report' });
-      await sendWebhookEmbed(env, request, ctx, 'create', 'Report Created', `New report **${record.title}** submitted.`, [], null, record);
-      return json({ ok: true, data: record });
-    }
+      renderUniforms(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
 
-    // ─────────────── Users (admin only) ───────────────
-    if (path === '/api/users' && request.method === 'GET') {
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const data = await kvGet(env, KEY.users);
-      return json({ ok: true, data });
-    }
+  function renderCodes(){
+    const codes = store.codes || [];
+    const rows = codes.map(c=>`
+      <tr>
+        <td><b>${esc(c.code||'')}</b></td>
+        <td>${esc(c.description||'')}</td>
+        <td><span class="badge badge-${c.priority==='danger'?'danger':c.priority==='warning'?'warning':'info'}">${esc(c.priority||'info')}</span></td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCodeModal(${c.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCode(${c.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
+    qs('#codes').innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-radio"></i> Police Codes</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openCodeModal()"><i class="ti ti-plus"></i> Add Code</button>':''}
+        </div>
+        <div class="card-body">
+          <table>
+            <thead><tr><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td>'}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
 
-    // ─────────────── Activity Logs (admin only) ───────────────
-    if (path === '/api/activity' && request.method === 'GET') {
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const data = await kvGet(env, KEY.activity);
-      return json({ ok: true, data });
-    }
-
-    // ─────────────── Points Log ───────────────
-    if (path === '/api/pointsLog' && request.method === 'GET') {
-      const data = await kvGet(env, KEY.pointsLog);
-      return json({ ok: true, data });
-    }
-
-    // ─────────────── Settings API ───────────────
-    if (path === '/api/settings') {
-      if (request.method === 'GET') {
-        const data = await kvGet(env, KEY.settings);
-        return json({ ok: true, data });
+  window.deleteCode = async id => {
+    if(!confirm('Delete code?')) return;
+    const r = await api('DELETE','/api/codes',{ id });
+    if(r.ok){ store.codes = (store.codes||[]).filter(c=>c.id!==id); renderCodes(); toast('Deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openCodeModal = (id=null) => {
+    const c = id ? (store.codes||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Code' : 'Add Code';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Code</label><input id="codeCode" value="${esc(c?.code||'')}"></div>
+      <div class="form-group"><label>Description</label><input id="codeDesc" value="${esc(c?.description||'')}"></div>
+      <div class="form-group"><label>Priority</label><select id="codePriority">
+        <option value="info" ${c?.priority==='info'?'selected':''}>info</option>
+        <option value="warning" ${c?.priority==='warning'?'selected':''}>warning</option>
+        <option value="danger" ${c?.priority==='danger'?'selected':''}>danger</option>
+      </select></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        code: qs('#codeCode').value.trim(),
+        description: qs('#codeDesc').value.trim(),
+        priority: qs('#codePriority').value
+      };
+      if(!payload.code){ toast('Code is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/codes',{ id, ...payload });
+        if(r.ok){ const idx=(store.codes||[]).findIndex(x=>x.id===id); if(idx!==-1) store.codes[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/codes', payload);
+        if(r.ok) store.codes.push(r.data);
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
-      const adminErr = requireAdmin(ctx); if (adminErr) return adminErr;
-      const body = await readBody(request);
-      const current = await kvGet(env, KEY.settings);
-      const updated = { ...current, ...body };
-      await kvPut(env, KEY.settings, updated);
-      await addLog(env, 'Settings updated', { by: ctx.user.id, type: 'settings' });
-      await sendWebhookEmbed(env, request, ctx, 'settings', 'System Settings Changed', `Settings modified by **${ctx.user.username}**.`, [], current, updated);
-      return json({ ok: true, data: updated });
-    }
+      renderCodes(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
 
-    return json({ ok: false, reason: 'not_found' }, 404);
-    } catch (globalErr) {
-      console.error('[Worker] ❌ Unhandled global error:', globalErr.message, globalErr.stack);
-      return json({ ok: false, error: 'internal_server_error', details: globalErr.message }, 500);
+  function renderWanted(){
+    const wanted = store.wanted || [];
+    const impound = store.impound || [];
+    const wRows = wanted.map(w=>`
+      <tr>
+        <td><b>${esc(w.name||'')}</b></td>
+        <td>${esc(w.plate||'-')}</td>
+        <td>${esc(w.reason||'-')}</td>
+        <td><span class="badge badge-danger">Level ${w.level||1}</span></td>
+        <td>${esc(w.by||'-')}</td>
+        <td>${fmtTime(w.time)}</td>
+        <td>${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteWanted(${w.id})"><i class="ti ti-trash"></i></button>`:''}</td>
+      </tr>`).join('');
+    const iRows = impound.map(i=>`
+      <tr>
+        <td><b>${esc(i.plate||'')}</b></td>
+        <td>${esc(i.model||'-')}</td>
+        <td>${esc(i.reason||'-')}</td>
+        <td>$${i.fee||0}</td>
+        <td>${esc(i.by||'-')}</td>
+        <td>${fmtTime(i.time)}</td>
+        <td>${isAdmin?`<button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})"><i class="ti ti-check"></i> Release</button>`:''}</td>
+      <tr>`).join('');
+    qs('#wanted').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-car"></i> Wanted List</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>':''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody>${wRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td>'}</tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-car"></i> Impound List</h3>
+          ${isAdmin?'<button class="btn btn-primary" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Add Impound</button>':''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td>'}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  window.deleteWanted = async id => {
+    if(!confirm('Remove from wanted list?')) return;
+    const r = await api('DELETE','/api/wanted',{ id });
+    if(r.ok){ store.wanted=(store.wanted||[]).filter(w=>w.id!==id); renderWanted(); toast('Removed','#2ecc71'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.releaseImpound = async id => {
+    if(!confirm('Release vehicle?')) return;
+    const r = await api('DELETE','/api/impound',{ id });
+    if(r.ok){ store.impound=(store.impound||[]).filter(i=>i.id!==id); renderWanted(); toast('Vehicle released','#2ecc71'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openWantedModal = () => {
+    qs('#modalTitle').textContent = 'Add Wanted';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Name</label><input id="wantedName" placeholder="Suspect name"></div>
+      <div class="form-group"><label>Plate</label><input id="wantedPlate" placeholder="License plate"></div>
+      <div class="form-group"><label>Reason</label><input id="wantedReason" placeholder="Reason"></div>
+      <div class="form-group"><label>Level (1-5)</label><input id="wantedLevel" type="number" min="1" max="5" value="1"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        name: qs('#wantedName').value.trim(),
+        plate: qs('#wantedPlate').value.trim(),
+        reason: qs('#wantedReason').value.trim(),
+        level: parseInt(qs('#wantedLevel').value)||1
+      };
+      if(!payload.name){ toast('Name is required','#ff5a67'); return; }
+      const r = await api('POST','/api/wanted', payload);
+      if(r.ok){ store.wanted = store.wanted||[]; store.wanted.unshift(r.data); renderWanted(); closeModal(); toast('Added ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+  window.openImpoundModal = () => {
+    qs('#modalTitle').textContent = 'Add Impound';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Plate</label><input id="impoundPlate" placeholder="License plate"></div>
+      <div class="form-group"><label>Model</label><input id="impoundModel" placeholder="Vehicle model"></div>
+      <div class="form-group"><label>Reason</label><input id="impoundReason" placeholder="Reason"></div>
+      <div class="form-group"><label>Fee ($)</label><input id="impoundFee" type="number" min="0" value="0"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        plate: qs('#impoundPlate').value.trim(),
+        model: qs('#impoundModel').value.trim(),
+        reason: qs('#impoundReason').value.trim(),
+        fee: parseInt(qs('#impoundFee').value)||0
+      };
+      if(!payload.plate){ toast('Plate is required','#ff5a67'); return; }
+      const r = await api('POST','/api/impound', payload);
+      if(r.ok){ store.impound = store.impound||[]; store.impound.unshift(r.data); renderWanted(); closeModal(); toast('Added ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  function renderCases(){
+    const cases = store.cases || [];
+    const rows = cases.map(c=>`
+      <tr>
+        <td><b>${esc(c.title||'')}</b></td>
+        <td>${esc(c.description||'-')}</td>
+        <td><span class="badge badge-${c.status==='open'?'active':c.status==='closed'?'inactive':'warning'}">${esc(c.status||'open')}</span></td>
+        <td>${esc(c.by||'-')}</td>
+        <td>${fmtTime(c.time)}</td>
+        <td>
+          ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openCaseModal(${c.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteCase(${c.id})"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('');
+    qs('#cases').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-folder"></i> Cases</h3>
+          <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Title</th><th>Description</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td>'}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  window.deleteCase = async id => {
+    if(!confirm('Delete case?')) return;
+    const r = await api('DELETE','/api/cases',{ id });
+    if(r.ok){ store.cases=(store.cases||[]).filter(c=>c.id!==id); renderCases(); toast('Deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.openCaseModal = (id=null) => {
+    const c = id ? (store.cases||[]).find(x=>x.id===id) : null;
+    qs('#modalTitle').textContent = id ? 'Edit Case' : 'New Case';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="caseTitle" value="${esc(c?.title||'')}"></div>
+      <div class="form-group"><label>Description</label><textarea id="caseDesc">${esc(c?.description||'')}</textarea></div>
+      <div class="form-group"><label>Status</label><select id="caseStatus">
+        <option value="open" ${c?.status==='open'||!c?'selected':''}>Open</option>
+        <option value="closed" ${c?.status==='closed'?'selected':''}>Closed</option>
+        <option value="pending" ${c?.status==='pending'?'selected':''}>Pending</option>
+      </select></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        title: qs('#caseTitle').value.trim(),
+        description: qs('#caseDesc').value.trim(),
+        status: qs('#caseStatus').value
+      };
+      if(!payload.title){ toast('Title is required','#ff5a67'); return; }
+      if(id){
+        const r = await api('PUT','/api/cases',{ id, ...payload });
+        if(r.ok){ const idx=(store.cases||[]).findIndex(x=>x.id===id); if(idx!==-1) store.cases[idx]=r.data; }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      } else {
+        const r = await api('POST','/api/cases', payload);
+        if(r.ok){ store.cases = store.cases||[]; store.cases.unshift(r.data); }
+        else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
+      }
+      renderCases(); closeModal(); toast('Saved ✓');
+    };
+    openModal();
+  };
+
+  function renderReports(){
+    const reports = store.reports || [];
+    const rows = reports.map(r=>`
+      <tr>
+        <td><b>${esc(r.title||'')}</b></td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.body||'-')}</td>
+        <td>${esc(r.by||'-')}</td>
+        <td>${fmtTime(r.time)}</td>
+      </tr>`).join('');
+    qs('#reports').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-file-text"></i> Reports</h3>
+          <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Title</th><th>Content</th><th>By</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  window.openReportModal = () => {
+    qs('#modalTitle').textContent = 'New Report';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Title</label><input id="repTitle" placeholder="Report title"></div>
+      <div class="form-group"><label>Content</label><textarea id="repBody" style="min-height:120px" placeholder="Report details..."></textarea></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const payload = {
+        title: qs('#repTitle').value.trim(),
+        body: qs('#repBody').value.trim()
+      };
+      if(!payload.title){ toast('Title is required','#ff5a67'); return; }
+      const r = await api('POST','/api/reports', payload);
+      if(r.ok){ store.reports = store.reports||[]; store.reports.unshift(r.data); renderReports(); closeModal(); toast('Report saved ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  function renderDiscordUsers(){
+    const users = store.users || [];
+    const rows = users.map(u=>`
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${u.avatar?`<img src="${esc(u.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" alt="">`:'<div style="width:32px;height:32px;border-radius:50%;background:#1b2942;display:grid;place-items:center">'+esc((u.username||'?')[0].toUpperCase())+'</div>'}
+            <b>${esc(u.username||'Unknown')}</b>
+          </div>
+         </td>
+        <td style="font-size:12px;color:#8fa0bd">${esc(u.id||'')}</td>
+        <td><span class="badge badge-${u.isAdmin?'warning':'info'}">${u.isAdmin?'Admin':'Officer'}</span></td>
+        <td>${fmtTime(u.lastLogin)}</td>
+        <td>${fmtTime(u.joinedAt)}</td>
+      </tr>`).join('');
+    qs('#discordUsers').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-brand-discord"></i> Discord Users</h3>
+          <span style="color:#8fa0bd;font-size:13px">${users.length} registered users</span>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td>'}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  function renderLogs(){
+    const activity = store.activity || [];
+    const rows = activity.slice(0,100).map(a=>`
+      <tr>
+        <td>${esc(a.msg||'')}</td>
+        <td><span class="badge badge-info">${esc(a.type||'system')}</span></td>
+        <td>${fmtTime(a.time)}</td>
+      </tr>`).join('');
+    qs('#logs').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-history"></i> System Logs</h3>
+          <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td>'}</tbody></table>
+        </div>
+      </div>`;
+  }
+
+  function renderSettings(){
+    const settings = store.settings || { webhookUrl:'', logsEnabled:true };
+    qs('#settings').innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-settings"></i> Settings</h3></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Discord Webhook URL</label>
+            <input id="settingsWebhook" value="${esc(settings.webhookUrl||'')}" placeholder="https://discord.com/api/webhooks/...">
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label style="margin:0">Enable Activity Logs</label>
+            <input type="checkbox" id="settingsLogs" ${settings.logsEnabled?'checked':''} style="width:auto;padding:0;margin:0">
+          </div>
+          ${isAdmin?`<button class="btn btn-primary" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save Settings</button>`:'<p style="color:#8fa0bd;font-size:13px">Only admins can change settings.</p>'}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-database"></i> Database</h3></div>
+        <div class="card-body">
+          <p style="color:#8fa0bd;margin-bottom:16px;font-size:13px">Reset the database to default seed data. This action cannot be undone.</p>
+          ${isAdmin?`<button class="btn btn-danger" onclick="seedDatabase()"><i class="ti ti-refresh"></i> Reset to Defaults</button>`:''}
+        </div>
+      </div>`;
+  }
+
+  window.saveSettings = async () => {
+    const payload = {
+      webhookUrl: qs('#settingsWebhook').value.trim(),
+      logsEnabled: qs('#settingsLogs').checked
+    };
+    const r = await api('PUT','/api/settings', payload);
+    if(r.ok){ store.settings = r.data; toast('Settings saved ✓'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.seedDatabase = async () => {
+    if(!confirm('Reset ALL data to defaults? This cannot be undone!')) return;
+    const r = await api('POST','/api/seed');
+    if(r.ok){ await loadAllData(); navigate('dashboard'); toast('Database reset ✓','#f3c75a'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  // ═══════════════════════════ INITIALIZATION ═══════════════════════════
+  async function init(){
+    const loginBtn = qs('#discordLoginBtn');
+    if(loginBtn) loginBtn.onclick = loginDiscord;
+
+    const logoutBtn = qs('#logoutBtn');
+    if(logoutBtn) logoutBtn.onclick = () => { clearSession(); location.reload(); };
+
+    const mobileBtn = qs('#mobileMenuBtn');
+    if(mobileBtn) mobileBtn.onclick = () => qs('#sidebar')?.classList.toggle('open');
+
+    const closeBtn = qs('#closeModalBtn');
+    if(closeBtn) closeBtn.onclick = window.closeModal;
+    const cancelBtn = qs('#modalCancelBtn');
+    if(cancelBtn) cancelBtn.onclick = window.closeModal;
+
+    const modal = qs('#globalModal');
+    if(modal) modal.addEventListener('click', (e) => {
+      if(e.target === modal) window.closeModal();
+    });
+
+    qsa('.nav button').forEach(b => {
+      b.onclick = () => navigate(b.dataset.page);
+    });
+
+    setInterval(() => {
+      const clockEl = qs('#clock');
+      if(clockEl) clockEl.textContent = fmtTime(Date.now());
+    }, 1000);
+
+    // ✅ Step 1: تحقق من OAuth callback أو session محفوظة
+    const oauthSuccess = await handleOAuth();
+    console.log('[Init] OAuth callback result:', oauthSuccess);
+
+    const sessionLoaded = oauthSuccess || loadSession();
+    console.log('[Init] Session loaded:', sessionLoaded, '| user:', currentUser?.id || 'none');
+
+    if(sessionLoaded){
+      console.log('[Init] Validating session with server...');
+      const serverOk = await validateSessionWithServer();
+      console.log('[Init] Server validation result:', serverOk);
+
+      if(!serverOk){
+        console.warn('[Init] Server rejected session — showing login page');
+        qs('#loginContainer').style.display = 'grid';
+        qs('#appContainer').style.display   = 'none';
+        if(!qs('#loginMessage').textContent) {
+          qs('#loginMessage').textContent = 'Session expired or access revoked. Please login again.';
+        }
+        return;
+      }
+
+      console.log('[Init] ✅ Session valid — booting dashboard');
+      bootApp();
+      await loadAllData();
+      navigate('dashboard');
+      console.log('[Init] ✅ Redirecting to dashboard complete');
+    } else {
+      console.log('[Init] No session — showing login page');
     }
-  },
-};
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
