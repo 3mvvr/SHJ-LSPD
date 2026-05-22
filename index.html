@@ -238,7 +238,7 @@
     officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
     codes:[], wanted:[], impound:[], cases:[], reports:[],
     users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true },
-    adminRoles:[], webhooks:{}, permissions:[]
+    adminRoles:[], webhooks:{}, permissions:[], nicknames:{}
   };
 
   // ═══════════════════════════ UTILS ════════════════════════════
@@ -279,6 +279,8 @@
       if(arRes.ok) store.adminRoles = arRes.data;
       const whRes = await api('GET','/api/webhooks');
       if(whRes.ok) store.webhooks = whRes.data;
+      const nnRes = await api('GET','/api/nicknames');
+      if(nnRes.ok) store.nicknames = nnRes.data || {};
     } else if(isAdmin){
       const whRes = await api('GET','/api/webhooks');
       if(whRes.ok) store.webhooks = whRes.data;
@@ -298,6 +300,11 @@
       currentUser=s.user; isAdmin=s.isAdmin; isOwner=s.isOwner||false; accessToken=s.token;
       return true;
     } catch{ return false; }
+  }
+  // إرجاع الاسم المعروض (nickname أو discord username)
+  function getDisplayName(userId, fallbackUsername) {
+    if (!userId) return fallbackUsername || '';
+    return store.nicknames?.[userId] || currentUser?.nickname || fallbackUsername || '';
   }
   function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; isOwner=false; accessToken=null; }
 
@@ -412,7 +419,7 @@
     const av = qs('#userAvatar');
     if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
-    qs('#userName').textContent = currentUser?.username || 'User';
+    qs('#userName').textContent = currentUser?.nickname || currentUser?.displayName || currentUser?.username || 'User';
     qs('#userRole').textContent = isOwner ? '👑 Ownership' : (isAdmin ? '⚡ Admin' : '👮 Officer');
     // إظهار/إخفاء أزرار الـ nav حسب الصلاحيات
     const ownerOnlyBtns = document.querySelectorAll('[data-owner-only]');
@@ -1425,6 +1432,33 @@
 
       ${isOwner?`
       <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-user-edit"></i> User Nickname System</h3>
+          <span style="font-size:12px;color:#8fa0bd">Owner Only</span>
+        </div>
+        <div class="card-body">
+          <p style="color:#8fa0bd;font-size:13px;margin-bottom:16px">
+            Set a custom display name for any user. This name will appear in all reports, cases, and logs instead of their Discord username.
+          </p>
+          <div id="nicknameUsersList">
+            ${(store.users||[]).map(u=>`
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);flex-wrap:wrap">
+                <img src="${u.avatar||'https://cdn.discordapp.com/embed/avatars/0.png'}" style="width:36px;height:36px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <div style="flex:1;min-width:120px">
+                  <div style="font-size:13px;font-weight:600">${esc(u.username)}</div>
+                  <div style="font-size:11px;color:#53617a">${esc(u.id)}</div>
+                </div>
+                <input id="nn_${u.id}" value="${esc(store.nicknames?.[u.id]||'')}" placeholder="Enter nickname..." style="width:200px;padding:8px 12px;font-size:13px">
+                <button class="btn btn-sm btn-primary" onclick="saveNickname('${esc(u.id)}','${esc(u.username)}')">
+                  <i class="ti ti-device-floppy"></i> Save
+                </button>
+                ${store.nicknames?.[u.id]?`<button class="btn btn-sm btn-danger" onclick="clearNickname('${esc(u.id)}')"><i class="ti ti-x"></i></button>`:''}
+              </div>`).join('') || '<p style="color:#8fa0bd;text-align:center">No users found. Users appear after they log in.</p>'}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-header"><h3><i class="ti ti-database"></i> Database (Owner Only)</h3></div>
         <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap">
           <button class="btn btn-success" onclick="downloadBackup()"><i class="ti ti-download"></i> Download Backup</button>
@@ -1485,6 +1519,24 @@
     else toast('Error: '+(r.reason||'failed'),'#ff5a67');
   };
 
+  window.saveNickname = async (userId, username) => {
+    const input = qs('#nn_'+userId);
+    if(!input) return;
+    const nickname = input.value.trim();
+    const r = await api('PUT','/api/nicknames',{ userId, nickname });
+    if(r.ok){
+      store.nicknames = r.data;
+      toast(`Nickname ${nickname?'saved':'cleared'} for ${username} ✓`,'#2ecc71');
+      renderSettings();
+    } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.clearNickname = async (userId) => {
+    const r = await api('PUT','/api/nicknames',{ userId, nickname: '' });
+    if(r.ok){ store.nicknames = r.data; toast('Nickname cleared ✓','#f3c75a'); renderSettings(); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
   window.seedDatabase = async () => {
     if(!confirm('Reset ALL data to defaults? This cannot be undone!')) return;
     const r = await api('POST','/api/seed');
@@ -1493,7 +1545,30 @@
   };
 
   // ═══════════════════════════ ADMIN ROLES (OWNER ONLY) ════════════════════════════
-  const ALL_PERMISSIONS = ['manage_users','manage_reports','manage_cases','manage_settings','manage_logs','manage_database','manage_webhooks','manage_roles'];
+  const ALL_PERMISSIONS = [
+    // General Access
+    { group: 'General Access', key: 'access_panel',    icon: 'ti-layout-dashboard', label: 'Access Panel' },
+    { group: 'General Access', key: 'view_dashboard',  icon: 'ti-dashboard',        label: 'View Dashboard' },
+    // Reports
+    { group: 'Reports',        key: 'create_reports',  icon: 'ti-file-plus',        label: 'Create Reports' },
+    { group: 'Reports',        key: 'edit_reports',    icon: 'ti-file-pencil',      label: 'Edit Reports' },
+    { group: 'Reports',        key: 'delete_reports',  icon: 'ti-file-minus',       label: 'Delete Reports' },
+    // Cases
+    { group: 'Cases',          key: 'create_cases',    icon: 'ti-folder-plus',      label: 'Create Cases' },
+    { group: 'Cases',          key: 'edit_cases',      icon: 'ti-folder-check',     label: 'Edit Cases' },
+    { group: 'Cases',          key: 'delete_cases',    icon: 'ti-folder-minus',     label: 'Delete Cases' },
+    // Points
+    { group: 'Points',         key: 'manage_points',   icon: 'ti-chart-bar',        label: 'Manage Points' },
+    // Logs
+    { group: 'Logs',           key: 'view_logs',       icon: 'ti-history',          label: 'View Logs' },
+    { group: 'Logs',           key: 'manage_logs',     icon: 'ti-trash',            label: 'Manage Logs' },
+    // Administration
+    { group: 'Administration', key: 'manage_users',    icon: 'ti-users',            label: 'Manage Users' },
+    { group: 'Administration', key: 'manage_settings', icon: 'ti-settings',         label: 'Manage Settings' },
+    { group: 'Administration', key: 'manage_database', icon: 'ti-database',         label: 'Manage Database' },
+    { group: 'Administration', key: 'manage_roles',    icon: 'ti-shield-lock',      label: 'Manage Roles' },
+    { group: 'Administration', key: 'manage_webhooks', icon: 'ti-webhook',          label: 'Manage Webhooks' },
+  ];
 
   function renderAdminRoles(){
     if(!isOwner){ qs('#adminRoles').innerHTML = '<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">Access denied — Owner only.</p></div></div>'; return; }
@@ -1504,9 +1579,12 @@
           <div>
             <b style="font-size:15px">${esc(r.name||'')}</b>
             <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
-              ${(r.permissions||[]).map(p=>`<span class="badge badge-info" style="font-size:10px">${esc(p)}</span>`).join('')}
+              ${(r.permissions||[]).map(p=>{
+                const pd = ALL_PERMISSIONS.find(x=>x.key===p);
+                return '<span class="badge badge-info" style="font-size:10px"><i class="ti '+(pd?.icon||'ti-check')+'" style="margin-right:3px"></i>'+esc(pd?.label||p)+'</span>';
+              }).join('')}
             </div>
-            ${r.members?.length?`<div style="margin-top:6px;color:#8fa0bd;font-size:12px">Members: ${esc(r.members.join(', '))}</div>`:''}
+            ${r.members?.length?'<div style="margin-top:6px;color:#8fa0bd;font-size:12px"><i class="ti ti-users" style="margin-right:4px"></i>Members: '+esc(r.members.join(', '))+'</div>':''}
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-warning" onclick="openAdminRoleModal(${r.id})"><i class="ti ti-edit"></i></button>
@@ -1541,12 +1619,14 @@
       <div class="form-group"><label>Role Name</label><input id="arName" value="${esc(role?.name||'')}" placeholder="e.g. Supervisor"></div>
       <div class="form-group"><label>Members (Discord IDs, comma-separated)</label><input id="arMembers" value="${esc((role?.members||[]).join(', '))}" placeholder="123456, 789012"></div>
       <div class="form-group"><label>Permissions</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-          ${ALL_PERMISSIONS.map(p=>`
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-              <input type="checkbox" value="${p}" ${(role?.permissions||[]).includes(p)?'checked':''} class="ar-perm" style="width:auto;padding:0;margin:0">
-              ${p.replace(/_/g,' ')}
-            </label>`).join('')}
+        <div style="margin-top:8px">
+          ${(()=>{
+            const groups = [...new Set(ALL_PERMISSIONS.map(p=>p.group))];
+            return groups.map(g=>{
+              const perms = ALL_PERMISSIONS.filter(p=>p.group===g);
+              return '<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#53617a;margin-bottom:8px;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:8px"><i class=\"ti ti-folder\" style=\"margin-right:6px\"></i>'+g+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+perms.map(p=>'<label style=\"display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.06);transition:.15s\" onmouseover=\"this.style.background=\'rgba(47,124,255,.08)\'\" onmouseout=\"this.style.background=\'\'\" ><input type=\"checkbox\" value=\"'+p.key+'\" '+((role?.permissions||[]).includes(p.key)?'checked':'')+' class=\"ar-perm\" style=\"width:auto;padding:0;margin:0\"><i class=\"ti '+p.icon+'\" style=\"color:#2f7cff;font-size:16px\"></i>'+p.label+'</label>').join('')+'</div></div>';
+            }).join('');
+          })()}
         </div>
       </div>`;
     qs('#modalConfirmBtn').onclick = async () => {
