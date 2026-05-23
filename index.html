@@ -138,7 +138,6 @@
 
 <div id="loginContainer" class="login-container">
   <div class="login-card">
-    <img id="loginLogoImg" src="" alt="Logo" style="display:none;width:80px;height:80px;object-fit:contain;margin:0 auto 20px;border-radius:50%">
     <div style="width:80px;height:80px;background:#0b1730;border:2px solid #f3c75a;border-radius:50%;display:grid;place-items:center;font-size:40px;margin:0 auto 20px">🛡️</div>
     <h1 style="font-size:28px;font-weight:900">SHJ LSPD</h1>
     <p style="color:#8fa0bd;margin:8px 0 24px">Complete Police Management System</p>
@@ -178,10 +177,7 @@
   <main class="main">
     <div class="top-bar">
       <button class="btn mobile-menu" id="mobileMenuBtn"><i class="ti ti-menu-2"></i></button>
-      <div style="display:flex;align-items:center;gap:12px">
-        <div id="topBarLogo"></div>
-        <div><b>Control Panel</b><div id="clock" style="font-size:12px;color:#8fa0bd"></div></div>
-      </div>
+      <div><b>Control Panel</b><div id="clock" style="font-size:12px;color:#8fa0bd"></div></div>
       <div class="user-info">
         <div class="avatar" id="userAvatar">U</div>
         <div><b id="userName">User</b><div id="userRole" class="role-badge">Officer</div></div>
@@ -238,51 +234,21 @@
   let isAdmin     = false;
   let isOwner     = false;
   let accessToken = null;
-  // PATCH: nickname & logo cache
-  let nicknameCache = {};   // {userId: nickname}
-  let siteLogoUrl   = '';   // logo URL from KV settings
   let store = {
     officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
     codes:[], wanted:[], impound:[], cases:[], reports:[],
-    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true, logoUrl:'' },
-    adminRoles:[], webhooks:{}, permissions:[]
+    users:[], activity:[], settings:{ webhookUrl:'', logsEnabled:true },
+    adminRoles:[], webhooks:{}, permissions:[], nicknames:{}
   };
+
+  // ── Nickname helpers ──
+  function getNick(userId, fallback){ return (store.nicknames && store.nicknames[userId]) || fallback || userId || '-'; }
+  function getCurrentUserDisplay(){ return getNick(currentUser?.id, currentUser?.username); }
 
   // ═══════════════════════════ UTILS ════════════════════════════
   const qs  = (s,p=document) => p.querySelector(s);
   const qsa = (s,p=document) => [...p.querySelectorAll(s)];
   function esc(str){ return String(str??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]); }
-
-  // ═══ PATCH: Nickname System ════
-  // Returns display name: nickname if set, else Discord username
-  function displayName(userId, fallbackUsername){
-    return nicknameCache[userId] || fallbackUsername || 'Unknown';
-  }
-  async function loadNicknames(){
-    try {
-      const r = await api('GET','/api/settings/nicknames');
-      if(r.ok && r.data) nicknameCache = r.data;
-    } catch(e){ console.warn('[Nicknames] Load failed:', e.message); }
-  }
-  async function saveNickname(userId, nickname){
-    const r = await api('PUT','/api/settings/nicknames',{ userId, nickname });
-    if(r.ok){ nicknameCache[userId] = nickname || undefined; if(!nickname) delete nicknameCache[userId]; }
-    return r;
-  }
-
-  // ═══ PATCH: Logo System helpers ════
-  function applyLogo(url){
-    siteLogoUrl = url || '';
-    // Login page logo
-    const loginLogo = document.querySelector('#loginLogoImg');
-    if(loginLogo){ if(url){ loginLogo.src=url; loginLogo.style.display=''; loginLogo.nextElementSibling && (loginLogo.nextElementSibling.style.display='none'); } else { loginLogo.style.display='none'; } }
-    // Navbar brand logo
-    const brandIcon = document.querySelector('.brand-icon');
-    if(brandIcon){ brandIcon.innerHTML = url ? `<img src="${url}" style="width:40px;height:40px;object-fit:contain;border-radius:50%" alt="Logo">` : '🛡️'; }
-    // Top-bar logo (header)
-    const topLogo = document.querySelector('#topBarLogo');
-    if(topLogo){ topLogo.innerHTML = url ? `<img src="${url}" style="height:38px;object-fit:contain" alt="Logo">` : ''; }
-  }
   function toast(msg,color='#2f7cff'){
     const t=qs('#toastMessage');
     if(t){ t.textContent=msg; t.style.borderLeftColor=color; t.classList.add('show');
@@ -318,11 +284,13 @@
       ['officers','ranks','pointsLog','laws','uniforms','codes',
        'wanted','impound','cases','reports','users','activity','settings'
       ].forEach(k => { if(data[k] !== undefined) store[k] = data[k]; });
-      // PATCH: Apply logo from settings
-      if(store.settings?.logoUrl) applyLogo(store.settings.logoUrl);
     }
-    // PATCH: Load nicknames
-    await loadNicknames();
+    // Load nicknames
+    const nickRes = await api('GET', '/api/nicknames');
+    if(nickRes.ok) store.nicknames = nickRes.data || {};
+    // Load logo
+    const logoRes = await api('GET', '/api/logo');
+    if(logoRes.ok && logoRes.data) applyLogo(logoRes.data);
     // تحميل adminRoles إذا كان owner
     if(isOwner){
       const arRes = await api('GET','/api/admin-roles');
@@ -469,12 +437,8 @@
     const av = qs('#userAvatar');
     if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
-    // PATCH: use nickname if available
-    const dName = currentUser ? displayName(currentUser.id, currentUser.username) : 'User';
-    qs('#userName').textContent = dName;
+    qs('#userName').textContent = getCurrentUserDisplay();
     qs('#userRole').textContent = isOwner ? '👑 Ownership' : (isAdmin ? '⚡ Admin' : '👮 Officer');
-    // PATCH: apply logo from settings if loaded
-    if(store.settings?.logoUrl) applyLogo(store.settings.logoUrl);
     // إظهار/إخفاء أزرار الـ nav حسب الصلاحيات
     const ownerOnlyBtns = document.querySelectorAll('[data-owner-only]');
     ownerOnlyBtns.forEach(b => b.style.display = isOwner ? '' : 'none');
@@ -488,6 +452,17 @@
         lastLogin: Date.now()
       }).catch(()=>{});
     }
+  }
+
+  function applyLogo(logoUrl){
+    if(!logoUrl) return;
+    // Login page logo
+    const loginIcon = qs('#loginContainer .login-card > div:first-child');
+    if(loginIcon){ loginIcon.innerHTML = `<img src="${esc(logoUrl)}" style="width:100%;height:100%;object-fit:contain;border-radius:50%">`; }
+    // Navbar brand icon
+    const brandIcon = qs('.brand-icon');
+    if(brandIcon){ brandIcon.innerHTML = `<img src="${esc(logoUrl)}" style="width:100%;height:100%;object-fit:contain;border-radius:50%">`; }
+    store._logoUrl = logoUrl;
   }
 
   function openModal(){ qs('#globalModal').classList.add('open'); }
@@ -551,17 +526,10 @@
 
   function renderOfficers(){
     const officers = store.officers || [];
-    const rows = officers.map((o,idx)=>`
+    const rows = officers.map(o=>`
       <tr>
-        <td>
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,rgba(47,124,255,.18),rgba(114,88,255,.18));border:1px solid rgba(47,124,255,.3);display:grid;place-items:center;font-size:16px;flex-shrink:0">👮</div>
-            <div>
-              <b style="color:#edf3ff">${esc(o.name)}</b>
-              <div style="font-size:11px;color:#53617a">#${esc(String(o.badge||''))}</div>
-            </div>
-          </div>
-        </td>
+        <td><b>${esc(o.name)}</b></td>
+        <td>#${esc(String(o.badge||''))}</td>
         <td>${esc(o.rank||'')}</td>
         <td>${esc(o.dept||'LSPD')}</td>
         <td>
@@ -577,22 +545,14 @@
         </td>
       </td>`).join('');
     qs('#officers').innerHTML = `
-      <div class="card" style="background:rgba(16,24,39,.8);border:1px solid rgba(255,255,255,.08)">
-        <div class="card-header" style="padding:20px 24px">
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:42px;height:42px;background:rgba(47,124,255,.12);border:1px solid rgba(47,124,255,.22);border-radius:13px;display:grid;place-items:center;flex-shrink:0">
-              <i class="ti ti-users" style="font-size:21px;color:#2f7cff"></i>
-            </div>
-            <div>
-              <h3 style="font-size:17px;font-weight:700;line-height:1.2">Officers Management</h3>
-              <div style="font-size:12px;color:#53617a;margin-top:3px">${officers.length} officer${officers.length!==1?'s':''} total</div>
-            </div>
-          </div>
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-users"></i> Officers Management</h3>
           ${isAdmin ? '<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> Add Officer</button>' : ''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Officer</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="6" style="color:#8fa0bd;text-align:center;padding:32px">No officers found</td></tr>'}</tbody>
+          <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
         </table>
         </div>
       </div>`;
@@ -653,18 +613,13 @@
     const ranks = store.ranks || [];
     const rows = ranks.map((r,idx)=>`
       <tr>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="display:flex;flex-direction:column;gap:2px">
-              <button class="btn btn-sm" style="padding:2px 6px;font-size:11px;line-height:1" onclick="moveRank(${r.id},-1)" ${idx===0?'disabled':''} title="Move Up">⬆️</button>
-              <button class="btn btn-sm" style="padding:2px 6px;font-size:11px;line-height:1" onclick="moveRank(${r.id},1)" ${idx===ranks.length-1?'disabled':''} title="Move Down">⬇️</button>
-            </div>
-            <div>
-              <b>${esc(r.name)}</b>
-              <div style="font-size:11px;color:#53617a">#${idx+1}</div>
-            </div>
+        <td style="width:36px">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <button class="btn btn-sm" style="padding:2px 7px;font-size:11px" onclick="moveRank(${r.id},-1)" ${idx===0?'disabled':''} title="Move Up">⬆️</button>
+            <button class="btn btn-sm" style="padding:2px 7px;font-size:11px" onclick="moveRank(${r.id},1)" ${idx===ranks.length-1?'disabled':''} title="Move Down">⬇️</button>
           </div>
         </td>
+        <td><b>${esc(r.name)}</b></td>
         <td>${r.pointsReq||0} pts</td>
         <td>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openRankModal(${r.id})"><i class="ti ti-edit"></i></button>
@@ -672,38 +627,23 @@
         </td>
       </tr>`).join('');
     qs('#ranks').innerHTML = `
-      <div class="card" style="background:rgba(16,24,39,.8);border:1px solid rgba(255,255,255,.08)">
-        <div class="card-header" style="padding:20px 24px">
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:42px;height:42px;background:rgba(47,124,255,.12);border:1px solid rgba(47,124,255,.22);border-radius:13px;display:grid;place-items:center;flex-shrink:0">
-              <i class="ti ti-stairs-up" style="font-size:21px;color:#2f7cff"></i>
-            </div>
-            <div>
-              <h3 style="font-size:17px;font-weight:700;line-height:1.2">Ranks System</h3>
-              <div style="font-size:12px;color:#53617a;margin-top:3px">${ranks.length} rank${ranks.length!==1?'s':''} configured</div>
-            </div>
-          </div>
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
+        <div class="card-body"><table><thead><tr><th style="width:36px">Order</th><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
   }
 
   window.moveRank = async (id, dir) => {
-    const ranks = [...(store.ranks||[])];
+    const ranks = store.ranks || [];
     const idx = ranks.findIndex(r=>r.id===id);
-    if(idx < 0) return;
+    if(idx === -1) return;
     const newIdx = idx + dir;
     if(newIdx < 0 || newIdx >= ranks.length) return;
     [ranks[idx], ranks[newIdx]] = [ranks[newIdx], ranks[idx]];
-    // Save order via API - use PUT with ordered array
-    const r = await api('PUT','/api/ranks/order',{ order: ranks.map(x=>x.id) });
-    if(r.ok){ store.ranks = ranks; renderRanks(); toast('Order updated ✓'); }
-    else {
-      // Fallback: update locally only (server might not support order endpoint yet)
-      store.ranks = ranks; renderRanks();
-      toast('Order updated locally','#f3c75a');
-    }
+    const r = await api('POST', '/api/ranks/reorder', { order: ranks.map(x=>x.id) });
+    if(r.ok){ store.ranks = ranks; renderRanks(); } else toast('Reorder failed','#ff5a67');
   };
 
   window.deleteRank = async id => {
@@ -1432,13 +1372,22 @@
         <td>
           <div style="display:flex;align-items:center;gap:10px">
             ${u.avatar?`<img src="${esc(u.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" alt="">`:'<div style="width:32px;height:32px;border-radius:50%;background:#1b2942;display:grid;place-items:center">'+esc((u.username||'?')[0].toUpperCase())+'</div>'}
-            <b>${esc(u.username||'Unknown')}</b>
+            <div>
+              <b>${esc(getNick(u.id, u.username)||'Unknown')}</b>
+              ${store.nicknames?.[u.id]?`<div style="font-size:11px;color:#8fa0bd">Discord: ${esc(u.username||'')}</div>`:''}
+            </div>
           </div>
-         </td>
+        </td>
         <td style="font-size:12px;color:#8fa0bd">${esc(u.id||'')}</td>
-        <td><span class="badge badge-${u.isAdmin?'warning':'info'}">${u.isAdmin?'Admin':'Officer'}</span></td>
+        <td><span class="badge badge-${u.isOwner?'danger':u.isAdmin?'warning':'info'}">${u.isOwner?'👑 Owner':u.isAdmin?'⚡ Admin':'👮 Officer'}</span></td>
         <td>${fmtTime(u.lastLogin)}</td>
         <td>${fmtTime(u.joinedAt)}</td>
+        <td>
+          ${isAdmin&&u.id!==currentUser?.id?`
+            <button class="btn btn-sm btn-warning" title="Edit Nickname" onclick="editUserNickname('${esc(u.id)}','${esc(u.username||'')}')"><i class="ti ti-at"></i></button>
+            <button class="btn btn-sm btn-danger" title="Revoke Access" onclick="revokeUserAccess('${esc(u.id)}','${esc(getNick(u.id,u.username)||'')}')"><i class="ti ti-user-off"></i></button>
+          `:''}
+        </td>
       </tr>`).join('');
     qs('#discordUsers').innerHTML = `
       <div class="card">
@@ -1446,11 +1395,56 @@
           <span style="color:#8fa0bd;font-size:13px">${users.length} registered users</span>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No users found</td>'}</tbody></table>
+          <table><thead><tr><th>User</th><th>Discord ID</th><th>Role</th><th>Last Login</th><th>Joined</th><th>Actions</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No users found</td>'}</tbody></table>
         </div>
       </div>`;
   }
+
+  window.editUserNickname = (userId, discordName) => {
+    const current = store.nicknames?.[userId] || '';
+    qs('#modalTitle').textContent = 'Edit Nickname';
+    qs('#modalBody').innerHTML = `
+      <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px;margin-bottom:20px">
+        <div style="font-size:12px;color:#53617a;font-weight:600;margin-bottom:4px">Discord Username</div>
+        <div style="font-weight:700">${esc(discordName)}</div>
+      </div>
+      <div class="form-group">
+        <label>Nickname (displayed in system)</label>
+        <input id="nickInput" value="${esc(current)}" placeholder="e.g. عمر البلوشي">
+      </div>
+      <p style="font-size:12px;color:#8fa0bd">Leave empty to use Discord username</p>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const nick = qs('#nickInput').value.trim();
+      const r = await api('PUT', '/api/nicknames', { userId, nickname: nick });
+      if(r.ok){
+        store.nicknames = store.nicknames || {};
+        if(nick) store.nicknames[userId] = nick;
+        else delete store.nicknames[userId];
+        // Update current user display if editing own nickname
+        if(userId === currentUser?.id) qs('#userName').textContent = getCurrentUserDisplay();
+        renderDiscordUsers(); closeModal(); toast('Nickname saved ✓');
+      } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.revokeUserAccess = async (userId, displayName) => {
+    if(!confirm(`Revoke access for "${displayName}"?\n\nThis will:\n• Delete their nickname\n• Remove them from all admin roles\n• Block future login\n\nThis cannot be undone.`)) return;
+    const r = await api('DELETE', '/api/users/revoke', { userId });
+    if(r.ok){
+      // Remove from local store
+      store.users = (store.users||[]).filter(u=>u.id!==userId);
+      if(store.nicknames) delete store.nicknames[userId];
+      // Remove from adminRoles
+      if(store.adminRoles){
+        store.adminRoles = store.adminRoles.map(role=>({
+          ...role, members:(role.members||[]).filter(m=>m!==userId)
+        }));
+      }
+      renderDiscordUsers(); toast(`Access revoked for ${displayName}`,'#ff5a67');
+    } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
 
   function renderLogs(){
     const activity = store.activity || [];
@@ -1518,6 +1512,49 @@
         </div>
       </div>
 
+      ${isAdmin?`
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-photo"></i> Logo System</h3></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:20px">
+            <div style="width:80px;height:80px;border-radius:50%;border:2px solid #f3c75a;background:#0b1730;display:grid;place-items:center;overflow:hidden" id="logoPreview">
+              ${store._logoUrl?`<img src="${esc(store._logoUrl)}" style="width:100%;height:100%;object-fit:contain">`:'<span style="font-size:32px">🛡️</span>'}
+            </div>
+            <div style="flex:1">
+              <div class="form-group" style="margin-bottom:12px">
+                <label>Logo URL</label>
+                <input id="logoUrl" value="${esc(store._logoUrl||'')}" placeholder="https://example.com/logo.png">
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-warning btn-sm" onclick="previewLogo()"><i class="ti ti-eye"></i> Preview</button>
+                <button class="btn btn-primary btn-sm" onclick="saveLogo()"><i class="ti ti-device-floppy"></i> Save Logo</button>
+                ${store._logoUrl?`<button class="btn btn-danger btn-sm" onclick="removeLogo()"><i class="ti ti-trash"></i> Remove</button>`:''}
+              </div>
+            </div>
+          </div>
+          <p style="font-size:12px;color:#8fa0bd">Logo appears on login page, navbar, and top header. Updates instantly across the system.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-at"></i> Nickname Management</h3></div>
+        <div class="card-body">
+          <p style="color:#8fa0bd;font-size:13px;margin-bottom:16px">Set display names for users. Nicknames replace Discord usernames across the entire system.</p>
+          <div style="display:grid;gap:10px">
+            ${(store.users||[]).map(u=>`
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;flex-wrap:wrap">
+                ${u.avatar?`<img src="${esc(u.avatar)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`:'<div style="width:36px;height:36px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:14px;font-weight:700">'+esc((u.username||'?')[0].toUpperCase())+'</div>'}
+                <div style="flex:1;min-width:120px">
+                  <div style="font-size:13px;color:#8fa0bd">Discord: ${esc(u.username||'')}</div>
+                  <div style="font-weight:600">${esc(store.nicknames?.[u.id] || '—')}</div>
+                </div>
+                <button class="btn btn-sm btn-warning" onclick="editUserNickname('${esc(u.id)}','${esc(u.username||'')}')"><i class="ti ti-edit"></i> Set Nick</button>
+              </div>`).join('')}
+            ${(store.users||[]).length===0?'<p style="color:#8fa0bd;text-align:center">No users registered yet.</p>':''}
+          </div>
+        </div>
+      </div>`:''}
+
       ${isAdmin?`<div class="card">
         <div class="card-header"><h3><i class="ti ti-webhook"></i> Webhook System</h3></div>
         <div class="card-body">
@@ -1553,6 +1590,24 @@
         </div>
       </div>`}`;
   }
+
+  window.previewLogo = () => {
+    const url = qs('#logoUrl')?.value?.trim();
+    if(!url){ toast('Enter a URL first','#f3c75a'); return; }
+    const prev = qs('#logoPreview');
+    if(prev) prev.innerHTML = `<img src="${esc(url)}" style="width:100%;height:100%;object-fit:contain" onerror="this.parentElement.innerHTML='<span style=font-size:24px>❌</span>'">`;
+  };
+  window.saveLogo = async () => {
+    const url = qs('#logoUrl')?.value?.trim() || '';
+    const r = await api('PUT', '/api/logo', { url });
+    if(r.ok){ applyLogo(url); renderSettings(); toast('Logo saved ✓'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+  window.removeLogo = async () => {
+    const r = await api('PUT', '/api/logo', { url: '' });
+    if(r.ok){ store._logoUrl = ''; applyLogo(''); renderSettings(); toast('Logo removed','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
 
   window.saveWebhooks = async () => {
     const wh = store.webhooks || {};
@@ -1606,7 +1661,7 @@
   };
 
   // ═══════════════════════════ ADMIN ROLES (OWNER ONLY) ════════════════════════════
-  // ═══ PATCH: Expanded Professional Permission System ════
+  // ═══════════════════════════ PERMISSION SYSTEM v2 ═══════════════════════════
   const ALL_PERMISSIONS = [
     'access_panel','view_dashboard',
     'create_reports','edit_reports','delete_reports',
@@ -1615,24 +1670,25 @@
     'manage_users','manage_settings','manage_database',
     'manage_roles','manage_webhooks','full_access'
   ];
-  const PERM_META = {
-    access_panel:    { icon:'ti-shield-check',   color:'#2f7cff', group:'General Access' },
-    view_dashboard:  { icon:'ti-dashboard',       color:'#2f7cff', group:'General Access' },
-    create_reports:  { icon:'ti-file-plus',       color:'#2ecc71', group:'Reports' },
-    edit_reports:    { icon:'ti-file-pencil',     color:'#2ecc71', group:'Reports' },
-    delete_reports:  { icon:'ti-file-minus',      color:'#ff5a67', group:'Reports' },
-    create_cases:    { icon:'ti-folder-plus',     color:'#f3c75a', group:'Cases' },
-    edit_cases:      { icon:'ti-folder-check',    color:'#f3c75a', group:'Cases' },
-    delete_cases:    { icon:'ti-folder-minus',    color:'#ff5a67', group:'Cases' },
-    manage_points:   { icon:'ti-chart-bar',       color:'#9c4dff', group:'Officers' },
-    view_logs:       { icon:'ti-history',         color:'#3498db', group:'System' },
-    manage_logs:     { icon:'ti-database-edit',   color:'#3498db', group:'System' },
-    manage_users:    { icon:'ti-users-group',     color:'#e67e22', group:'Administration' },
-    manage_settings: { icon:'ti-settings',        color:'#e67e22', group:'Administration' },
-    manage_database: { icon:'ti-database',        color:'#ff5a67', group:'Administration' },
-    manage_roles:    { icon:'ti-shield-lock',     color:'#ff5a67', group:'Administration' },
-    manage_webhooks: { icon:'ti-webhook',         color:'#e67e22', group:'Administration' },
-    full_access:     { icon:'ti-crown',           color:'#f3c75a', group:'Full Access' },
+  const PERM_GROUPS = [
+    { label:'General Access', icon:'ti-lock-open', color:'#3498db',
+      perms:['access_panel','view_dashboard'] },
+    { label:'Reports', icon:'ti-file-text', color:'#2ecc71',
+      perms:['create_reports','edit_reports','delete_reports'] },
+    { label:'Cases', icon:'ti-folder', color:'#f3c75a',
+      perms:['create_cases','edit_cases','delete_cases'] },
+    { label:'Points & Logs', icon:'ti-chart-bar', color:'#9b59b6',
+      perms:['manage_points','view_logs','manage_logs'] },
+    { label:'Administration', icon:'ti-shield-lock', color:'#e74c3c',
+      perms:['manage_users','manage_settings','manage_database','manage_roles','manage_webhooks','full_access'] },
+  ];
+  const PERM_COLOR = {
+    access_panel:'#3498db', view_dashboard:'#3498db',
+    create_reports:'#2ecc71', edit_reports:'#f1c40f', delete_reports:'#e74c3c',
+    create_cases:'#2ecc71', edit_cases:'#f1c40f', delete_cases:'#e74c3c',
+    manage_points:'#9b59b6', view_logs:'#1abc9c', manage_logs:'#1abc9c',
+    manage_users:'#e67e22', manage_settings:'#e67e22', manage_database:'#c0392b',
+    manage_roles:'#c0392b', manage_webhooks:'#ff69b4', full_access:'#c0392b'
   };
 
   function renderAdminRoles(){
@@ -1644,7 +1700,7 @@
           <div>
             <b style="font-size:15px">${esc(r.name||'')}</b>
             <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
-              ${(r.permissions||[]).map(p=>`<span class="badge badge-info" style="font-size:10px">${esc(p)}</span>`).join('')}
+              ${(r.permissions||[]).map(p=>`<span class="badge" style="font-size:10px;background:${PERM_COLOR[p]||'#3498db'}22;color:${PERM_COLOR[p]||'#3498db'};border:1px solid ${PERM_COLOR[p]||'#3498db'}44">${esc(p)}</span>`).join('')}
             </div>
             ${r.members?.length?`<div style="margin-top:6px;color:#8fa0bd;font-size:12px">Members: ${esc(r.members.join(', '))}</div>`:''}
           </div>
@@ -1693,12 +1749,22 @@
       <div class="form-group"><label>Role Name</label><input id="arName" value="${esc(role?.name||'')}" placeholder="e.g. Supervisor"></div>
       <div class="form-group"><label>Members (Discord IDs, comma-separated)</label><input id="arMembers" value="${esc((role?.members||[]).join(', '))}" placeholder="123456, 789012"></div>
       <div class="form-group"><label>Permissions</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-          ${ALL_PERMISSIONS.map(p=>`
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-              <input type="checkbox" value="${p}" ${(role?.permissions||[]).includes(p)?'checked':''} class="ar-perm" style="width:auto;padding:0;margin:0">
-              ${p.replace(/_/g,' ')}
-            </label>`).join('')}
+        <div style="display:grid;gap:12px;margin-top:8px">
+          ${PERM_GROUPS.map(g=>`
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <i class="ti ${g.icon}" style="color:${g.color};font-size:16px"></i>
+                <b style="font-size:13px;color:${g.color}">${g.label}</b>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                ${g.perms.map(p=>`
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.03);transition:.15s" onmouseover="this.style.background='rgba(255,255,255,.07)'" onmouseout="this.style.background='rgba(255,255,255,.03)'">
+                    <input type="checkbox" value="${p}" ${(role?.permissions||[]).includes(p)?'checked':''} class="ar-perm" style="width:auto;padding:0;margin:0">
+                    <span style="flex:1">${p.replace(/_/g,' ')}</span>
+                    <span style="width:8px;height:8px;border-radius:50%;background:${PERM_COLOR[p]||'#8fa0bd'};flex-shrink:0"></span>
+                  </label>`).join('')}
+              </div>
+            </div>`).join('')}
         </div>
       </div>`;
     qs('#modalConfirmBtn').onclick = async () => {
