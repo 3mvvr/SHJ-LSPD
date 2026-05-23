@@ -125,6 +125,25 @@
 
     .mobile-menu { display:none; }
 
+    /* ── Background Logo Effect (shared across pages) ── */
+    .page-bg-logo {
+      position:relative; overflow:hidden;
+    }
+    .page-bg-logo::before {
+      content:'🛡️';
+      position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%) rotate(-15deg);
+      font-size:340px; opacity:.025; pointer-events:none; z-index:0;
+      user-select:none; filter:blur(2px);
+    }
+    .page-bg-logo > * { position:relative; z-index:1; }
+
+    /* Role color swatch */
+    .role-color-dot { width:14px; height:14px; border-radius:50%; display:inline-block; flex-shrink:0; border:1px solid rgba(255,255,255,.15); }
+
+    /* Hierarchy badge */
+    .hier-badge { display:inline-flex; align-items:center; gap:4px; background:rgba(47,124,255,.12); border:1px solid rgba(47,124,255,.2); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; color:#2f7cff; }
+
     /* ── Drag & Drop ── */
     .drag-handle { cursor:grab; color:#53617a; padding:0 8px; font-size:18px; user-select:none; transition:.15s; }
     .drag-handle:hover { color:#8fa0bd; }
@@ -175,9 +194,11 @@
       <button data-page="cases"><i class="ti ti-folder"></i> Cases</button>
       <button data-page="reports"><i class="ti ti-file-text"></i> Reports</button>
       <div class="nav-title">Administration</div>
-      <button data-page="discordUsers"><i class="ti ti-brand-discord"></i> Discord Users</button>
-      <button data-page="logs"><i class="ti ti-history"></i> System Logs</button>
-      <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
+      <button data-page="discordUsers" data-admin-only style="display:none"><i class="ti ti-brand-discord"></i> Discord Users</button>
+      <button data-page="serverRoles" data-admin-only style="display:none"><i class="ti ti-shield-star"></i> Server Roles</button>
+      <button data-page="websiteRoles" data-owner-only style="display:none"><i class="ti ti-lock-access"></i> Website Roles</button>
+      <button data-page="logs" data-admin-only style="display:none"><i class="ti ti-history"></i> System Logs</button>
+      <button data-page="settings" data-admin-only style="display:none"><i class="ti ti-settings"></i> Settings</button>
       <button data-page="adminRoles" data-owner-only style="display:none"><i class="ti ti-shield-lock"></i> Admin Roles</button>
     </nav>
   </aside>
@@ -206,6 +227,8 @@
       <div id="cases"        class="page"></div>
       <div id="reports"      class="page"></div>
       <div id="discordUsers" class="page"></div>
+      <div id="serverRoles"  class="page"></div>
+      <div id="websiteRoles" class="page"></div>
       <div id="logs"         class="page"></div>
       <div id="settings"     class="page"></div>
       <div id="adminRoles"   class="page"></div>
@@ -241,6 +264,8 @@
   let currentUser = null;
   let isAdmin     = false;
   let isOwner     = false;
+  let isFullAccess = false;
+  let userPermissions = [];
   let accessToken = null;
   let store = {
     officers:[], ranks:[], pointsLog:[], laws:[], uniforms:[],
@@ -351,8 +376,8 @@
     // Load logo
     const logoRes = await api('GET', '/api/logo');
     if(logoRes.ok && logoRes.data) applyLogo(logoRes.data);
-    // تحميل adminRoles إذا كان owner
-    if(isOwner){
+    // تحميل adminRoles إذا كان owner أو full access
+    if(isOwner || isFullAccess){
       const arRes = await api('GET','/api/admin-roles');
       if(arRes.ok) store.adminRoles = arRes.data;
       const whRes = await api('GET','/api/webhooks');
@@ -364,20 +389,20 @@
   }
 
   // ═══════════════════════════ SESSION ══════════════════════════
-  function saveSession(user,admin,token,owner=false){
-    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, isOwner:owner, token, ts:Date.now() }));
-    currentUser=user; isAdmin=admin; isOwner=owner; accessToken=token;
+  function saveSession(user,admin,token,owner=false,fullAccess=false,permissions=[]){
+    localStorage.setItem('lspd_session', JSON.stringify({ user, isAdmin:admin, isOwner:owner, isFullAccess:fullAccess, permissions, token, ts:Date.now() }));
+    currentUser=user; isAdmin=admin; isOwner=owner; isFullAccess=fullAccess; userPermissions=permissions; accessToken=token;
   }
   function loadSession(){
     try {
       const s = JSON.parse(localStorage.getItem('lspd_session')||'null');
       if(!s) return false;
       if(Date.now()-s.ts > 12*3600*1000){ localStorage.removeItem('lspd_session'); return false; }
-      currentUser=s.user; isAdmin=s.isAdmin; isOwner=s.isOwner||false; accessToken=s.token;
+      currentUser=s.user; isAdmin=s.isAdmin; isOwner=s.isOwner||false; isFullAccess=s.isFullAccess||false; userPermissions=s.permissions||[]; accessToken=s.token;
       return true;
     } catch{ return false; }
   }
-  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; isOwner=false; accessToken=null; }
+  function clearSession(){ localStorage.removeItem('lspd_session'); currentUser=null; isAdmin=false; isOwner=false; isFullAccess=false; userPermissions=[]; accessToken=null; }
 
   async function validateSessionWithServer(){
     if(!accessToken){
@@ -399,15 +424,19 @@
       // ✅ FIX: ALWAYS override local isAdmin/isOwner with live server values — never trust localStorage cache
       const serverIsAdmin = r.isAdmin === true;
       const serverIsOwner = r.isOwner === true;
+      const serverIsFullAccess = r.isFullAccess === true;
+      const serverPermissions = r.permissions || [];
       if(isAdmin !== serverIsAdmin || isOwner !== serverIsOwner){
         console.warn(`[Auth] Role change detected! Local: isAdmin=${isAdmin} isOwner=${isOwner} → Server: isAdmin=${serverIsAdmin} isOwner=${serverIsOwner}`);
         console.warn('[Auth] Applying server role state immediately');
       }
       isAdmin = serverIsAdmin;
       isOwner = serverIsOwner;
+      isFullAccess = serverIsFullAccess;
+      userPermissions = serverPermissions;
       if(currentUser) currentUser = { ...currentUser, ...(r.user || {}) };
       // ✅ FIX: Save updated session with LIVE server values — overwrite any stale data
-      saveSession(currentUser, isAdmin, accessToken, isOwner);
+      saveSession(currentUser, isAdmin, accessToken, isOwner, isFullAccess, userPermissions);
       console.log('[Auth] Server validation OK — isAdmin:', isAdmin, '| isOwner:', isOwner);
       return true;
     } catch(e){
@@ -479,7 +508,7 @@
     console.log('[Auth] isAdmin:', admin, '| isOwner:', owner, '| token length:', token.length);
 
     // ✅ حفظ الـ session في localStorage قبل history.replaceState
-    saveSession(user, admin, token, owner);
+    saveSession(user, admin, token, owner, false, []);
     console.log('[Auth] Session created and saved to localStorage');
 
     // ✅ مسح الـ URL params بعد الحفظ
@@ -494,14 +523,17 @@
     qs('#appContainer').style.display   = 'grid';
     document.body.classList.toggle('is-admin', isAdmin);
     document.body.classList.toggle('is-owner', isOwner);
+    document.body.classList.toggle('is-full-access', isFullAccess);
     const av = qs('#userAvatar');
     if(currentUser?.avatar) av.innerHTML = `<img src="${currentUser.avatar}" alt="avatar">`;
     else av.textContent = (currentUser?.username?.[0]||'U').toUpperCase();
     qs('#userName').textContent = getCurrentUserDisplay();
-    qs('#userRole').textContent = isOwner ? '👑 Ownership' : (isAdmin ? '⚡ Admin' : '👮 Officer');
+    qs('#userRole').textContent = isOwner ? '👑 Ownership' : (isFullAccess ? '🔑 Full Access' : (isAdmin ? '⚡ Admin' : '👮 Officer'));
     // إظهار/إخفاء أزرار الـ nav حسب الصلاحيات
     const ownerOnlyBtns = document.querySelectorAll('[data-owner-only]');
-    ownerOnlyBtns.forEach(b => b.style.display = isOwner ? '' : 'none');
+    ownerOnlyBtns.forEach(b => b.style.display = (isOwner || isFullAccess) ? '' : 'none');
+    const adminOnlyBtns = document.querySelectorAll('[data-admin-only]');
+    adminOnlyBtns.forEach(b => b.style.display = (isAdmin || isOwner || isFullAccess) ? '' : 'none');
     if(currentUser?.id) {
       api('POST','/api/users/register',{
         id: currentUser.id,
@@ -541,6 +573,8 @@
     cases:        renderCases,
     reports:      renderReports,
     discordUsers: renderDiscordUsers,
+    serverRoles:  renderServerRoles,
+    websiteRoles: renderWebsiteRoles,
     logs:         renderLogs,
     settings:     renderSettings,
     adminRoles:   renderAdminRoles,
@@ -551,6 +585,15 @@
     qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
     qs('#sidebar')?.classList.remove('open');
     if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
+    // Apply bg logo effect to all pages after render
+    const BG_LOGO_PAGES = ['dashboard','officers','ranks','points','laws','uniform','codes','wanted','cases','reports'];
+    if(BG_LOGO_PAGES.includes(pageId)){
+      const el = qs(`#${pageId}`);
+      if(el && !el.querySelector('.page-bg-logo')){
+        const inner = el.innerHTML;
+        el.innerHTML = `<div class="page-bg-logo">${inner}</div>`;
+      }
+    }
   }
 
   // ═══════════════════════════ RENDERERS ════════════════════════
@@ -558,6 +601,7 @@
     const o = store.officers || [];
     const active = o.filter(x=>x.status==='active').length;
     qs('#dashboard').innerHTML = `
+      <div class="page-bg-logo">
       <div class="stats-grid">
         <div class="stat-card"><i class="ti ti-users"></i><div class="value">${o.length}</div><div class="label">Total Officers</div></div>
         <div class="stat-card"><i class="ti ti-shield-check"></i><div class="value">${active}</div><div class="label">Active</div></div>
@@ -606,6 +650,7 @@
         </td>
       </td>`).join('');
     qs('#officers').innerHTML = `
+      <div class="page-bg-logo">
       <div class="card">
         <div class="card-header">
           <h3><i class="ti ti-users"></i> Officers Management</h3>
@@ -616,7 +661,7 @@
           <tbody id="officersTbody">${rows || '<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
         </table>
         </div>
-      </div>`;
+      </div></div>`;
     if(isAdmin) initDnD('officersTbody', 'officers', renderOfficers);
   }
 
@@ -1514,10 +1559,10 @@
         <td>${fmtTime(u.lastLogin)}</td>
         <td>${fmtTime(u.joinedAt)}</td>
         <td>
-          ${isAdmin&&u.id!==currentUser?.id?`
+          ${isAdmin&&u.id!==currentUser?.id&&!u.isOwner?`
             <button class="btn btn-sm btn-warning" title="Edit Nickname" onclick="editUserNickname('${esc(u.id)}','${esc(u.username||'')}')"><i class="ti ti-at"></i></button>
-            <button class="btn btn-sm btn-danger" title="Revoke Access" onclick="revokeUserAccess('${esc(u.id)}','${esc(getNick(u.id,u.username)||'')}')"><i class="ti ti-user-off"></i></button>
-          `:''}
+            ${!u.isOwner&&!(u.isAdmin&&!isOwner&&!isFullAccess)?`<button class="btn btn-sm btn-danger" title="Revoke Access" onclick="revokeUserAccess('${esc(u.id)}','${esc(getNick(u.id,u.username)||'')}','${u.isAdmin?'admin':'officer'}')"><i class="ti ti-user-off"></i></button>`:''}
+          `:(u.id===currentUser?.id?'<span style="color:#53617a;font-size:12px">You</span>':'')}
         </td>
       </tr>`).join('');
     qs('#discordUsers').innerHTML = `
@@ -2004,12 +2049,18 @@
         const q = searchInput.value.trim();
         if(!q){ resultsDiv.style.display='none'; return; }
         resultsDiv.style.display = 'block';
-        resultsDiv.innerHTML = '<div style="padding:12px;color:#53617a;font-size:13px;text-align:center"><span class="spinner"></span></div>';
+        resultsDiv.innerHTML = '<div style="padding:12px;color:#53617a;font-size:13px;text-align:center"><span class="spinner"></span> Searching...</div>';
         searchTimeout = setTimeout(async () => {
           const res = await api('GET', `/api/discord/members?q=${encodeURIComponent(q)}`);
-          if(!res.ok){ resultsDiv.innerHTML='<div style="padding:12px;color:#ff5a67;font-size:13px;text-align:center">Search failed</div>'; return; }
+          if(!res.ok){
+            resultsDiv.innerHTML=`<div style="padding:12px;color:#ff5a67;font-size:13px;text-align:center">Search failed: ${esc(res.reason||'error')}</div>`;
+            return;
+          }
           const members = res.data || [];
-          if(!members.length){ resultsDiv.innerHTML='<div style="padding:12px;color:#53617a;font-size:13px;text-align:center">No members found</div>'; return; }
+          if(!members.length){
+            resultsDiv.innerHTML='<div style="padding:12px;color:#53617a;font-size:13px;text-align:center">No members found — try searching by ID or full username</div>';
+            return;
+          }
           resultsDiv.innerHTML = members.map(m=>`
             <div onclick="window._addAdminMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:.15s;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
               <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
@@ -2017,13 +2068,14 @@
                 <div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div>
                 <div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div>
               </div>
-              ${window._selectedAdminMembers.includes(m.id)?'<span style="font-size:11px;color:#2ecc71;font-weight:700">✓ Added</span>':''}
+              ${window._selectedAdminMembers.includes(m.id)?'<span style="font-size:11px;color:#2ecc71;font-weight:700">✓ Added</span>':'<span style="font-size:10px;color:#53617a">Click to add</span>'}
             </div>`).join('');
-        }, 400);
+        }, 350);
       });
+      // ✅ FIX: Use persistent click handler instead of { once: true } to keep search working
       document.addEventListener('click', (e) => {
         if(!resultsDiv.contains(e.target) && e.target !== searchInput) resultsDiv.style.display='none';
-      }, { once: true });
+      });
     }
 
     window._addAdminMember = (member) => {
@@ -2079,6 +2131,342 @@
         navigate('dashboard');
         toast('Your admin role was updated — permissions refreshed','#f3c75a');
       }
+    };
+    openModal();
+  };
+
+  // ═══════════════════════════ SERVER ROLES PAGE ═══════════════════════════
+  async function renderServerRoles(){
+    const el = qs('#serverRoles');
+    el.innerHTML = '<div class="card"><div class="card-body" style="text-align:center"><span class="spinner"></span> Loading server roles...</div></div>';
+    const res = await api('GET', '/api/server-roles');
+    if(!res.ok){ el.innerHTML = `<div class="card"><div class="card-body"><p style="color:#ff5a67">Failed to load: ${esc(res.reason||'error')}</p></div></div>`; return; }
+    const roles = res.data || [];
+
+    function hexColor(c){ if(!c) return '#8fa0bd'; return '#'+c.toString(16).padStart(6,'0'); }
+
+    const rows = roles.map(r => {
+      const color = hexColor(r.color);
+      const permsNum = BigInt(r.permissions||'0');
+      const isAdmin = (permsNum & 8n) > 0n;
+      const canBan  = (permsNum & 4n) > 0n;
+      const canKick = (permsNum & 2n) > 0n;
+      const canManageRoles = (permsNum & 268435456n) > 0n;
+      const permsTags = [
+        isAdmin && '<span class="badge badge-danger" style="font-size:10px">ADMIN</span>',
+        canBan  && '<span class="badge badge-warning" style="font-size:10px">BAN</span>',
+        canKick && '<span class="badge badge-info" style="font-size:10px">KICK</span>',
+        canManageRoles && '<span class="badge" style="background:rgba(155,89,182,.15);color:#9b59b6;font-size:10px">MANAGE ROLES</span>',
+      ].filter(Boolean).join(' ');
+      return `<tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="role-color-dot" style="background:${color}"></span>
+            <b>${esc(r.name)}</b>
+            ${r.managed?'<span class="badge badge-info" style="font-size:10px">managed</span>':''}
+          </div>
+        </td>
+        <td style="color:#8fa0bd;font-size:12px">${r.memberCount}</td>
+        <td><div style="display:flex;gap:4px;flex-wrap:wrap">${permsTags||'<span style="color:#53617a;font-size:12px">none</span>'}</div></td>
+        <td style="color:#8fa0bd;font-size:12px">${r.position}</td>
+        <td>
+          ${(isOwner||isFullAccess)&&!r.managed&&r.id!=='@everyone'?`
+            <button class="btn btn-sm btn-warning" onclick="editServerRole('${esc(r.id)}','${esc(r.name)}',${r.color||0})" title="Edit"><i class="ti ti-edit"></i></button>
+            <button class="btn btn-sm btn-success" onclick="addMemberToRole('${esc(r.id)}','${esc(r.name)}')" title="Add Member"><i class="ti ti-user-plus"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteServerRole('${esc(r.id)}','${esc(r.name)}')" title="Delete"><i class="ti ti-trash"></i></button>
+          `:'<span style="color:#53617a;font-size:12px">—</span>'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="page-bg-logo">
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-shield-star"></i> Server Roles</h3>
+          ${(isOwner||isFullAccess)?'<button class="btn btn-primary" onclick="createServerRole()"><i class="ti ti-plus"></i> Create Role</button>':''}
+        </div>
+        <div class="card-body">
+          <table>
+            <thead><tr><th>Role Name</th><th>Members</th><th>Permissions</th><th>Position</th><th>Actions</th></tr></thead>
+            <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No roles found</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+      </div>`;
+  }
+
+  window.createServerRole = () => {
+    qs('#modalTitle').textContent = 'Create Server Role';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Role Name</label><input id="srName" placeholder="Role name"></div>
+      <div class="form-group"><label>Color (hex e.g. #2f7cff)</label><input id="srColor" value="#2f7cff" type="color"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const name = qs('#srName').value.trim();
+      if(!name){ toast('Name required','#ff5a67'); return; }
+      const colorHex = qs('#srColor').value.trim();
+      const color = parseInt(colorHex.replace('#',''),16) || 0;
+      const r = await api('POST','/api/server-roles',{ name, color });
+      if(r.ok){ renderServerRoles(); closeModal(); toast('Role created ✓','#2ecc71'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.editServerRole = (id, name, color) => {
+    qs('#modalTitle').textContent = 'Edit Server Role';
+    const colorHex = '#'+color.toString(16).padStart(6,'0');
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Role Name</label><input id="srEditName" value="${esc(name)}"></div>
+      <div class="form-group"><label>Color</label><input id="srEditColor" type="color" value="${esc(colorHex)}"></div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const n = qs('#srEditName').value.trim();
+      const c = parseInt(qs('#srEditColor').value.replace('#',''),16) || 0;
+      const r = await api('PUT','/api/server-roles',{ id, name: n, color: c });
+      if(r.ok){ renderServerRoles(); closeModal(); toast('Role updated ✓'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.deleteServerRole = async (id, name) => {
+    if(!confirm(`Delete server role "${name}"?\nThis will remove the role from all members in Discord.`)) return;
+    const r = await api('DELETE','/api/server-roles',{ id });
+    if(r.ok){ renderServerRoles(); toast('Role deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.addMemberToRole = (roleId, roleName) => {
+    qs('#modalTitle').textContent = `Add Member to: ${roleName}`;
+    qs('#modalBody').innerHTML = `
+      <div class="form-group">
+        <label>Search Discord Member</label>
+        <div style="position:relative">
+          <input id="srMemberSearch" placeholder="Username, ID or nickname..." autocomplete="off">
+          <div id="srSearchResults" style="position:absolute;top:100%;left:0;right:0;background:#101827;border:1px solid rgba(255,255,255,.12);border-radius:14px;z-index:100;max-height:220px;overflow-y:auto;display:none;margin-top:4px"></div>
+        </div>
+      </div>
+      <div id="srSelectedMember" style="min-height:40px"></div>`;
+    let selectedUserId = null;
+    let st;
+    const si = qs('#srMemberSearch');
+    const rd = qs('#srSearchResults');
+    si.addEventListener('input', () => {
+      clearTimeout(st);
+      const q = si.value.trim();
+      if(!q){ rd.style.display='none'; return; }
+      rd.style.display='block';
+      rd.innerHTML='<div style="padding:10px;color:#53617a;text-align:center"><span class="spinner"></span></div>';
+      st = setTimeout(async()=>{
+        const res = await api('GET',`/api/discord/members?q=${encodeURIComponent(q)}`);
+        if(!res.ok||!res.data?.length){ rd.innerHTML='<div style="padding:10px;color:#53617a;text-align:center">No members found</div>'; return; }
+        rd.innerHTML = res.data.map(m=>`
+          <div onclick="window._selectSrMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
+            <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+            <div><div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div><div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div></div>
+          </div>`).join('');
+      }, 400);
+    });
+    window._selectSrMember = (m) => {
+      selectedUserId = m.id;
+      rd.style.display='none';
+      si.value='';
+      qs('#srSelectedMember').innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:12px">
+        <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <div><b>${esc(m.displayName)}</b><div style="font-size:11px;color:#53617a">${esc(m.id)}</div></div>
+      </div>`;
+    };
+    qs('#modalConfirmBtn').onclick = async () => {
+      if(!selectedUserId){ toast('Select a member first','#f3c75a'); return; }
+      const r = await api('PUT','/api/server-roles/member',{ roleId, userId: selectedUserId });
+      if(r.ok){ renderServerRoles(); closeModal(); toast('Member added ✓','#2ecc71'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  // ═══════════════════════════ WEBSITE ROLES PAGE ═══════════════════════════
+  async function renderWebsiteRoles(){
+    const el = qs('#websiteRoles');
+    el.innerHTML = '<div class="card"><div class="card-body" style="text-align:center"><span class="spinner"></span> Loading roles...</div></div>';
+    const res = await api('GET', '/api/website-roles');
+    if(!res.ok){ el.innerHTML = `<div class="card"><div class="card-body"><p style="color:#ff5a67">Failed to load</p></div></div>`; return; }
+    const roles = res.data || [];
+
+    const accessColors = { ownership:'#f3c75a', full:'#c0392b', high:'#e67e22', standard:'#3498db', basic:'#8fa0bd' };
+    const accessLabels = { ownership:'👑 Ownership', full:'🔑 Full Access', high:'⚡ High', standard:'📋 Standard', basic:'👮 Basic' };
+
+    const rows = roles.map(r => `
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 20px;margin-bottom:12px;${r.protected?'border-color:rgba(243,199,90,.2)':''}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <b style="font-size:15px">${esc(r.name)}</b>
+              ${r.protected?'<span class="badge badge-warning" style="font-size:10px">🔒 Protected</span>':''}
+              <span class="hier-badge">Lvl ${r.hierarchy}</span>
+              <span class="badge" style="background:${accessColors[r.accessLevel]||'#8fa0bd'}22;color:${accessColors[r.accessLevel]||'#8fa0bd'};border:1px solid ${accessColors[r.accessLevel]||'#8fa0bd'}44;font-size:11px">${accessLabels[r.accessLevel]||r.accessLevel}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+              ${(r.permissions||[]).map(p=>`<span class="badge" style="font-size:10px;background:${PERM_COLOR[p]||'#3498db'}22;color:${PERM_COLOR[p]||'#3498db'};border:1px solid ${PERM_COLOR[p]||'#3498db'}44">${esc(p)}</span>`).join('')||'<span style="color:#53617a;font-size:12px">no permissions</span>'}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${(r.members||[]).slice(0,8).map(m=>`
+                <div style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:3px 10px;font-size:12px">
+                  ${m.avatar?`<img src="${esc(m.avatar)}" style="width:16px;height:16px;border-radius:50%;object-fit:cover">`:
+                    `<div style="width:16px;height:16px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:9px;font-weight:700">${esc((m.username||'?')[0].toUpperCase())}</div>`}
+                  ${esc(m.username||m.id)}
+                </div>`).join('')}
+              ${(r.members||[]).length>8?`<span style="color:#8fa0bd;font-size:12px">+${r.members.length-8} more</span>`:''}
+              ${!(r.members||[]).length?'<span style="color:#53617a;font-size:12px">No members</span>':''}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            ${!r.protected?`
+              <button class="btn btn-sm btn-warning" onclick="editWebsiteRole(${r.id})" title="Edit"><i class="ti ti-edit"></i></button>
+              <button class="btn btn-sm btn-success" onclick="assignWebsiteRole(${r.id},'${esc(r.name)}')" title="Assign Member"><i class="ti ti-user-plus"></i></button>
+              <button class="btn btn-sm btn-danger" onclick="deleteWebsiteRole(${r.id},'${esc(r.name)}')" title="Delete"><i class="ti ti-trash"></i></button>
+            `:'<span style="color:#53617a;font-size:12px">Protected</span>'}
+          </div>
+        </div>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <div class="page-bg-logo">
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-lock-access"></i> Website Roles</h3>
+          <button class="btn btn-primary" onclick="createWebsiteRole()"><i class="ti ti-plus"></i> Create Role</button>
+        </div>
+        <div class="card-body">
+          ${rows||'<p style="color:#8fa0bd;text-align:center">No roles found</p>'}
+        </div>
+      </div>
+      </div>`;
+  }
+
+  window.createWebsiteRole = () => {
+    qs('#modalTitle').textContent = 'Create Website Role';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Role Name</label><input id="wrName" placeholder="Role name"></div>
+      <div class="form-group"><label>Hierarchy Level</label><input id="wrHier" type="number" value="10" min="1" max="999"></div>
+      <div class="form-group"><label>Permissions</label>
+        <div style="display:grid;gap:10px;margin-top:8px">
+          ${PERM_GROUPS.map(g=>`
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px">
+              <b style="font-size:12px;color:${g.color}">${g.label}</b>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+                ${g.perms.map(p=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.03)">
+                  <input type="checkbox" value="${p}" class="wr-perm" style="width:auto;padding:0;margin:0"> ${p.replace(/_/g,' ')}
+                </label>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const name = qs('#wrName').value.trim();
+      if(!name){ toast('Name required','#ff5a67'); return; }
+      const permissions = [...document.querySelectorAll('.wr-perm:checked')].map(c=>c.value);
+      const hierarchy = parseInt(qs('#wrHier').value)||10;
+      const r = await api('POST','/api/website-roles',{ name, permissions, hierarchy });
+      if(r.ok){ renderWebsiteRoles(); closeModal(); toast('Role created ✓','#2ecc71'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.editWebsiteRole = (id) => {
+    const roles = (store.adminRoles||[]);
+    const role = roles.find(r=>r.id===id);
+    if(!role){ toast('Role not found','#ff5a67'); return; }
+    qs('#modalTitle').textContent = 'Edit Website Role';
+    qs('#modalBody').innerHTML = `
+      <div class="form-group"><label>Role Name</label><input id="wrEditName" value="${esc(role.name||'')}"></div>
+      <div class="form-group"><label>Hierarchy Level</label><input id="wrEditHier" type="number" value="${role.hierarchy||10}" min="1" max="999"></div>
+      <div class="form-group"><label>Permissions</label>
+        <div style="display:grid;gap:10px;margin-top:8px">
+          ${PERM_GROUPS.map(g=>`
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px">
+              <b style="font-size:12px;color:${g.color}">${g.label}</b>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+                ${g.perms.map(p=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.03)">
+                  <input type="checkbox" value="${p}" class="wr-edit-perm" ${(role.permissions||[]).includes(p)?'checked':''} style="width:auto;padding:0;margin:0"> ${p.replace(/_/g,' ')}
+                </label>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const name = qs('#wrEditName').value.trim();
+      if(!name){ toast('Name required','#ff5a67'); return; }
+      const permissions = [...document.querySelectorAll('.wr-edit-perm:checked')].map(c=>c.value);
+      const hierarchy = parseInt(qs('#wrEditHier').value)||10;
+      const r = await api('PUT','/api/website-roles',{ id, name, permissions, hierarchy });
+      if(r.ok){
+        const idx=(store.adminRoles||[]).findIndex(x=>x.id===id);
+        if(idx!==-1) store.adminRoles[idx]={...store.adminRoles[idx],name,permissions,hierarchy};
+        renderWebsiteRoles(); closeModal(); toast('Role updated ✓');
+      } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.deleteWebsiteRole = async (id, name) => {
+    if(!confirm(`Delete website role "${name}"?\nAll members will lose this role.`)) return;
+    const r = await api('DELETE','/api/website-roles',{ id });
+    if(r.ok){ store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id); renderWebsiteRoles(); toast('Role deleted','#ff5a67'); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.assignWebsiteRole = (roleId, roleName) => {
+    qs('#modalTitle').textContent = `Assign Member to: ${roleName}`;
+    qs('#modalBody').innerHTML = `
+      <div class="form-group">
+        <label>Search Discord Member</label>
+        <div style="position:relative">
+          <input id="wrAssignSearch" placeholder="Username, ID or nickname..." autocomplete="off">
+          <div id="wrAssignResults" style="position:absolute;top:100%;left:0;right:0;background:#101827;border:1px solid rgba(255,255,255,.12);border-radius:14px;z-index:100;max-height:220px;overflow-y:auto;display:none;margin-top:4px"></div>
+        </div>
+      </div>
+      <div id="wrAssignSelected" style="min-height:40px"></div>`;
+    let selectedUserId = null;
+    let st2;
+    const si2 = qs('#wrAssignSearch');
+    const rd2 = qs('#wrAssignResults');
+    si2.addEventListener('input', () => {
+      clearTimeout(st2);
+      const q = si2.value.trim();
+      if(!q){ rd2.style.display='none'; return; }
+      rd2.style.display='block';
+      rd2.innerHTML='<div style="padding:10px;color:#53617a;text-align:center"><span class="spinner"></span></div>';
+      st2 = setTimeout(async()=>{
+        const res = await api('GET',`/api/discord/members?q=${encodeURIComponent(q)}`);
+        if(!res.ok||!res.data?.length){ rd2.innerHTML='<div style="padding:10px;color:#53617a;text-align:center">No members found</div>'; return; }
+        rd2.innerHTML = res.data.map(m=>`
+          <div onclick="window._selectWrMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
+            <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+            <div><div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div><div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div></div>
+          </div>`).join('');
+      }, 400);
+    });
+    window._selectWrMember = (m) => {
+      selectedUserId = m.id;
+      rd2.style.display='none'; si2.value='';
+      qs('#wrAssignSelected').innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:12px">
+        <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <div><b>${esc(m.displayName)}</b><div style="font-size:11px;color:#53617a">${esc(m.id)}</div></div>
+      </div>`;
+    };
+    qs('#modalConfirmBtn').onclick = async () => {
+      if(!selectedUserId){ toast('Select a member first','#f3c75a'); return; }
+      // Get current role
+      const role = (store.adminRoles||[]).find(r=>r.id===roleId);
+      if(!role){ toast('Role not found','#ff5a67'); return; }
+      const members = [...(role.members||[])];
+      if(members.includes(selectedUserId)){ toast('Already a member','#f3c75a'); return; }
+      members.push(selectedUserId);
+      const r = await api('PUT','/api/admin-roles',{ id: roleId, name: role.name, permissions: role.permissions, members });
+      if(r.ok){ const idx=(store.adminRoles||[]).findIndex(x=>x.id===roleId); if(idx!==-1) store.adminRoles[idx]=r.data; renderWebsiteRoles(); closeModal(); toast('Member assigned ✓','#2ecc71'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
     openModal();
   };
