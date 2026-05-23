@@ -275,6 +275,7 @@
       <button data-page="logs" data-admin-only style="display:none"><i class="ti ti-history"></i> <span data-i18n="system_logs">System Logs</span></button>
       <button data-page="settings" data-admin-only style="display:none"><i class="ti ti-settings"></i> <span data-i18n="settings">Settings</span></button>
       <button data-page="adminRoles" data-owner-only style="display:none"><i class="ti ti-shield-lock"></i> <span data-i18n="admin_roles">Admin Roles</span></button>
+      <button data-page="discordControl" data-admin-only style="display:none"><i class="ti ti-command"></i> <span data-i18n="discord_control">Discord Control Center</span></button>
       <button data-page="console" data-admin-only style="display:none"><i class="ti ti-terminal-2"></i> <span data-i18n="console">Console</span></button>
     </nav>
   </aside>
@@ -287,7 +288,7 @@
         <div class="avatar" id="userAvatar">U</div>
         <div><b id="userName">User</b><div id="userRole" class="role-badge">Officer</div></div>
         <button id="logoutBtn" class="btn" style="background:rgba(255,90,103,.15);color:#ff5a67">
-          <i class="ti ti-logout"></i> Logout
+          <i class="ti ti-logout"></i> <span data-i18n="logout">Logout</span>
         </button>
       </div>
     </div>
@@ -308,6 +309,7 @@
       <div id="logs"         class="page"></div>
       <div id="settings"     class="page"></div>
       <div id="adminRoles" class="page"></div>
+      <div id="discordControl" class="page"></div>
       <div id="console"    class="page"></div>
     </div>
   </main>
@@ -697,6 +699,7 @@
     logs:         renderLogs,
     settings:     renderSettings,
     adminRoles:   renderAdminRoles,
+    discordControl: renderDiscordControl,
     console:      renderConsole,
   };
 
@@ -1840,20 +1843,36 @@
   };
 
   window.revokeUserAccess = async (userId, displayName) => {
-    if(!confirm(`Revoke access for "${displayName}"?\n\nThis will:\n• Delete their nickname\n• Remove them from all admin roles\n• Block future login\n\nThis cannot be undone.`)) return;
-    const r = await api('DELETE', '/api/users/revoke', { userId });
-    if(r.ok){
-      // Remove from local store
-      store.users = (store.users||[]).filter(u=>u.id!==userId);
-      if(store.nicknames) delete store.nicknames[userId];
-      // Remove from adminRoles
-      if(store.adminRoles){
-        store.adminRoles = store.adminRoles.map(role=>({
-          ...role, members:(role.members||[]).filter(m=>m!==userId)
-        }));
-      }
-      renderDiscordUsers(); toast(`Access revoked for ${displayName}`,'#ff5a67');
-    } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    qs('#modalTitle').textContent = '⚠️ Revoke Access';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+      <div style="font-size:48px;margin-bottom:16px">⛔</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:8px">Revoke access for <b>${esc(displayName)}</b>?</p>
+      <div style="background:rgba(255,90,103,.08);border:1px solid rgba(255,90,103,.2);border-radius:12px;padding:12px;text-align:left;font-size:13px;color:#ff5a67;line-height:2">
+        • Delete their nickname<br>
+        • Remove from all admin roles<br>
+        • Block future login<br>
+        • Invalidate current session
+      </div>
+      <p style="color:#ff5a67;font-size:12px;margin-top:10px">This cannot be undone.</p>
+    </div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Revoke Access';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE', '/api/users/revoke', { userId });
+      if(r.ok){
+        store.users = (store.users||[]).filter(u=>u.id!==userId);
+        if(store.nicknames) delete store.nicknames[userId];
+        if(store.adminRoles){
+          store.adminRoles = store.adminRoles.map(role=>({
+            ...role, members:(role.members||[]).filter(m=>m!==userId)
+          }));
+        }
+        renderDiscordUsers(); closeModal(); toast(`Access revoked for ${displayName}`,'#ff5a67');
+      } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   function renderLogs(){
@@ -1953,6 +1972,7 @@
       { key:'settings',    label:'⚙️ Settings Logs Webhook',      color:'#95a5a6' },
       { key:'database',    label:'🗄️ Database Logs Webhook',      color:'#c0392b' },
     ];
+    const branding = store._branding || {};
     qs('#settings').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-settings"></i> General Settings</h3></div>
@@ -1970,25 +1990,69 @@
       </div>
 
       ${isAdmin?`
+      <!-- ════ SITE BRANDING CONTROL ════ -->
+      <div class="card" style="border-color:rgba(243,199,90,.2)">
+        <div class="card-header" style="border-color:rgba(243,199,90,.1)">
+          <h3><i class="ti ti-paint" style="color:#f3c75a"></i> Site Branding Control</h3>
+          <span style="font-size:12px;color:#8fa0bd">Changes apply instantly — no restart needed</span>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+            <!-- Logo Preview -->
+            <div style="grid-column:1/-1;display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:16px;background:rgba(243,199,90,.04);border:1px solid rgba(243,199,90,.15);border-radius:14px">
+              <div style="width:80px;height:80px;border-radius:50%;border:2px solid #f3c75a;background:#0b1730;display:grid;place-items:center;overflow:hidden;flex-shrink:0" id="logoPreview">
+                ${store._logoUrl?`<img src="${esc(store._logoUrl)}" style="width:100%;height:100%;object-fit:contain">`:'<span style="font-size:32px">🛡️</span>'}
+              </div>
+              <div style="flex:1">
+                <div class="form-group" style="margin-bottom:10px">
+                  <label>Dashboard Logo / Login Icon URL</label>
+                  <input id="logoUrl" value="${esc(store._logoUrl||'')}" placeholder="https://example.com/logo.png">
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-warning btn-sm" onclick="previewLogo()"><i class="ti ti-eye"></i> Preview</button>
+                  <button class="btn btn-primary btn-sm" onclick="saveLogo()"><i class="ti ti-device-floppy"></i> Save Logo</button>
+                  ${store._logoUrl?`<button class="btn btn-danger btn-sm" onclick="removeLogo()"><i class="ti ti-trash"></i> Remove</button>`:''}
+                </div>
+              </div>
+            </div>
+
+            <!-- Site Name -->
+            <div class="form-group" style="margin:0">
+              <label><i class="ti ti-typography" style="color:#2f7cff"></i> Site Name</label>
+              <input id="brandSiteName" value="${esc(branding.siteName||'SHJ LSPD')}" placeholder="SHJ LSPD">
+              <div style="font-size:11px;color:#53617a;margin-top:4px">Shown in sidebar and login page</div>
+            </div>
+
+            <!-- Path/Slug -->
+            <div class="form-group" style="margin:0">
+              <label><i class="ti ti-route" style="color:#9b59b6"></i> Site Sub-Title</label>
+              <input id="brandSubTitle" value="${esc(branding.subTitle||'Command Center')}" placeholder="Command Center">
+              <div style="font-size:11px;color:#53617a;margin-top:4px">Shown below site name in sidebar</div>
+            </div>
+
+            <!-- Favicon -->
+            <div class="form-group" style="margin:0">
+              <label><i class="ti ti-browser" style="color:#f3c75a"></i> Favicon URL (Browser Tab Icon)</label>
+              <input id="brandFavicon" value="${esc(branding.favicon||'')}" placeholder="https://example.com/favicon.ico">
+            </div>
+
+            <!-- Login Background -->
+            <div class="form-group" style="margin:0">
+              <label><i class="ti ti-photo" style="color:#2ecc71"></i> Login Page Background URL</label>
+              <input id="brandLoginBg" value="${esc(branding.loginBg||'')}" placeholder="https://example.com/bg.jpg">
+            </div>
+          </div>
+
+          <!-- Preview of login background -->
+          ${branding.loginBg?`<div style="margin-bottom:16px;border-radius:12px;overflow:hidden;height:120px;background-image:url('${esc(branding.loginBg)}');background-size:cover;background-position:center;position:relative"><div style="position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:white;font-weight:600">Login Background Preview</div></div>`:''}
+
+          <button class="btn btn-primary" onclick="saveBranding()"><i class="ti ti-device-floppy"></i> Save All Branding</button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-photo"></i> Logo System</h3></div>
         <div class="card-body">
-          <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:20px">
-            <div style="width:80px;height:80px;border-radius:50%;border:2px solid #f3c75a;background:#0b1730;display:grid;place-items:center;overflow:hidden" id="logoPreview">
-              ${store._logoUrl?`<img src="${esc(store._logoUrl)}" style="width:100%;height:100%;object-fit:contain">`:'<span style="font-size:32px">🛡️</span>'}
-            </div>
-            <div style="flex:1">
-              <div class="form-group" style="margin-bottom:12px">
-                <label>Logo URL</label>
-                <input id="logoUrl" value="${esc(store._logoUrl||'')}" placeholder="https://example.com/logo.png">
-              </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-warning btn-sm" onclick="previewLogo()"><i class="ti ti-eye"></i> Preview</button>
-                <button class="btn btn-primary btn-sm" onclick="saveLogo()"><i class="ti ti-device-floppy"></i> Save Logo</button>
-                ${store._logoUrl?`<button class="btn btn-danger btn-sm" onclick="removeLogo()"><i class="ti ti-trash"></i> Remove</button>`:''}
-              </div>
-            </div>
-          </div>
           <p style="font-size:12px;color:#8fa0bd">Logo appears on login page, navbar, and top header. Updates instantly across the system.</p>
         </div>
       </div>
@@ -2048,6 +2112,72 @@
       </div>`}`;
   }
 
+  window.saveBranding = async () => {
+    const siteName  = qs('#brandSiteName')?.value?.trim() || 'SHJ LSPD';
+    const subTitle  = qs('#brandSubTitle')?.value?.trim() || 'Command Center';
+    const favicon   = qs('#brandFavicon')?.value?.trim() || '';
+    const loginBg   = qs('#brandLoginBg')?.value?.trim() || '';
+    const logoUrl   = qs('#logoUrl')?.value?.trim() || '';
+
+    // Apply immediately to UI
+    const brandEl = qs('.brand h1');
+    const brandP  = qs('.brand p');
+    const loginH1 = qs('#loginContainer h1');
+    if(brandEl) brandEl.textContent = siteName;
+    if(brandP)  brandP.textContent  = subTitle;
+    if(loginH1) loginH1.textContent = siteName;
+
+    // Apply favicon
+    if(favicon){
+      let link = document.querySelector("link[rel~='icon']");
+      if(!link){ link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
+      link.href = favicon;
+    }
+    // Apply login background
+    const loginContainer = qs('#loginContainer');
+    if(loginContainer && loginBg){
+      loginContainer.style.backgroundImage = `url('${loginBg}')`;
+      loginContainer.style.backgroundSize  = 'cover';
+      loginContainer.style.backgroundPosition = 'center';
+    }
+    // Save logo if provided
+    if(logoUrl){
+      await api('PUT', '/api/logo', { url: logoUrl });
+      applyLogo(logoUrl);
+    }
+
+    store._branding = { siteName, subTitle, favicon, loginBg };
+    localStorage.setItem('lspd_branding', JSON.stringify(store._branding));
+    // Also persist to KV for server-wide sync (non-blocking)
+    api('PUT', '/api/branding', store._branding).catch(()=>{});
+    toast('Branding saved & applied ✓', '#2ecc71');
+    renderSettings();
+  };
+
+  // Apply saved branding on load — reads localStorage instantly, then syncs KV
+  function applyStoredBranding(){
+    try {
+      const b = JSON.parse(localStorage.getItem('lspd_branding') || 'null');
+      if(b){ _applyBrandingObj(b); }
+    } catch(e){}
+    // Async: also pull from KV (for shared branding across sessions/devices)
+    api('GET', '/api/branding').then(res => {
+      if(res.ok && res.data && Object.keys(res.data).length){
+        store._branding = { ...store._branding, ...res.data };
+        localStorage.setItem('lspd_branding', JSON.stringify(store._branding));
+        _applyBrandingObj(store._branding);
+      }
+    }).catch(()=>{});
+  }
+  function _applyBrandingObj(b){
+    if(!b) return;
+    store._branding = b;
+    if(b.siteName){ const el=qs('.brand h1'); if(el) el.textContent=b.siteName; const lh=qs('#loginContainer h1'); if(lh) lh.textContent=b.siteName; document.title=b.siteName; }
+    if(b.subTitle){ const el=qs('.brand p'); if(el) el.textContent=b.subTitle; }
+    if(b.favicon){ let lnk=document.querySelector("link[rel~='icon']"); if(!lnk){lnk=document.createElement('link');lnk.rel='icon';document.head.appendChild(lnk);} lnk.href=b.favicon; }
+    if(b.loginBg){ const lc=qs('#loginContainer'); if(lc){lc.style.backgroundImage=`url('${b.loginBg}')`;lc.style.backgroundSize='cover';lc.style.backgroundPosition='center';} }
+  }
+
   window.previewLogo = () => {
     const url = qs('#logoUrl')?.value?.trim();
     if(!url){ toast('Enter a URL first','#f3c75a'); return; }
@@ -2097,7 +2227,7 @@
     qs('#modalTitle').textContent = '⚠️ Reset Database';
     qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:48px;margin-bottom:12px">💥</div><p style="font-size:15px;font-weight:700;color:#ff5a67;margin-bottom:8px">DANGER: Reset ALL Database!</p><p style="color:#8fa0bd;font-size:13px">This will permanently delete ALL data and reset to defaults. This CANNOT be undone!</p></div>`;
     qs('#modalConfirmBtn').className = 'btn btn-danger';
-    qs('#modalConfirmBtn').textContent = '💥 Confirmed';
+    qs('#modalConfirmBtn').textContent = '💥 Reset Everything';
     qs('#modalConfirmBtn').onclick = async () => {
       const r = await api('POST','/api/database/reset');
       if(r.ok){ await loadAllData(); navigate('dashboard'); closeModal(); toast('Database reset ✓','#f3c75a'); }
@@ -2468,6 +2598,131 @@
     openModal();
   };
 
+  // ═══════════════════════════ DISCORD PERMISSIONS SYSTEM ═══════════════════════════
+  const DISCORD_PERM_GROUPS = [
+    {
+      label: 'General Server', color: '#f3c75a', icon: 'ti-settings',
+      perms: [
+        { name:'Administrator', bit:'8', desc:'Full server control' },
+        { name:'Manage Server', bit:'32', desc:'Edit server settings' },
+        { name:'Manage Roles', bit:'268435456', desc:'Create/edit/delete roles below own' },
+        { name:'Manage Channels', bit:'16', desc:'Create/edit/delete channels' },
+        { name:'View Audit Log', bit:'128', desc:'View server audit logs' },
+        { name:'Manage Webhooks', bit:'536870912', desc:'Manage server webhooks' },
+        { name:'Manage Expressions', bit:'8192', desc:'Manage emojis & stickers' },
+        { name:'Manage Events', bit:'8589934592', desc:'Manage scheduled events' },
+      ]
+    },
+    {
+      label: 'Member Control', color: '#e74c3c', icon: 'ti-users',
+      perms: [
+        { name:'Kick Members', bit:'2', desc:'Remove members from server' },
+        { name:'Ban Members', bit:'4', desc:'Ban members from server' },
+        { name:'Timeout Members', bit:'1099511627776', desc:'Timeout members' },
+        { name:'Moderate Members', bit:'1099511627776', desc:'Apply moderation actions' },
+        { name:'Manage Nicknames', bit:'134217728', desc:'Change others\' nicknames' },
+        { name:'Create Invite', bit:'1', desc:'Create server invites' },
+        { name:'Change Nickname', bit:'67108864', desc:'Change own nickname' },
+        { name:'Mention Everyone', bit:'131072', desc:'Mention @everyone and @here' },
+      ]
+    },
+    {
+      label: 'Text Channels', color: '#3498db', icon: 'ti-message',
+      perms: [
+        { name:'Send Messages', bit:'2048', desc:'Send messages in text channels' },
+        { name:'Send Messages in Threads', bit:'274877906944', desc:'Send messages in threads' },
+        { name:'Create Public Threads', bit:'34359738368', desc:'Create public threads' },
+        { name:'Create Private Threads', bit:'137438953472', desc:'Create private threads' },
+        { name:'Embed Links', bit:'16384', desc:'Embed links in messages' },
+        { name:'Attach Files', bit:'32768', desc:'Attach files to messages' },
+        { name:'Add Reactions', bit:'64', desc:'Add reactions to messages' },
+        { name:'Use External Emojis', bit:'262144', desc:'Use emojis from other servers' },
+        { name:'Manage Messages', bit:'8192', desc:'Delete/pin any messages' },
+        { name:'Manage Threads', bit:'17592186044416', desc:'Archive/delete any thread' },
+        { name:'Read Message History', bit:'65536', desc:'Read previous messages' },
+        { name:'View Channel', bit:'1024', desc:'View channels and messages' },
+      ]
+    },
+    {
+      label: 'Voice Channels', color: '#2ecc71', icon: 'ti-microphone',
+      perms: [
+        { name:'Connect', bit:'1048576', desc:'Connect to voice channels' },
+        { name:'Speak', bit:'2097152', desc:'Speak in voice channels' },
+        { name:'Video', bit:'512', desc:'Use video in voice channels' },
+        { name:'Stream', bit:'512', desc:'Stream in voice channels' },
+        { name:'Mute Members', bit:'4194304', desc:'Mute others in voice' },
+        { name:'Deafen Members', bit:'8388608', desc:'Deafen others in voice' },
+        { name:'Move Members', bit:'16777216', desc:'Move members between voice channels' },
+        { name:'Priority Speaker', bit:'256', desc:'Priority in voice transmission' },
+        { name:'Use Soundboard', bit:'4294967296', desc:'Use soundboard in voice' },
+        { name:'Use External Sounds', bit:'34359738368', desc:'Use sounds from other servers' },
+        { name:'Request to Speak', bit:'4294967296', desc:'Request to speak in stage' },
+        { name:'Manage Events (Voice)', bit:'8589934592', desc:'Manage voice events' },
+      ]
+    },
+    {
+      label: 'Applications & Bots', color: '#9b59b6', icon: 'ti-robot',
+      perms: [
+        { name:'Use Application Commands', bit:'2147483648', desc:'Use slash commands' },
+        { name:'Use Embedded Activities', bit:'549755813888', desc:'Use voice channel activities' },
+        { name:'Use External Applications', bit:'549755813888', desc:'Use external application commands' },
+      ]
+    },
+  ];
+
+  function renderDiscordPermPicker(selectedBits = [], prefix = 'dperm') {
+    return `<div style="border:1px solid rgba(114,137,218,.3);border-radius:14px;overflow:hidden;margin-top:8px">
+      <div style="background:rgba(114,137,218,.1);padding:12px 16px;border-bottom:1px solid rgba(114,137,218,.2)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <i class="ti ti-brand-discord" style="color:#7289da;font-size:18px"></i>
+            <b style="font-size:14px;color:#7289da">Link Discord Permissions</b>
+          </div>
+          <div style="display:flex;gap:8px">
+            <input id="${prefix}_search" placeholder="🔍 Search permission..." style="background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;font-size:12px;width:180px" oninput="filterDiscordPerms('${prefix}',this.value)">
+          </div>
+        </div>
+      </div>
+      <div id="${prefix}_body" style="max-height:280px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
+        ${DISCORD_PERM_GROUPS.map((g,gi)=>`
+          <div class="${prefix}_group" data-group="${gi}">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.06)">
+              <i class="ti ${g.icon}" style="color:${g.color};font-size:13px"></i>
+              <b style="font-size:12px;color:${g.color}">${g.label}</b>
+              <button type="button" onclick="toggleDiscordPermGroup('${prefix}',${gi})" style="margin-left:auto;font-size:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:2px 8px;cursor:pointer;color:#8fa0bd">All</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+              ${g.perms.map(p=>`
+                <label title="${p.desc}" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;padding:5px 8px;border-radius:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);transition:.1s" onmouseover="this.style.borderColor='${g.color}44'" onmouseout="this.style.borderColor='rgba(255,255,255,.04)'" class="${prefix}_perm_item">
+                  <input type="checkbox" value="${p.bit}" class="${prefix}_dperm" ${selectedBits.includes(p.bit)?'checked':''} style="width:auto;padding:0;margin:0;accent-color:${g.color}">
+                  <span style="flex:1;font-weight:500">${p.name}</span>
+                </label>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  window.filterDiscordPerms = (prefix, query) => {
+    const q = query.toLowerCase();
+    document.querySelectorAll(`.${prefix}_perm_item`).forEach(el => {
+      const text = el.textContent.toLowerCase();
+      el.style.display = !q || text.includes(q) ? '' : 'none';
+    });
+    document.querySelectorAll(`.${prefix}_group`).forEach(g => {
+      const visible = [...g.querySelectorAll(`.${prefix}_perm_item`)].some(el=>el.style.display!=='none');
+      g.style.display = visible ? '' : 'none';
+    });
+  };
+
+  window.toggleDiscordPermGroup = (prefix, groupIdx) => {
+    const group = document.querySelector(`.${prefix}_group[data-group="${groupIdx}"]`);
+    if(!group) return;
+    const checkboxes = group.querySelectorAll(`.${prefix}_dperm`);
+    const allChecked = [...checkboxes].every(c=>c.checked);
+    checkboxes.forEach(c => c.checked = !allChecked);
+  };
+
   // ═══════════════════════════ SERVER ROLES PAGE ═══════════════════════════
   async function renderServerRoles(){
     const el = qs('#serverRoles');
@@ -2566,10 +2821,21 @@
   };
 
   window.removeRoleMember = async (roleId, userId, displayName) => {
-    if(!confirm(`Remove "${displayName}" from this role?`)) return;
-    const r = await api('DELETE', '/api/server-roles/member', { roleId, userId });
-    if(r.ok){ toast('Member removed ✓', '#2ecc71'); closeModal(); renderServerRoles(); }
-    else toast('Error: '+(r.reason||r.details||'failed'),'#ff5a67');
+    qs('#modalTitle').textContent = '⚠️ Remove Member';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+      <div style="font-size:40px;margin-bottom:12px">👤</div>
+      <p>Remove <b>${esc(displayName)}</b> from this role?</p>
+    </div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Remove';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE', '/api/server-roles/member', { roleId, userId });
+      if(r.ok){ toast('Member removed ✓', '#2ecc71'); closeModal(); renderServerRoles(); }
+      else toast('Error: '+(r.reason||r.details||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.createServerRole = () => {
@@ -2577,14 +2843,15 @@
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="srName" placeholder="Role name"></div>
       <div class="form-group"><label>Color</label><input id="srColor" value="#2f7cff" type="color"></div>
+
       <div style="border:1px solid rgba(47,124,255,.2);border-radius:14px;padding:16px;margin-top:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
           <i class="ti ti-link" style="color:#2f7cff"></i>
           <b style="font-size:13px;color:#2f7cff">Link Website Permissions</b>
           <span style="font-size:11px;color:#53617a;margin-left:auto">Optional</span>
         </div>
-        <p style="font-size:12px;color:#53617a;margin-bottom:12px">Link website permissions to this Discord role. Members with this role will automatically get these website permissions.</p>
-        <div style="display:grid;gap:8px;max-height:240px;overflow-y:auto">
+        <p style="font-size:12px;color:#53617a;margin-bottom:12px">Members with this role will automatically get these website permissions.</p>
+        <div style="display:grid;gap:8px;max-height:200px;overflow-y:auto">
           ${PERM_GROUPS.map(g=>`
             <div style="border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
@@ -2600,14 +2867,26 @@
               </div>
             </div>`).join('')}
         </div>
-      </div>`;
+      </div>
+
+      ${renderDiscordPermPicker([], 'sr_create')}`;
     qs('#modalConfirmBtn').onclick = async () => {
       const name = qs('#srName').value.trim();
       if(!name){ toast('Name required','#ff5a67'); return; }
       const colorHex = qs('#srColor').value.trim();
       const color = parseInt(colorHex.replace('#',''),16) || 0;
       const linkedPerms = [...document.querySelectorAll('.sr-link-perm:checked')].map(c=>c.value);
-      const r = await api('POST','/api/server-roles',{ name, color, linkedWebsitePermissions: linkedPerms });
+      const discordPerms = [...document.querySelectorAll('.sr_create_dperm:checked')].map(c=>c.value);
+      // Build Discord permissions integer from selected bits
+      const permInt = discordPerms.reduce((acc,bit) => {
+        try { return acc | BigInt(bit); } catch { return acc; }
+      }, 0n);
+      const r = await api('POST','/api/server-roles',{
+        name, color,
+        linkedWebsitePermissions: linkedPerms,
+        discordPermissions: permInt.toString(),
+        permissions: permInt.toString(),
+      });
       if(r.ok){ renderServerRoles(); closeModal(); toast('Role created ✓','#2ecc71'); }
       else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
@@ -2617,15 +2896,20 @@
   window.editServerRole = (id, name, color) => {
     qs('#modalTitle').textContent = 'Edit Server Role';
     const colorHex = '#'+color.toString(16).padStart(6,'0');
+    // Load existing linked permissions from KV store
+    const existingLinkedPerms = (store._serverRolePerms && store._serverRolePerms[id]) ? store._serverRolePerms[id] : [];
+    const existingDiscordPerms = (store._serverRoleDiscordPerms && store._serverRoleDiscordPerms[id]) ? store._serverRoleDiscordPerms[id] : [];
+
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="srEditName" value="${esc(name)}"></div>
       <div class="form-group"><label>Color</label><input id="srEditColor" type="color" value="${esc(colorHex)}"></div>
+
       <div style="border:1px solid rgba(47,124,255,.2);border-radius:14px;padding:16px;margin-top:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
           <i class="ti ti-link" style="color:#2f7cff"></i>
           <b style="font-size:13px;color:#2f7cff">Link Website Permissions</b>
         </div>
-        <div style="display:grid;gap:8px;max-height:220px;overflow-y:auto">
+        <div style="display:grid;gap:8px;max-height:180px;overflow-y:auto">
           ${PERM_GROUPS.map(g=>`
             <div style="border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
@@ -2635,29 +2919,60 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
                 ${g.perms.map(p=>`
                   <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.02)">
-                    <input type="checkbox" value="${p}" class="sr-edit-link-perm" style="width:auto;padding:0;margin:0">
+                    <input type="checkbox" value="${p}" class="sr-edit-link-perm" ${existingLinkedPerms.includes(p)?'checked':''} style="width:auto;padding:0;margin:0">
                     <span>${p.replace(/_/g,' ')}</span>
                   </label>`).join('')}
               </div>
             </div>`).join('')}
         </div>
-      </div>`;
+      </div>
+
+      ${renderDiscordPermPicker(existingDiscordPerms, 'sr_edit')}`;
+
     qs('#modalConfirmBtn').onclick = async () => {
       const n = qs('#srEditName').value.trim();
       const c = parseInt(qs('#srEditColor').value.replace('#',''),16) || 0;
       const linkedPerms = [...document.querySelectorAll('.sr-edit-link-perm:checked')].map(x=>x.value);
-      const r = await api('PUT','/api/server-roles',{ id, name: n, color: c, linkedWebsitePermissions: linkedPerms });
-      if(r.ok){ renderServerRoles(); closeModal(); toast('Role updated ✓'); }
+      const discordPerms = [...document.querySelectorAll('.sr_edit_dperm:checked')].map(x=>x.value);
+      const permInt = discordPerms.reduce((acc,bit) => {
+        try { return acc | BigInt(bit); } catch { return acc; }
+      }, 0n);
+      const r = await api('PUT','/api/server-roles',{
+        id, name: n, color: c,
+        linkedWebsitePermissions: linkedPerms,
+        discordPermissions: permInt.toString(),
+        permissions: permInt.toString(),
+      });
+      if(r.ok){
+        // Cache permissions locally for UI refresh
+        if(!store._serverRolePerms) store._serverRolePerms = {};
+        store._serverRolePerms[id] = linkedPerms;
+        if(!store._serverRoleDiscordPerms) store._serverRoleDiscordPerms = {};
+        store._serverRoleDiscordPerms[id] = discordPerms;
+        renderServerRoles(); closeModal(); toast('Role updated ✓');
+      }
       else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
     openModal();
   };
 
   window.deleteServerRole = async (id, name) => {
-    if(!confirm(`Delete server role "${name}"?\nThis will remove the role from all members in Discord.`)) return;
-    const r = await api('DELETE','/api/server-roles',{ id });
-    if(r.ok){ renderServerRoles(); toast('Role deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    qs('#modalTitle').textContent = '⚠️ Delete Server Role';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+      <div style="font-size:48px;margin-bottom:16px">🛡️</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:8px">Delete role <b>${esc(name)}</b>?</p>
+      <p style="color:#ff5a67;font-size:13px">This will remove the role from ALL members in Discord. This cannot be undone.</p>
+    </div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete Role';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/server-roles',{ id });
+      if(r.ok){ renderServerRoles(); closeModal(); toast('Role deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.addMemberToRole = (roleId, roleName) => {
@@ -2858,10 +3173,25 @@
   window.deleteWebsiteRole = async (id, name) => {
     const role = (store.adminRoles||[]).find(r=>r.id===id);
     if(!checkProtectedAccess(role, 'delet')) return;
-    if(!confirm(`Delete website role "${name}"?\nAll members will lose this role.`)) return;
-    const r = await api('DELETE','/api/website-roles',{ id });
-    if(r.ok){ store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id); renderWebsiteRoles(); toast('Role deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    qs('#modalTitle').textContent = '🗑️ Delete Website Role';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+      <div style="font-size:48px;margin-bottom:16px">🔒</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:8px">Delete website role <b style="color:#ff5a67">${esc(name)}</b>?</p>
+      <div style="background:rgba(255,90,103,.08);border:1px solid rgba(255,90,103,.2);border-radius:12px;padding:12px;text-align:left;font-size:13px;color:#ff5a67;line-height:2">
+        • All members will lose this role<br>
+        • Permissions will be revoked immediately<br>
+        • This cannot be undone
+      </div>
+    </div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete Role';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/website-roles',{ id });
+      if(r.ok){ store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id); renderWebsiteRoles(); closeModal(); toast('Role deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className='btn btn-primary'; qs('#modalConfirmBtn').textContent='Confirm';
+    };
+    openModal();
   };
 
   window.assignWebsiteRole = (roleId, roleName) => {
@@ -3127,7 +3457,544 @@
     consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;color:#ff5a67">${ts}❌ Unknown command: <span style="color:#edf3ff">'${esc(trimmed)}'</span>. Type <span style="color:#f3c75a">help</span> for available commands.</div>`);
   }
 
-  window.consoleExec = consoleExec;
+  // ═══════════════════════════ DISCORD CONTROL CENTER ═══════════════════════════
+  async function renderDiscordControl(){
+    if(!isAdmin){ qs('#discordControl').innerHTML='<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">Access denied — Admin only.</p></div></div>'; return; }
+    const el = qs('#discordControl');
+    el.innerHTML = `
+      <div class="page-bg-logo">
+        <!-- Header Stats -->
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+          <div class="stat-card"><i class="ti ti-brand-discord" style="color:#7289da"></i><div class="value" id="dcc-members">—</div><div class="label">Members</div></div>
+          <div class="stat-card"><i class="ti ti-microphone" style="color:#2ecc71"></i><div class="value" id="dcc-voice">—</div><div class="label">In Voice</div></div>
+          <div class="stat-card"><i class="ti ti-shield-star" style="color:#f3c75a"></i><div class="value" id="dcc-roles">—</div><div class="label">Roles</div></div>
+          <div class="stat-card"><i class="ti ti-hash" style="color:#3498db"></i><div class="value" id="dcc-channels">—</div><div class="label">Channels</div></div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+          ${['Members','Channels','Roles','Voice','Activity'].map((tab,i)=>`
+            <button onclick="dccTab('${tab.toLowerCase()}')" id="dcc-tab-${tab.toLowerCase()}" class="btn ${i===0?'btn-primary':''}" style="border-radius:12px;font-size:13px;${i===0?'':'background:rgba(255,255,255,.06)'}">
+              <i class="ti ${['ti-users','ti-hash','ti-shield-star','ti-microphone','ti-history'][i]}"></i> ${tab}
+            </button>`).join('')}
+        </div>
+
+        <!-- Tab Content -->
+        <div id="dcc-content">
+          <div class="card"><div class="card-body" style="text-align:center"><span class="spinner"></span> Loading Discord data...</div></div>
+        </div>
+
+        <!-- Real-time Log -->
+        <div class="card" style="margin-top:24px">
+          <div class="card-header">
+            <h3><i class="ti ti-activity" style="color:#2ecc71"></i> Real-time Action Log</h3>
+            <button class="btn btn-sm" onclick="qs('#dcc-realtime-log').innerHTML=''">Clear</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="dcc-realtime-log" style="max-height:200px;overflow-y:auto;font-family:monospace;font-size:12px;padding:12px;background:rgba(0,0,0,.3)">
+              <div style="color:#53617a">Real-time actions will appear here...</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    // Load initial data
+    await dccLoadStats();
+    await dccTab('members');
+  }
+
+  async function dccLoadStats(){
+    const [membersRes, rolesRes] = await Promise.all([
+      api('GET', '/api/discord/members?q='),
+      api('GET', '/api/server-roles'),
+    ]);
+    if(membersRes.ok){
+      const m = membersRes.data || [];
+      const el = qs('#dcc-members'); if(el) el.textContent = m.length;
+    }
+    if(rolesRes.ok){
+      const r = rolesRes.data || [];
+      const rel = qs('#dcc-roles'); if(rel) rel.textContent = r.length;
+    }
+  }
+
+  window.dccTab = async (tab) => {
+    // Update tab button styles
+    ['members','channels','roles','voice','activity'].forEach(t => {
+      const btn = qs(`#dcc-tab-${t}`);
+      if(btn){ btn.className = `btn ${t===tab?'btn-primary':''}`; btn.style.background = t===tab?'':'rgba(255,255,255,.06)'; }
+    });
+    const content = qs('#dcc-content');
+    if(!content) return;
+    content.innerHTML = '<div class="card"><div class="card-body" style="text-align:center"><span class="spinner"></span> Loading...</div></div>';
+
+    if(tab === 'members'){
+      const res = await api('GET', '/api/discord/members?q=');
+      if(!res.ok){ content.innerHTML=`<div class="card"><div class="card-body"><p style="color:#ff5a67">Failed: ${esc(res.reason||'error')}</p></div></div>`; return; }
+      const members = res.data || [];
+      const el2 = qs('#dcc-members'); if(el2) el2.textContent=members.length;
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h3><i class="ti ti-users"></i> Members (${members.length})</h3>
+            <input id="dcc-member-search" placeholder="🔍 Search member..." style="width:220px;padding:8px 12px;border-radius:10px;background:#0b1220;border:1px solid rgba(255,255,255,.12);color:white;font-size:13px" oninput="dccFilterMembers(this.value)">
+          </div>
+          <div class="card-body" style="padding:0;max-height:480px;overflow-y:auto">
+            <table style="margin:0">
+              <thead><tr><th>Member</th><th>Discord ID</th><th>Actions</th></tr></thead>
+              <tbody id="dcc-members-tbody">
+                ${members.map(m=>`
+                  <tr data-name="${esc(m.username.toLowerCase())} ${esc(m.displayName.toLowerCase())}">
+                    <td>
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                        <div>
+                          <div style="font-weight:600;font-size:13px">${esc(m.displayName)}</div>
+                          <div style="font-size:11px;color:#53617a">@${esc(m.username)}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-family:monospace;font-size:12px;color:#8fa0bd">${esc(m.id)}</td>
+                    <td>
+                      <div style="display:flex;gap:4px;flex-wrap:wrap">
+                        <button class="btn btn-sm" style="background:rgba(52,152,219,.15);color:#3498db;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','view')" title="View Profile"><i class="ti ti-eye"></i></button>
+                        <button class="btn btn-sm" style="background:rgba(243,199,90,.15);color:#f3c75a;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','nickname')" title="Edit Nickname"><i class="ti ti-at"></i></button>
+                        <button class="btn btn-sm" style="background:rgba(155,89,182,.15);color:#9b59b6;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','roles')" title="Manage Roles"><i class="ti ti-shield-star"></i></button>
+                        <button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','timeout')" title="Timeout"><i class="ti ti-clock-pause"></i></button>
+                        <button class="btn btn-sm" style="background:rgba(255,90,103,.15);color:#ff5a67;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','kick')" title="Kick"><i class="ti ti-user-minus"></i></button>
+                        <button class="btn btn-sm" style="background:rgba(192,57,43,.15);color:#c0392b;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','ban')" title="Ban"><i class="ti ti-ban"></i></button>
+                        <button class="btn btn-sm" style="background:rgba(95,99,104,.2);color:#8fa0bd;font-size:11px" onclick="navigator.clipboard.writeText('${esc(m.id)}').then(()=>toast('ID copied ✓','#2ecc71'))" title="Copy ID"><i class="ti ti-copy"></i></button>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    if(tab === 'roles'){
+      const res = await api('GET', '/api/server-roles');
+      if(!res.ok){ content.innerHTML=`<div class="card"><div class="card-body"><p style="color:#ff5a67">Failed to load roles</p></div></div>`; return; }
+      const roles = res.data || [];
+      const rel = qs('#dcc-roles'); if(rel) rel.textContent=roles.length;
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h3><i class="ti ti-shield-star"></i> Server Roles (${roles.length})</h3>
+            ${(isOwner||isFullAccess)?'<button class="btn btn-primary btn-sm" onclick="createServerRole()"><i class="ti ti-plus"></i> Create Role</button>':''}
+          </div>
+          <div class="card-body" style="padding:0;max-height:480px;overflow-y:auto">
+            <table style="margin:0">
+              <thead><tr><th>Role</th><th>Members</th><th>Position</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${roles.sort((a,b)=>(b.position||0)-(a.position||0)).map(r=>{
+                  const color = r.color ? '#'+r.color.toString(16).padStart(6,'0') : '#8fa0bd';
+                  return `<tr>
+                    <td><div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:${color};flex-shrink:0"></span><b>${esc(r.name)}</b></div></td>
+                    <td><span style="color:#8fa0bd">${r.memberCount||0}</span></td>
+                    <td><span style="color:#53617a">${r.position||0}</span></td>
+                    <td>
+                      ${(isOwner||isFullAccess)&&r.id!=='@everyone'?`
+                        <button class="btn btn-sm btn-warning" onclick="editServerRole('${esc(r.id)}','${esc(r.name)}',${r.color||0})"><i class="ti ti-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteServerRole('${esc(r.id)}','${esc(r.name)}')"><i class="ti ti-trash"></i></button>
+                      `:'<span style="color:#53617a;font-size:11px">—</span>'}
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    if(tab === 'channels'){
+      const chRes = await api('GET', '/api/discord/channels');
+      const channels = chRes.ok ? (chRes.data || []) : [];
+      const el2 = qs('#dcc-channels'); if(el2) el2.textContent = channels.filter(c=>c.type!==4).length;
+      const grouped = {};
+      channels.forEach(ch => {
+        const cat = ch.parent_name || (ch.type===4?'📁 Categories':'#️⃣ Uncategorized');
+        if(!grouped[cat]) grouped[cat]=[];
+        grouped[cat].push(ch);
+      });
+      const typeIcon = t => ({0:'ti-hash',2:'ti-microphone',4:'ti-folder',5:'ti-megaphone',10:'ti-messages',15:'ti-layout-list'}[t]||'ti-hash');
+      const typeName = t => ({0:'Text',2:'Voice',4:'Category',5:'Announce',10:'Thread',15:'Forum'}[t]||'Channel');
+      content.innerHTML = `<div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-hash"></i> Channels (${channels.filter(c=>c.type!==4).length})</h3>
+          ${isAdmin?`<button class="btn btn-primary btn-sm" onclick="dccCreateChannel()"><i class="ti ti-plus"></i> Create Channel</button>`:''}
+        </div>
+        <div class="card-body" style="padding:0;max-height:520px;overflow-y:auto">
+          ${chRes.ok ? Object.entries(grouped).sort(([a],[b])=>a.localeCompare(b)).map(([cat, chs])=>`
+            <div style="border-bottom:1px solid rgba(255,255,255,.05)">
+              <div style="padding:8px 16px;background:rgba(255,255,255,.02);font-size:11px;font-weight:700;color:#53617a;text-transform:uppercase;letter-spacing:.08em">${esc(cat)}</div>
+              ${chs.sort((a,b)=>(a.position||0)-(b.position||0)).map(ch=>`
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.03)">
+                  <i class="ti ${typeIcon(ch.type)}" style="color:#8fa0bd;font-size:14px;width:16px;flex-shrink:0"></i>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ch.name)}</div>
+                    <div style="font-size:11px;color:#53617a">${typeName(ch.type)}${ch.topic?` · <span style="color:#8fa0bd">${esc(ch.topic.slice(0,40))}${ch.topic.length>40?'...':''}</span>`:''}</div>
+                  </div>
+                  ${isAdmin&&ch.type!==4?`<div style="display:flex;gap:4px;flex-shrink:0">
+                    <button class="btn btn-sm" style="background:rgba(52,152,219,.15);color:#3498db;font-size:11px" onclick="dccEditChannel('${esc(ch.id)}','${esc(ch.name)}',${ch.type})" title="Edit"><i class="ti ti-edit"></i></button>
+                    <button class="btn btn-sm" style="background:rgba(255,90,103,.15);color:#ff5a67;font-size:11px" onclick="dccDeleteChannel('${esc(ch.id)}','${esc(ch.name)}')" title="Delete"><i class="ti ti-trash"></i></button>
+                    <button class="btn btn-sm" style="background:rgba(255,255,255,.04);color:#8fa0bd;font-size:11px" onclick="navigator.clipboard.writeText('${esc(ch.id)}').then(()=>toast('ID copied ✓','#2ecc71'))" title="Copy ID"><i class="ti ti-copy"></i></button>
+                  </div>`:''}
+                </div>`).join('')}
+            </div>`).join('') : `<div style="padding:20px;text-align:center;color:#ff5a67">Failed to load channels — Bot needs VIEW_CHANNELS permission</div>`}
+        </div>
+      </div>`;
+    }
+
+    if(tab === 'voice'){
+      const voiceRes = await api('GET', '/api/discord/members?q=');
+      const voiceMembers = voiceRes.ok ? (voiceRes.data || []) : [];
+      content.innerHTML = `<div class="card">
+        <div class="card-header">
+          <h3><i class="ti ti-microphone"></i> Voice Controls</h3>
+          <input id="dcc-voice-search" placeholder="🔍 Search member..." style="width:200px;padding:7px 12px;border-radius:10px;background:#0b1220;border:1px solid rgba(255,255,255,.12);color:white;font-size:13px" oninput="dccFilterVoice(this.value)">
+        </div>
+        <div class="card-body" style="padding:0;max-height:480px;overflow-y:auto">
+          <table style="margin:0">
+            <thead><tr><th>Member</th><th>Server Mute</th><th>Server Deafen</th><th>Timeout</th><th>Disconnect</th><th>Kick</th><th>Ban</th></tr></thead>
+            <tbody id="dcc-voice-tbody">
+              ${voiceMembers.map(m=>`
+                <tr data-name="${esc(m.username.toLowerCase())} ${esc(m.displayName.toLowerCase())}">
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <img src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                      <div>
+                        <div style="font-weight:600;font-size:12px">${esc(m.displayName)}</div>
+                        <div style="font-size:10px;color:#53617a">@${esc(m.username)}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName)}','mute')" title="Server Mute"><i class="ti ti-microphone-off"></i></button>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName)}','deafen')" title="Server Deafen"><i class="ti ti-ear-off"></i></button>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" style="background:rgba(243,199,90,.15);color:#f3c75a;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','timeout')" title="Timeout"><i class="ti ti-clock-pause"></i></button>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" style="background:rgba(230,126,34,.15);color:#e67e22;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName)}','disconnect')" title="Disconnect from Voice"><i class="ti ti-logout"></i></button>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" style="background:rgba(255,90,103,.15);color:#ff5a67;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','kick')" title="Kick"><i class="ti ti-user-minus"></i></button>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" style="background:rgba(192,57,43,.15);color:#c0392b;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','ban')" title="Ban"><i class="ti ti-ban"></i></button>
+                  </td>
+                </tr>`).join('') || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center;padding:20px">No members found</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    if(tab === 'activity'){
+      const res = await api('GET', '/api/data');
+      const logs = (res.activity||[]).slice(0,50);
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header"><h3><i class="ti ti-history"></i> Recent Activity</h3></div>
+          <div class="card-body" style="padding:0;max-height:480px;overflow-y:auto">
+            <table style="margin:0">
+              <thead><tr><th>Message</th><th>Type</th><th>Time</th></tr></thead>
+              <tbody>
+                ${logs.map(l=>`<tr>
+                  <td>${esc(l.msg||'')}</td>
+                  <td><span class="badge badge-info" style="font-size:10px">${esc(l.type||'system')}</span></td>
+                  <td style="font-size:11px;color:#8fa0bd;white-space:nowrap">${fmtTime(l.time)}</td>
+                </tr>`).join('') || '<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No activity</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+  };
+
+  window.dccCreateChannel = () => {
+    qs('#modalTitle').textContent = '➕ Create Channel';
+    qs('#modalBody').innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group"><label>Channel Name</label><input id="dcc-ch-name" placeholder="new-channel"></div>
+      <div class="form-group"><label>Type</label><select id="dcc-ch-type">
+        <option value="0">📝 Text Channel</option>
+        <option value="2">🔊 Voice Channel</option>
+        <option value="5">📢 Announcement Channel</option>
+      </select></div>
+      <div class="form-group"><label>Topic (optional)</label><input id="dcc-ch-topic" placeholder="Channel topic..."></div>
+    </div>`;
+    qs('#modalConfirmBtn').textContent = 'Create';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const name = qs('#dcc-ch-name')?.value?.trim();
+      const type = parseInt(qs('#dcc-ch-type')?.value||'0');
+      const topic = qs('#dcc-ch-topic')?.value?.trim();
+      if(!name){ toast('Channel name required','#f3c75a'); return; }
+      const r = await api('POST', '/api/discord/channels', { name, type, topic });
+      if(r.ok){ closeModal(); toast(`Channel #${name} created ✓`,'#2ecc71'); dccLogAction(`Channel created: #${name}`); dccTab('channels'); }
+      else toast('Error: '+(r.reason||'failed — Bot needs MANAGE_CHANNELS'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.dccEditChannel = (id, name, type) => {
+    qs('#modalTitle').textContent = `✏️ Edit Channel: #${name}`;
+    qs('#modalBody').innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-group"><label>Channel Name</label><input id="dcc-ech-name" value="${esc(name)}"></div>
+      <div class="form-group"><label>Topic</label><input id="dcc-ech-topic" placeholder="Channel topic..."></div>
+      ${type===2?`<div class="form-group"><label>Bitrate (kbps)</label><input id="dcc-ech-bitrate" type="number" value="64" min="8" max="384"></div>`:''}
+      ${type===0?`<div class="form-group"><label>Slowmode (seconds)</label><input id="dcc-ech-slowmode" type="number" value="0" min="0" max="21600"></div>`:''}
+    </div>`;
+    qs('#modalConfirmBtn').textContent = 'Save Changes';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const patch = {};
+      const n = qs('#dcc-ech-name')?.value?.trim(); if(n&&n!==name) patch.name=n;
+      const t = qs('#dcc-ech-topic')?.value?.trim(); if(t!==undefined) patch.topic=t;
+      if(type===2){ const b=parseInt(qs('#dcc-ech-bitrate')?.value||'64'); patch.bitrate=b*1000; }
+      if(type===0){ const s=parseInt(qs('#dcc-ech-slowmode')?.value||'0'); patch.rate_limit_per_user=s; }
+      const r = await api('PATCH', '/api/discord/channels', { channelId: id, patch });
+      if(r.ok){ closeModal(); toast(`#${n||name} updated ✓`,'#2ecc71'); dccLogAction(`Channel edited: #${n||name}`); dccTab('channels'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    };
+    openModal();
+  };
+
+  window.dccDeleteChannel = (id, name) => {
+    qs('#modalTitle').textContent = '🗑️ Delete Channel';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+      <div style="font-size:40px;margin-bottom:12px">💣</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:8px">Delete channel <b style="color:#ff5a67">#${esc(name)}</b>?</p>
+      <p style="color:#ff5a67;font-size:13px">All messages in this channel will be permanently deleted.</p>
+    </div>`;
+    qs('#modalConfirmBtn').className='btn btn-danger';
+    qs('#modalConfirmBtn').textContent='Delete Channel';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE', '/api/discord/channels', { channelId: id });
+      if(r.ok){ closeModal(); toast(`#${name} deleted ✓`,'#ff5a67'); dccLogAction(`Channel deleted: #${name}`); dccTab('channels'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className='btn btn-primary'; qs('#modalConfirmBtn').textContent='Confirm';
+    };
+    openModal();
+  };
+
+  window.dccFilterVoice = (q) => {
+    const rows = document.querySelectorAll('#dcc-voice-tbody tr');
+    const lq = q.toLowerCase();
+    rows.forEach(row => { row.style.display = !lq || (row.dataset.name||'').includes(lq) ? '' : 'none'; });
+  };
+
+  window.dccVoiceAction = async (userId, displayName, action) => {
+    if(action === 'mute' || action === 'deafen'){
+      const field = action === 'mute' ? 'mute' : 'deaf';
+      const label = action === 'mute' ? 'Server Mute' : 'Server Deafen';
+      qs('#modalTitle').textContent = `${label}: ${displayName}`;
+      qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+        <div style="font-size:40px;margin-bottom:12px">${action==='mute'?'🔇':'🔕'}</div>
+        <p style="font-size:15px;margin-bottom:16px">Apply <b>${label}</b> to <b>${esc(displayName)}</b>?</p>
+        <div style="display:flex;gap:8px;justify-content:center">
+          <button class="btn btn-danger" onclick="dccDoVoice('${esc(userId)}','${esc(displayName)}','${field}',true)">Enable ${label}</button>
+          <button class="btn btn-success" onclick="dccDoVoice('${esc(userId)}','${esc(displayName)}','${field}',false)">Remove ${label}</button>
+        </div>
+      </div>`;
+      qs('#modalConfirmBtn').style.display='none';
+      qs('#modalCancelBtn').textContent='Close';
+      openModal();
+      qs('#modalConfirmBtn').style.display=''; qs('#modalCancelBtn').textContent='Cancel';
+    }
+    if(action === 'disconnect'){
+      qs('#modalTitle').textContent = '🔌 Disconnect from Voice';
+      qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+        <div style="font-size:40px;margin-bottom:12px">🔌</div>
+        <p style="font-size:15px;margin-bottom:8px">Disconnect <b>${esc(displayName)}</b> from voice?</p>
+        <p style="color:#8fa0bd;font-size:13px">They will be removed from their current voice channel.</p>
+      </div>`;
+      qs('#modalConfirmBtn').className='btn btn-warning';
+      qs('#modalConfirmBtn').textContent='Disconnect';
+      qs('#modalConfirmBtn').onclick = async () => {
+        const r = await api('POST', '/api/discord/disconnect', { userId });
+        if(r.ok){ closeModal(); toast(`${displayName} disconnected from voice ✓`,'#e67e22'); dccLogAction(`Voice disconnect: ${displayName} (${userId})`); }
+        else toast('Error: '+(r.reason||'failed — member may not be in a voice channel'),'#ff5a67');
+        qs('#modalConfirmBtn').className='btn btn-primary'; qs('#modalConfirmBtn').textContent='Confirm';
+      };
+      openModal();
+    }
+  };
+
+  window.dccDoVoice = async (userId, displayName, field, value) => {
+    const r = await api('PATCH', '/api/discord/voice', { userId, [field]: value });
+    if(r.ok){ closeModal(); toast(`${value?'Applied':'Removed'} ${field} for ${displayName} ✓`, value?'#e74c3c':'#2ecc71'); dccLogAction(`${field} ${value?'on':'off'}: ${displayName}`); }
+    else toast('Error: '+(r.reason||'failed — Bot needs MUTE_MEMBERS permission'),'#ff5a67');
+  };
+
+  window.dccFilterMembers = (q) => {
+    const rows = document.querySelectorAll('#dcc-members-tbody tr');
+    const lq = q.toLowerCase();
+    rows.forEach(row => {
+      const name = row.dataset.name || '';
+      row.style.display = !lq || name.includes(lq) ? '' : 'none';
+    });
+  };
+
+  window.dccMemberAction = async (userId, displayName, action) => {
+    if(action === 'view'){
+      qs('#modalTitle').textContent = `Member: ${displayName}`;
+      qs('#modalBody').innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px">
+            <div style="font-size:12px;color:#53617a;margin-bottom:4px">DISCORD ID</div>
+            <div style="font-family:monospace;font-weight:600">${esc(userId)}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm" style="background:rgba(243,199,90,.15);color:#f3c75a" onclick="dccMemberAction('${esc(userId)}','${esc(displayName)}','nickname');closeModal()"><i class="ti ti-at"></i> Set Nickname</button>
+            <button class="btn btn-sm" style="background:rgba(155,89,182,.15);color:#9b59b6" onclick="dccMemberAction('${esc(userId)}','${esc(displayName)}','roles');closeModal()"><i class="ti ti-shield-star"></i> Manage Roles</button>
+            <button class="btn btn-sm btn-danger" onclick="dccMemberAction('${esc(userId)}','${esc(displayName)}','kick');closeModal()"><i class="ti ti-user-minus"></i> Kick</button>
+            <button class="btn btn-sm" style="background:rgba(192,57,43,.15);color:#c0392b" onclick="dccMemberAction('${esc(userId)}','${esc(displayName)}','ban');closeModal()"><i class="ti ti-ban"></i> Ban</button>
+          </div>
+        </div>`;
+      qs('#modalConfirmBtn').style.display='none';
+      qs('#modalCancelBtn').textContent='Close';
+      openModal();
+      qs('#modalConfirmBtn').style.display='';
+      qs('#modalCancelBtn').textContent='Cancel';
+    }
+    if(action === 'nickname'){
+      qs('#modalTitle').textContent = `Set Nickname: ${displayName}`;
+      qs('#modalBody').innerHTML = `
+        <div class="form-group"><label>Nickname</label><input id="dcc-nick-input" placeholder="Enter nickname..." value="${esc(store.nicknames?.[userId]||'')}"></div>
+        <p style="font-size:12px;color:#8fa0bd">Leave empty to reset to Discord username</p>`;
+      qs('#modalConfirmBtn').onclick = async () => {
+        const nick = qs('#dcc-nick-input').value.trim();
+        const r = await api('PUT', '/api/nicknames', { userId, nickname: nick });
+        if(r.ok){
+          store.nicknames = store.nicknames||{};
+          if(nick) store.nicknames[userId] = nick; else delete store.nicknames[userId];
+          closeModal(); toast('Nickname updated ✓', '#2ecc71');
+          dccLogAction(`Nickname set for ${displayName}: "${nick}"`);
+        } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      };
+      openModal();
+    }
+    if(action === 'roles'){
+      qs('#modalTitle').textContent = `Manage Roles: ${displayName}`;
+      qs('#modalBody').innerHTML = `<div style="text-align:center;padding:20px"><span class="spinner"></span> Loading roles...</div>`;
+      qs('#modalConfirmBtn').style.display='none';
+      qs('#modalCancelBtn').textContent='Close';
+      openModal();
+      const res = await api('GET', '/api/server-roles');
+      if(res.ok){
+        const roles = (res.data||[]).filter(r=>r.id!=='@everyone');
+        qs('#modalBody').innerHTML = `
+          <p style="font-size:13px;color:#8fa0bd;margin-bottom:12px">Add or remove Discord server roles for this member</p>
+          <div style="display:grid;gap:8px;max-height:300px;overflow-y:auto">
+            ${roles.map(r=>{
+              const color = r.color?'#'+r.color.toString(16).padStart(6,'0'):'#8fa0bd';
+              return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px">
+                <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>
+                <span style="flex:1;font-size:13px;font-weight:600">${esc(r.name)}</span>
+                <button class="btn btn-sm btn-success" style="font-size:11px" onclick="dccAssignRole('${esc(r.id)}','${esc(userId)}','${esc(r.name)}','${esc(displayName)}')"><i class="ti ti-plus"></i> Add</button>
+                <button class="btn btn-sm btn-danger" style="font-size:11px" onclick="dccRemoveRole('${esc(r.id)}','${esc(userId)}','${esc(r.name)}','${esc(displayName)}')"><i class="ti ti-minus"></i> Remove</button>
+              </div>`;
+            }).join('')}
+          </div>`;
+      }
+      qs('#modalCancelBtn').textContent='Cancel';
+      qs('#modalConfirmBtn').style.display='';
+    }
+    if(action === 'kick'){
+      qs('#modalTitle').textContent = '⚠️ Kick Member';
+      qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+        <div style="font-size:40px;margin-bottom:12px">👢</div>
+        <p style="font-size:15px;margin-bottom:8px">Kick <b>${esc(displayName)}</b> from the server?</p>
+        <p style="color:#ff5a67;font-size:13px">They can rejoin with an invite link.</p>
+      </div>`;
+      qs('#modalConfirmBtn').className='btn btn-danger';
+      qs('#modalConfirmBtn').textContent='Kick';
+      qs('#modalConfirmBtn').onclick = async () => {
+        const r = await api('DELETE', '/api/discord/member', { userId, action:'kick' });
+        if(r.ok){ closeModal(); toast(`${displayName} kicked ✓`,'#e74c3c'); dccLogAction(`Kicked: ${displayName} (${userId})`); }
+        else toast('Error: '+(r.reason||'failed — Bot needs KICK_MEMBERS permission'),'#ff5a67');
+        qs('#modalConfirmBtn').className='btn btn-primary'; qs('#modalConfirmBtn').textContent='Confirm';
+      };
+      openModal();
+    }
+    if(action === 'ban'){
+      qs('#modalTitle').textContent = '🚫 Ban Member';
+      qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+        <div style="font-size:40px;margin-bottom:12px">🔨</div>
+        <p style="font-size:15px;font-weight:700;margin-bottom:8px">Ban <b>${esc(displayName)}</b>?</p>
+        <div class="form-group" style="text-align:left;margin-top:12px"><label>Reason</label><input id="ban-reason" placeholder="Ban reason..."></div>
+        <p style="color:#ff5a67;font-size:13px">They will be permanently banned.</p>
+      </div>`;
+      qs('#modalConfirmBtn').className='btn btn-danger';
+      qs('#modalConfirmBtn').textContent='Ban';
+      qs('#modalConfirmBtn').onclick = async () => {
+        const reason = qs('#ban-reason')?.value?.trim() || 'No reason';
+        const r = await api('POST', '/api/discord/ban', { userId, reason });
+        if(r.ok){ closeModal(); toast(`${displayName} banned ✓`,'#c0392b'); dccLogAction(`Banned: ${displayName} (${userId}) — ${reason}`); }
+        else toast('Error: '+(r.reason||'failed — Bot needs BAN_MEMBERS permission'),'#ff5a67');
+        qs('#modalConfirmBtn').className='btn btn-primary'; qs('#modalConfirmBtn').textContent='Confirm';
+      };
+      openModal();
+    }
+    if(action === 'timeout'){
+      qs('#modalTitle').textContent = '⏰ Timeout Member';
+      qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+        <div style="font-size:40px;margin-bottom:12px">⏱️</div>
+        <p style="margin-bottom:16px">Timeout <b>${esc(displayName)}</b></p>
+        <div class="form-group" style="text-align:left"><label>Duration</label><select id="timeout-dur">
+          <option value="60">1 Minute</option>
+          <option value="300">5 Minutes</option>
+          <option value="600">10 Minutes</option>
+          <option value="1800">30 Minutes</option>
+          <option value="3600">1 Hour</option>
+          <option value="86400">1 Day</option>
+          <option value="604800">1 Week</option>
+        </select></div>
+        <div class="form-group" style="text-align:left"><label>Reason</label><input id="timeout-reason" placeholder="Timeout reason..."></div>
+      </div>`;
+      qs('#modalConfirmBtn').className='btn btn-warning';
+      qs('#modalConfirmBtn').textContent='Timeout';
+      qs('#modalConfirmBtn').onclick = async () => {
+        const dur = parseInt(qs('#timeout-dur').value);
+        const reason = qs('#timeout-reason')?.value?.trim()||'No reason';
+        const until = new Date(Date.now()+dur*1000).toISOString();
+        const r = await api('PUT', '/api/discord/timeout', { userId, until, reason });
+        if(r.ok){ closeModal(); toast(`${displayName} timed out ✓`,'#f3c75a'); dccLogAction(`Timeout: ${displayName} for ${dur}s — ${reason}`); }
+        else toast('Error: '+(r.reason||'failed — Bot needs MODERATE_MEMBERS permission'),'#ff5a67');
+        qs('#modalConfirmBtn').className='btn btn-primary'; qs('#modalConfirmBtn').textContent='Confirm';
+      };
+      openModal();
+    }
+  };
+
+  window.dccAssignRole = async (roleId, userId, roleName, memberName) => {
+    const r = await api('PUT', '/api/server-roles/member', { roleId, userId });
+    if(r.ok){ toast(`Role "${roleName}" added to ${memberName} ✓`,'#2ecc71'); dccLogAction(`Role added: ${roleName} → ${memberName}`); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  window.dccRemoveRole = async (roleId, userId, roleName, memberName) => {
+    const r = await api('DELETE', '/api/server-roles/member', { roleId, userId });
+    if(r.ok){ toast(`Role "${roleName}" removed from ${memberName} ✓`,'#f3c75a'); dccLogAction(`Role removed: ${roleName} ← ${memberName}`); }
+    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+  };
+
+  function dccLogAction(msg){
+    const log = qs('#dcc-realtime-log');
+    if(!log) return;
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)';
+    d.innerHTML = `<span style="color:#53617a">[${new Date().toLocaleTimeString()}]</span> <span style="color:#2ecc71">✓</span> <span style="color:#edf3ff">${esc(msg)}</span>`;
+    if(log.querySelector('div[style*="Real-time"]')) log.innerHTML='';
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ═══════════════════════════════════════════════════════════
 
   window.consoleExecInput = () => {
     const input = document.getElementById('consoleInput');
@@ -3155,7 +4022,7 @@
   // ═══════════════════════════ ENHANCED WEBHOOK SYSTEM ═══════════════════════════
   // (Extended webhook types — the renderSettings webhookTypes array is defined inside renderSettings)
 
-  // ═══════════════════════════ LANGUAGE SYSTEM (i18n) ═══════════════════════════
+  // ═══════════════════════════ LANGUAGE SYSTEM (i18n) v2 — REBUILT ═══════════════════════════
   const LANGUAGES = [
     { code:'en', name:'English', flag:'🇺🇸' },
     { code:'ar', name:'العربية', flag:'🇸🇦' },
@@ -3179,93 +4046,302 @@
     { code:'ms', name:'Bahasa Melayu', flag:'🇲🇾' },
   ];
 
-  // Base English strings (keys used throughout the UI)
+  // ════ FULL i18n MASTER TABLE — every key, every language ════
   const I18N_BASE = {
     en: {
-      login_title: 'SHJ LSPD', login_sub: 'Complete Police Management System',
-      login_btn: 'Login with Discord', control_panel: 'Control Panel',
-      logout: 'Logout', dashboard: 'Dashboard', officers: 'Officers',
-      ranks: 'Ranks', points_logs: 'Points Logs', laws: 'Laws & Rules',
-      uniform: 'Uniform Guide', codes: 'Police Codes', wanted: 'Wanted & Impound',
-      cases: 'Cases', reports: 'Reports', discord_users: 'Discord Users',
-      server_roles: 'Server Roles', website_roles: 'Website Roles',
-      system_logs: 'System Logs', settings: 'Settings', admin_roles: 'Admin Roles',
-      console: 'Console',
-      add: 'Add', edit: 'Edit', delete: 'Delete', save: 'Save', cancel: 'Cancel',
-      confirm: 'Confirm', search: 'Search', no_data: 'No data found',
-      saved: 'Saved ✓', deleted: 'Deleted', error: 'Error', loading: 'Loading...',
-      protected: 'Protected', total_officers: 'Total Officers', active: 'Active',
-      administration: 'Administration', main: 'Main',
+      login_title:'SHJ LSPD', login_sub:'Complete Police Management System',
+      login_btn:'Login with Discord', control_panel:'Control Panel',
+      logout:'Logout', dashboard:'Dashboard', officers:'Officers',
+      ranks:'Ranks', points_logs:'Points Logs', laws:'Laws & Rules',
+      uniform:'Uniform Guide', codes:'Police Codes', wanted:'Wanted & Impound',
+      cases:'Cases', reports:'Reports', discord_users:'Discord Users',
+      server_roles:'Server Roles', website_roles:'Website Roles',
+      system_logs:'System Logs', settings:'Settings', admin_roles:'Admin Roles',
+      console:'Console', discord_control:'Discord Control Center',
+      add:'Add', edit:'Edit', delete:'Delete', save:'Save', cancel:'Cancel',
+      confirm:'Confirm', search:'Search', no_data:'No data found',
+      saved:'Saved ✓', deleted:'Deleted', error:'Error', loading:'Loading...',
+      protected:'Protected', total_officers:'Total Officers', active:'Active',
+      administration:'Administration', main:'Main',
+      name:'Name', badge:'Badge', rank:'Rank', dept:'Department', status:'Status',
+      points:'Points', actions:'Actions', date:'Date', by:'By',
+      add_officer:'Add Officer', add_rank:'Add Rank', add_law:'Add Law',
+      no_officers:'No officers found', no_ranks:'No ranks found',
+      permissions:'Permissions', members:'Members', role:'Role',
+      create_role:'Create Role', edit_role:'Edit Role', delete_role:'Delete Role',
+      website_settings:'Website Settings', site_name:'Site Name',
+      site_favicon:'Favicon URL', login_bg:'Login Background',
+      dashboard_logo:'Dashboard Logo', save_branding:'Save Branding',
+      voice_controls:'Voice Controls', channel_management:'Channel Management',
+      role_management:'Role Management', realtime_events:'Real-time Events',
     },
     ar: {
-      login_title: 'SHJ LSPD', login_sub: 'نظام إدارة الشرطة الشامل',
-      login_btn: 'تسجيل الدخول عبر Discord', control_panel: 'لوحة التحكم',
-      logout: 'تسجيل الخروج', dashboard: 'الرئيسية', officers: 'الضباط',
-      ranks: 'الرتب', points_logs: 'سجل النقاط', laws: 'القوانين واللوائح',
-      uniform: 'دليل الزي الرسمي', codes: 'رموز الشرطة', wanted: 'المطلوبون والمحجوزات',
-      cases: 'القضايا', reports: 'التقارير', discord_users: 'مستخدمو Discord',
-      server_roles: 'رتب السيرفر', website_roles: 'رتب الموقع',
-      system_logs: 'سجلات النظام', settings: 'الإعدادات', admin_roles: 'صلاحيات الإدارة',
-      console: 'لوحة الأوامر',
-      add: 'إضافة', edit: 'تعديل', delete: 'حذف', save: 'حفظ', cancel: 'إلغاء',
-      confirm: 'تأكيد', search: 'بحث', no_data: 'لا توجد بيانات',
-      saved: 'تم الحفظ ✓', deleted: 'تم الحذف', error: 'خطأ', loading: 'جار التحميل...',
-      protected: 'محمي', total_officers: 'إجمالي الضباط', active: 'نشط',
-      administration: 'الإدارة', main: 'الرئيسية',
+      login_title:'SHJ LSPD', login_sub:'نظام إدارة الشرطة الشامل',
+      login_btn:'تسجيل الدخول عبر Discord', control_panel:'لوحة التحكم',
+      logout:'تسجيل الخروج', dashboard:'الرئيسية', officers:'الضباط',
+      ranks:'الرتب', points_logs:'سجل النقاط', laws:'القوانين واللوائح',
+      uniform:'دليل الزي الرسمي', codes:'رموز الشرطة', wanted:'المطلوبون والمحجوزات',
+      cases:'القضايا', reports:'التقارير', discord_users:'مستخدمو Discord',
+      server_roles:'رتب السيرفر', website_roles:'رتب الموقع',
+      system_logs:'سجلات النظام', settings:'الإعدادات', admin_roles:'صلاحيات الإدارة',
+      console:'لوحة الأوامر', discord_control:'مركز تحكم Discord',
+      add:'إضافة', edit:'تعديل', delete:'حذف', save:'حفظ', cancel:'إلغاء',
+      confirm:'تأكيد', search:'بحث', no_data:'لا توجد بيانات',
+      saved:'تم الحفظ ✓', deleted:'تم الحذف', error:'خطأ', loading:'جار التحميل...',
+      protected:'محمي', total_officers:'إجمالي الضباط', active:'نشط',
+      administration:'الإدارة', main:'الرئيسية',
+      name:'الاسم', badge:'الشارة', rank:'الرتبة', dept:'القسم', status:'الحالة',
+      points:'النقاط', actions:'الإجراءات', date:'التاريخ', by:'بواسطة',
+      add_officer:'إضافة ضابط', add_rank:'إضافة رتبة', add_law:'إضافة قانون',
+      no_officers:'لا توجد ضباط', no_ranks:'لا توجد رتب',
+      permissions:'الصلاحيات', members:'الأعضاء', role:'الدور',
+      create_role:'إنشاء دور', edit_role:'تعديل الدور', delete_role:'حذف الدور',
+      website_settings:'إعدادات الموقع', site_name:'اسم الموقع',
+      site_favicon:'أيقونة المتصفح', login_bg:'خلفية صفحة الدخول',
+      dashboard_logo:'شعار لوحة التحكم', save_branding:'حفظ الهوية البصرية',
+      voice_controls:'تحكم في الصوت', channel_management:'إدارة القنوات',
+      role_management:'إدارة الأدوار', realtime_events:'الأحداث الحية',
     },
     fr: {
-      login_btn: 'Se connecter avec Discord', control_panel: 'Panneau de contrôle',
-      logout: 'Déconnexion', dashboard: 'Tableau de bord', officers: 'Officiers',
-      ranks: 'Grades', cases: 'Affaires', reports: 'Rapports', settings: 'Paramètres',
-      add: 'Ajouter', edit: 'Modifier', delete: 'Supprimer', save: 'Enregistrer', cancel: 'Annuler',
-      loading: 'Chargement...', administration: 'Administration', main: 'Principal',
+      login_title:'SHJ LSPD', login_sub:'Système complet de gestion de la police',
+      login_btn:'Se connecter avec Discord', control_panel:'Panneau de contrôle',
+      logout:'Déconnexion', dashboard:'Tableau de bord', officers:'Officiers',
+      ranks:'Grades', points_logs:'Journal de points', laws:'Lois & Règles',
+      uniform:'Guide uniforme', codes:'Codes police', wanted:'Recherchés & Fourrière',
+      cases:'Affaires', reports:'Rapports', discord_users:'Utilisateurs Discord',
+      server_roles:'Rôles serveur', website_roles:'Rôles site web',
+      system_logs:'Journaux système', settings:'Paramètres', admin_roles:'Rôles admin',
+      console:'Console', discord_control:'Centre de contrôle Discord',
+      add:'Ajouter', edit:'Modifier', delete:'Supprimer', save:'Enregistrer', cancel:'Annuler',
+      confirm:'Confirmer', search:'Rechercher', no_data:'Aucune donnée',
+      saved:'Enregistré ✓', deleted:'Supprimé', error:'Erreur', loading:'Chargement...',
+      protected:'Protégé', total_officers:'Total officiers', active:'Actif',
+      administration:'Administration', main:'Principal',
+      name:'Nom', badge:'Badge', rank:'Grade', dept:'Département', status:'Statut',
+      points:'Points', actions:'Actions', date:'Date', by:'Par',
     },
     es: {
-      login_btn: 'Iniciar sesión con Discord', control_panel: 'Panel de control',
-      logout: 'Cerrar sesión', dashboard: 'Panel', officers: 'Oficiales',
-      ranks: 'Rangos', cases: 'Casos', reports: 'Informes', settings: 'Configuración',
-      add: 'Añadir', edit: 'Editar', delete: 'Eliminar', save: 'Guardar', cancel: 'Cancelar',
-      loading: 'Cargando...', administration: 'Administración', main: 'Principal',
+      login_title:'SHJ LSPD', login_sub:'Sistema completo de gestión policial',
+      login_btn:'Iniciar sesión con Discord', control_panel:'Panel de control',
+      logout:'Cerrar sesión', dashboard:'Panel', officers:'Oficiales',
+      ranks:'Rangos', points_logs:'Registro de puntos', laws:'Leyes & Normas',
+      uniform:'Guía de uniforme', codes:'Códigos policiales', wanted:'Buscados & Depósito',
+      cases:'Casos', reports:'Informes', discord_users:'Usuarios Discord',
+      server_roles:'Roles del servidor', website_roles:'Roles del sitio',
+      system_logs:'Registros del sistema', settings:'Configuración', admin_roles:'Roles admin',
+      console:'Consola', discord_control:'Centro de control Discord',
+      add:'Añadir', edit:'Editar', delete:'Eliminar', save:'Guardar', cancel:'Cancelar',
+      confirm:'Confirmar', search:'Buscar', no_data:'Sin datos',
+      saved:'Guardado ✓', deleted:'Eliminado', error:'Error', loading:'Cargando...',
+      protected:'Protegido', total_officers:'Total oficiales', active:'Activo',
+      administration:'Administración', main:'Principal',
+      name:'Nombre', badge:'Insignia', rank:'Rango', dept:'Departamento', status:'Estado',
+      points:'Puntos', actions:'Acciones', date:'Fecha', by:'Por',
     },
     de: {
-      login_btn: 'Mit Discord anmelden', control_panel: 'Kontrollpanel',
-      logout: 'Abmelden', dashboard: 'Dashboard', officers: 'Offiziere',
-      settings: 'Einstellungen', add: 'Hinzufügen', edit: 'Bearbeiten',
-      delete: 'Löschen', save: 'Speichern', cancel: 'Abbrechen', loading: 'Laden...',
-      administration: 'Verwaltung', main: 'Haupt',
+      login_title:'SHJ LSPD', login_sub:'Vollständiges Polizei-Verwaltungssystem',
+      login_btn:'Mit Discord anmelden', control_panel:'Kontrollpanel',
+      logout:'Abmelden', dashboard:'Dashboard', officers:'Offiziere',
+      ranks:'Ränge', points_logs:'Punkteprotokoll', laws:'Gesetze & Regeln',
+      uniform:'Uniformleitfaden', codes:'Polizeicodes', wanted:'Gesucht & Abgeschleppt',
+      cases:'Fälle', reports:'Berichte', discord_users:'Discord-Benutzer',
+      server_roles:'Serverrollen', website_roles:'Website-Rollen',
+      system_logs:'Systemprotokolle', settings:'Einstellungen', admin_roles:'Admin-Rollen',
+      console:'Konsole', discord_control:'Discord-Kontrollzentrum',
+      add:'Hinzufügen', edit:'Bearbeiten', delete:'Löschen', save:'Speichern', cancel:'Abbrechen',
+      confirm:'Bestätigen', search:'Suchen', no_data:'Keine Daten',
+      saved:'Gespeichert ✓', deleted:'Gelöscht', error:'Fehler', loading:'Laden...',
+      protected:'Geschützt', total_officers:'Offiziere gesamt', active:'Aktiv',
+      administration:'Verwaltung', main:'Haupt',
+      name:'Name', badge:'Abzeichen', rank:'Rang', dept:'Abteilung', status:'Status',
+      points:'Punkte', actions:'Aktionen', date:'Datum', by:'Von',
     },
     tr: {
-      login_btn: "Discord ile Giriş Yap", control_panel: 'Kontrol Paneli',
-      logout: 'Çıkış', dashboard: 'Gösterge', officers: 'Memurlar',
-      settings: 'Ayarlar', add: 'Ekle', edit: 'Düzenle',
-      delete: 'Sil', save: 'Kaydet', cancel: 'İptal', loading: 'Yükleniyor...',
-      administration: 'Yönetim', main: 'Ana',
+      login_title:'SHJ LSPD', login_sub:'Eksiksiz Polis Yönetim Sistemi',
+      login_btn:'Discord ile Giriş Yap', control_panel:'Kontrol Paneli',
+      logout:'Çıkış Yap', dashboard:'Gösterge Paneli', officers:'Memurlar',
+      ranks:'Rütbeler', points_logs:'Puan Günlüğü', laws:'Yasalar & Kurallar',
+      uniform:'Üniforma Rehberi', codes:'Polis Kodları', wanted:'Arananlar & Çekici',
+      cases:'Davalar', reports:'Raporlar', discord_users:'Discord Kullanıcıları',
+      server_roles:'Sunucu Rolleri', website_roles:'Site Rolleri',
+      system_logs:'Sistem Günlükleri', settings:'Ayarlar', admin_roles:'Yönetici Rolleri',
+      console:'Konsol', discord_control:'Discord Kontrol Merkezi',
+      add:'Ekle', edit:'Düzenle', delete:'Sil', save:'Kaydet', cancel:'İptal',
+      confirm:'Onayla', search:'Ara', no_data:'Veri bulunamadı',
+      saved:'Kaydedildi ✓', deleted:'Silindi', error:'Hata', loading:'Yükleniyor...',
+      protected:'Korumalı', total_officers:'Toplam Memur', active:'Aktif',
+      administration:'Yönetim', main:'Ana',
+      name:'Ad', badge:'Rozet', rank:'Rütbe', dept:'Departman', status:'Durum',
+      points:'Puan', actions:'İşlemler', date:'Tarih', by:'Tarafından',
+    },
+    ru: {
+      login_title:'SHJ LSPD', login_sub:'Полная система управления полицией',
+      login_btn:'Войти через Discord', control_panel:'Панель управления',
+      logout:'Выйти', dashboard:'Панель', officers:'Офицеры',
+      ranks:'Звания', points_logs:'Журнал очков', laws:'Законы & Правила',
+      uniform:'Руководство по форме', codes:'Полицейские коды', wanted:'Розыск & Штрафстоянка',
+      cases:'Дела', reports:'Отчёты', discord_users:'Пользователи Discord',
+      server_roles:'Роли сервера', website_roles:'Роли сайта',
+      system_logs:'Журналы системы', settings:'Настройки', admin_roles:'Роли администратора',
+      console:'Консоль', discord_control:'Центр управления Discord',
+      add:'Добавить', edit:'Изменить', delete:'Удалить', save:'Сохранить', cancel:'Отмена',
+      confirm:'Подтвердить', search:'Поиск', no_data:'Данные не найдены',
+      saved:'Сохранено ✓', deleted:'Удалено', error:'Ошибка', loading:'Загрузка...',
+      protected:'Защищено', total_officers:'Всего офицеров', active:'Активен',
+      administration:'Администрирование', main:'Главная',
+      name:'Имя', badge:'Жетон', rank:'Звание', dept:'Отдел', status:'Статус',
+      points:'Очки', actions:'Действия', date:'Дата', by:'Кем',
+    },
+    zh: {
+      login_title:'SHJ LSPD', login_sub:'完整警察管理系统',
+      login_btn:'通过Discord登录', control_panel:'控制面板',
+      logout:'退出登录', dashboard:'仪表板', officers:'警官',
+      ranks:'级别', points_logs:'积分日志', laws:'法律和规则',
+      uniform:'制服指南', codes:'警察代码', wanted:'通缉与扣押',
+      cases:'案件', reports:'报告', discord_users:'Discord用户',
+      server_roles:'服务器角色', website_roles:'网站角色',
+      system_logs:'系统日志', settings:'设置', admin_roles:'管理员角色',
+      console:'控制台', discord_control:'Discord控制中心',
+      add:'添加', edit:'编辑', delete:'删除', save:'保存', cancel:'取消',
+      confirm:'确认', search:'搜索', no_data:'未找到数据',
+      saved:'已保存 ✓', deleted:'已删除', error:'错误', loading:'加载中...',
+      protected:'受保护', total_officers:'警官总数', active:'活跃',
+      administration:'管理', main:'主页',
+      name:'姓名', badge:'徽章', rank:'级别', dept:'部门', status:'状态',
+      points:'积分', actions:'操作', date:'日期', by:'由',
+    },
+    ja: {
+      login_title:'SHJ LSPD', login_sub:'完全な警察管理システム',
+      login_btn:'Discordでログイン', control_panel:'コントロールパネル',
+      logout:'ログアウト', dashboard:'ダッシュボード', officers:'警官',
+      ranks:'ランク', points_logs:'ポイントログ', laws:'法律&ルール',
+      uniform:'制服ガイド', codes:'警察コード', wanted:'指名手配&押収',
+      cases:'案件', reports:'報告', discord_users:'Discordユーザー',
+      server_roles:'サーバーロール', website_roles:'サイトロール',
+      system_logs:'システムログ', settings:'設定', admin_roles:'管理者ロール',
+      console:'コンソール', discord_control:'Discordコントロールセンター',
+      add:'追加', edit:'編集', delete:'削除', save:'保存', cancel:'キャンセル',
+      confirm:'確認', search:'検索', no_data:'データなし',
+      saved:'保存済み ✓', deleted:'削除済み', error:'エラー', loading:'読み込み中...',
+      protected:'保護済み', total_officers:'警官総数', active:'アクティブ',
+      administration:'管理', main:'メイン',
+      name:'名前', badge:'バッジ', rank:'ランク', dept:'部門', status:'ステータス',
+      points:'ポイント', actions:'アクション', date:'日付', by:'担当者',
+    },
+    ko: {
+      login_title:'SHJ LSPD', login_sub:'완전한 경찰 관리 시스템',
+      login_btn:'Discord로 로그인', control_panel:'제어판',
+      logout:'로그아웃', dashboard:'대시보드', officers:'경관',
+      ranks:'계급', points_logs:'점수 기록', laws:'법률 & 규칙',
+      uniform:'제복 가이드', codes:'경찰 코드', wanted:'수배 & 압류',
+      cases:'사건', reports:'보고서', discord_users:'Discord 사용자',
+      server_roles:'서버 역할', website_roles:'웹사이트 역할',
+      system_logs:'시스템 로그', settings:'설정', admin_roles:'관리자 역할',
+      console:'콘솔', discord_control:'Discord 제어 센터',
+      add:'추가', edit:'편집', delete:'삭제', save:'저장', cancel:'취소',
+      confirm:'확인', search:'검색', no_data:'데이터 없음',
+      saved:'저장됨 ✓', deleted:'삭제됨', error:'오류', loading:'로딩 중...',
+      protected:'보호됨', total_officers:'경관 총수', active:'활성',
+      administration:'관리', main:'메인',
+      name:'이름', badge:'배지', rank:'계급', dept:'부서', status:'상태',
+      points:'점수', actions:'작업', date:'날짜', by:'담당자',
+    },
+    pt: {
+      login_title:'SHJ LSPD', login_sub:'Sistema completo de gestão policial',
+      login_btn:'Entrar com Discord', control_panel:'Painel de controle',
+      logout:'Sair', dashboard:'Painel', officers:'Oficiais',
+      ranks:'Patentes', points_logs:'Registro de pontos', laws:'Leis & Regras',
+      uniform:'Guia de uniforme', codes:'Códigos policiais', wanted:'Procurados & Pátio',
+      cases:'Casos', reports:'Relatórios', discord_users:'Usuários Discord',
+      server_roles:'Cargos do servidor', website_roles:'Cargos do site',
+      system_logs:'Registros do sistema', settings:'Configurações', admin_roles:'Cargos admin',
+      console:'Console', discord_control:'Centro de controle Discord',
+      add:'Adicionar', edit:'Editar', delete:'Excluir', save:'Salvar', cancel:'Cancelar',
+      confirm:'Confirmar', search:'Pesquisar', no_data:'Nenhum dado',
+      saved:'Salvo ✓', deleted:'Excluído', error:'Erro', loading:'Carregando...',
+      protected:'Protegido', total_officers:'Total de oficiais', active:'Ativo',
+      administration:'Administração', main:'Principal',
+      name:'Nome', badge:'Distintivo', rank:'Patente', dept:'Departamento', status:'Status',
+      points:'Pontos', actions:'Ações', date:'Data', by:'Por',
+    },
+    fa: {
+      login_title:'SHJ LSPD', login_sub:'سیستم مدیریت کامل پلیس',
+      login_btn:'ورود با Discord', control_panel:'پنل کنترل',
+      logout:'خروج', dashboard:'داشبورد', officers:'افسران',
+      ranks:'درجات', points_logs:'گزارش امتیازات', laws:'قوانین و مقررات',
+      uniform:'راهنمای یونیفرم', codes:'کدهای پلیس', wanted:'تحت تعقیب و توقیف',
+      cases:'پرونده‌ها', reports:'گزارش‌ها', discord_users:'کاربران Discord',
+      server_roles:'نقش‌های سرور', website_roles:'نقش‌های وبسایت',
+      system_logs:'لاگ‌های سیستم', settings:'تنظیمات', admin_roles:'نقش‌های ادمین',
+      console:'کنسول', discord_control:'مرکز کنترل Discord',
+      add:'افزودن', edit:'ویرایش', delete:'حذف', save:'ذخیره', cancel:'لغو',
+      confirm:'تأیید', search:'جستجو', no_data:'داده‌ای یافت نشد',
+      saved:'ذخیره شد ✓', deleted:'حذف شد', error:'خطا', loading:'در حال بارگذاری...',
+      protected:'محافظت شده', total_officers:'کل افسران', active:'فعال',
+      administration:'مدیریت', main:'اصلی',
+      name:'نام', badge:'نشان', rank:'درجه', dept:'واحد', status:'وضعیت',
+      points:'امتیاز', actions:'اقدامات', date:'تاریخ', by:'توسط',
+    },
+    ur: {
+      login_title:'SHJ LSPD', login_sub:'مکمل پولیس مینجمنٹ سسٹم',
+      login_btn:'Discord سے لاگ ان کریں', control_panel:'کنٹرول پینل',
+      logout:'لاگ آؤٹ', dashboard:'ڈیش بورڈ', officers:'افسران',
+      ranks:'درجات', points_logs:'پوائنٹس لاگ', laws:'قوانین اور ضوابط',
+      uniform:'یونیفارم گائیڈ', codes:'پولیس کوڈز', wanted:'مطلوب اور ضبط',
+      cases:'مقدمات', reports:'رپورٹیں', discord_users:'Discord صارفین',
+      server_roles:'سرور رولز', website_roles:'ویب سائٹ رولز',
+      system_logs:'سسٹم لاگز', settings:'ترتیبات', admin_roles:'ایڈمن رولز',
+      console:'کنسول', discord_control:'Discord کنٹرول سنٹر',
+      add:'شامل کریں', edit:'ترمیم', delete:'حذف', save:'محفوظ', cancel:'منسوخ',
+      confirm:'تصدیق', search:'تلاش', no_data:'کوئی ڈیٹا نہیں',
+      saved:'محفوظ ✓', deleted:'حذف ہوا', error:'غلطی', loading:'لوڈ ہو رہا ہے...',
+      protected:'محفوظ', total_officers:'کل افسران', active:'فعال',
+      administration:'انتظامیہ', main:'مرکزی',
+      name:'نام', badge:'بیج', rank:'درجہ', dept:'محکمہ', status:'حالت',
+      points:'پوائنٹس', actions:'اقدامات', date:'تاریخ', by:'بذریعہ',
     },
   };
+
+  // RTL languages
+  const RTL_LANGS = new Set(['ar','fa','ur','he']);
 
   let _currentLang = localStorage.getItem('lspd_lang') || 'en';
 
   function t(key) {
     const lang = I18N_BASE[_currentLang] || {};
-    const en   = I18N_BASE.en || {};
-    return lang[key] || en[key] || key;
+    const en   = I18N_BASE.en;
+    return lang[key] !== undefined ? lang[key] : (en[key] !== undefined ? en[key] : key);
   }
 
   function applyTranslations() {
-    // Update elements with data-i18n attribute
+    // Update ALL elements with data-i18n attribute
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.dataset.i18n;
-      el.textContent = t(key);
+      const val = t(key);
+      // If element has children we don't want to overwrite, skip (safety)
+      if(el.childElementCount === 0) el.textContent = val;
     });
-    // Update document direction for RTL languages
-    const rtlLangs = ['ar', 'fa', 'ur', 'he'];
-    document.documentElement.dir = rtlLangs.includes(_currentLang) ? 'rtl' : 'ltr';
+    // Update placeholder attrs
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+      el.placeholder = t(el.dataset.i18nPh);
+    });
+    // RTL / LTR
+    const isRTL = RTL_LANGS.has(_currentLang);
+    document.documentElement.dir  = isRTL ? 'rtl' : 'ltr';
     document.documentElement.lang = _currentLang;
-    // Update lang button label
+    // Update lang selector button label
     const label = document.getElementById('currentLangLabel');
     if(label){
       const lang = LANGUAGES.find(l=>l.code===_currentLang);
       label.textContent = lang ? `${lang.flag} ${lang.name}` : 'English';
+    }
+    // Update logout button text (hardcoded element that may not have data-i18n)
+    const logoutBtn = document.getElementById('logoutBtn');
+    if(logoutBtn){
+      const icon = logoutBtn.querySelector('i');
+      logoutBtn.textContent = '';
+      if(icon) logoutBtn.appendChild(icon);
+      logoutBtn.appendChild(document.createTextNode(' ' + t('logout')));
     }
   }
 
@@ -3276,12 +4352,11 @@
     // Close dropdown
     const dd = document.getElementById('langDropdown');
     if(dd) dd.classList.remove('open');
-    // Re-render current page if needed for dynamic content
+    // Re-render current active page so all dynamic content updates
     const activePage = document.querySelector('.nav button.active')?.dataset?.page;
     if(activePage && PAGE_RENDERERS[activePage]) PAGE_RENDERERS[activePage]();
-    toast(`Language: ${LANGUAGES.find(l=>l.code===code)?.name || code}`, '#2f7cff');
+    toast(`🌐 ${LANGUAGES.find(l=>l.code===code)?.name || code}`, '#2f7cff');
   }
-  // ✅ FIX: Expose setLanguage globally so inline onclick and other scripts can call it
   window.setLanguage = setLanguage;
 
   window.toggleLangDropdown = () => {
@@ -3323,6 +4398,8 @@
   async function init(){
     // Apply saved language immediately
     applyTranslations();
+    // Apply saved branding immediately
+    applyStoredBranding();
 
     const loginBtn = qs('#discordLoginBtn');
     if(loginBtn) loginBtn.onclick = loginDiscord;
