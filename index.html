@@ -124,6 +124,14 @@
     .points-bar-fill { height:100%; background:linear-gradient(90deg,#2f7cff,#7258ff); border-radius:99px; }
 
     .mobile-menu { display:none; }
+
+    /* ── Drag & Drop ── */
+    .drag-handle { cursor:grab; color:#53617a; padding:0 8px; font-size:18px; user-select:none; transition:.15s; }
+    .drag-handle:hover { color:#8fa0bd; }
+    .drag-handle:active { cursor:grabbing; }
+    .dragging { opacity:.45; background:rgba(47,124,255,.08) !important; border:2px dashed rgba(47,124,255,.4) !important; border-radius:14px; }
+    .drag-over { border-top:2px solid #2f7cff !important; }
+
     @media(max-width:800px){
       .app { grid-template-columns:1fr; }
       .sidebar { position:fixed; right:-280px; transition:.2s; height:100vh; z-index:20; }
@@ -255,6 +263,58 @@
       setTimeout(()=>t.classList.remove('show'),3000); }
   }
   function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-US') : '-'; }
+
+  // ═══════════════════════════ DRAG & DROP ENGINE ═══════════════════════════
+  function initDnD(tableBodyId, collection, onReorder) {
+    const tbody = document.getElementById(tableBodyId);
+    if (!tbody) return;
+    let dragged = null;
+    tbody.querySelectorAll('tr[data-id]').forEach(row => {
+      row.setAttribute('draggable', 'true');
+      row.addEventListener('dragstart', e => {
+        dragged = row;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+        dragged = null;
+      });
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (dragged && row !== dragged) {
+          tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+          row.classList.add('drag-over');
+        }
+      });
+      row.addEventListener('drop', async e => {
+        e.preventDefault();
+        if (!dragged || dragged === row) return;
+        row.classList.remove('drag-over');
+        const rows = [...tbody.querySelectorAll('tr[data-id]')];
+        const fromIdx = rows.indexOf(dragged);
+        const toIdx   = rows.indexOf(row);
+        if (fromIdx === -1 || toIdx === -1) return;
+        rows.splice(fromIdx, 1);
+        rows.splice(toIdx, 0, dragged);
+        rows.forEach(r => tbody.appendChild(r));
+        const newOrder = rows.map(r => Number(r.dataset.id));
+        const endpoint = collection === 'ranks' ? '/api/ranks/reorder' : '/api/reorder';
+        const body = collection === 'ranks' ? { order: newOrder } : { collection, order: newOrder };
+        const res = await api('POST', endpoint, body);
+        if (res.ok) {
+          if (collection === 'ranks') store.ranks = res.data;
+          else if (store[collection]) store[collection] = res.data;
+          if (onReorder) onReorder();
+          toast('Order saved ✓', '#2ecc71');
+        } else {
+          toast('Reorder failed', '#ff5a67');
+          if (onReorder) onReorder(); // re-render to restore
+        }
+      });
+    });
+  }
 
   // ═══════════════════════════ API ENGINE ══════════════════════════
   async function api(method, path, body=null){
@@ -527,7 +587,8 @@
   function renderOfficers(){
     const officers = store.officers || [];
     const rows = officers.map(o=>`
-      <tr>
+      <tr data-id="${o.id}">
+        <td style="width:28px"><span class="drag-handle ti ti-grip-vertical" title="Drag to reorder"></span></td>
         <td><b>${esc(o.name)}</b></td>
         <td>#${esc(String(o.badge||''))}</td>
         <td>${esc(o.rank||'')}</td>
@@ -551,11 +612,12 @@
           ${isAdmin ? '<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> Add Officer</button>' : ''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
+          <table><thead><tr><th></th><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="officersTbody">${rows || '<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
         </table>
         </div>
       </div>`;
+    if(isAdmin) initDnD('officersTbody', 'officers', renderOfficers);
   }
 
   window.editOfficer = id => openOfficerModal(id);
@@ -612,12 +674,9 @@
   function renderRanks(){
     const ranks = store.ranks || [];
     const rows = ranks.map((r,idx)=>`
-      <tr>
+      <tr data-id="${r.id}">
         <td style="width:36px">
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <button class="btn btn-sm" style="padding:2px 7px;font-size:11px" onclick="moveRank(${r.id},-1)" ${idx===0?'disabled':''} title="Move Up">⬆️</button>
-            <button class="btn btn-sm" style="padding:2px 7px;font-size:11px" onclick="moveRank(${r.id},1)" ${idx===ranks.length-1?'disabled':''} title="Move Down">⬇️</button>
-          </div>
+          <span class="drag-handle ti ti-grip-vertical" title="Drag to reorder"></span>
         </td>
         <td><b>${esc(r.name)}</b></td>
         <td>${r.pointsReq||0} pts</td>
@@ -631,8 +690,62 @@
         <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th style="width:36px">Order</th><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
+        <div class="card-body"><table><thead><tr><th style="width:36px"></th><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
+        <tbody id="ranksTbody">${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
+    initDnD('ranksTbody', 'ranks', renderRanks);
+  }
+
+  // ── Div-based DnD (for laws etc.) ──
+  function initDnDDiv(containerId, collection, onReorder) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    let dragged = null;
+    container.querySelectorAll('[data-id]').forEach(el => {
+      el.setAttribute('draggable', 'true');
+      el.addEventListener('dragstart', e => {
+        dragged = el;
+        setTimeout(() => el.classList.add('dragging'), 0);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        container.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
+        dragged = null;
+      });
+      el.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (dragged && el !== dragged) {
+          container.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
+          el.classList.add('drag-over');
+        }
+      });
+      el.addEventListener('drop', async e => {
+        e.preventDefault();
+        if (!dragged || dragged === el) return;
+        el.classList.remove('drag-over');
+        const items = [...container.querySelectorAll('[data-id]')];
+        const fromIdx = items.indexOf(dragged);
+        const toIdx   = items.indexOf(el);
+        if (fromIdx === -1 || toIdx === -1) return;
+        items.splice(fromIdx, 1);
+        items.splice(toIdx, 0, dragged);
+        // Re-insert into DOM (skip divider siblings)
+        items.forEach(i => {
+          container.appendChild(i);
+          const next = i.nextElementSibling;
+          if (next && next.classList.contains('divider')) container.appendChild(next);
+        });
+        const newOrder = items.map(i => Number(i.dataset.id));
+        const res = await api('POST', '/api/reorder', { collection, order: newOrder });
+        if (res.ok) {
+          if (store[collection]) store[collection] = res.data;
+          toast('Order saved ✓', '#2ecc71');
+        } else {
+          toast('Reorder failed', '#ff5a67');
+          if (onReorder) onReorder();
+        }
+      });
+    });
   }
 
   window.moveRank = async (id, dir) => {
@@ -688,7 +801,7 @@
       const changeIcon   = isPos ? '▲' : (isNeg ? '▼' : '●');
       const safeId       = JSON.stringify(p.id);
       return `
-        <tr class="pts-row">
+        <tr class="pts-row" data-id="${p.id}">
           <td class="pts-td">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,rgba(47,124,255,.18),rgba(114,88,255,.18));border:1px solid rgba(47,124,255,.3);display:grid;place-items:center;font-size:16px;flex-shrink:0">👮</div>
@@ -806,13 +919,14 @@
                   <th style="text-align:center">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="pointsLogTbody">
                 ${rows || `<tr class="pts-empty-row"><td colspan="6"><i class="ti ti-clipboard-list" style="font-size:36px;display:block;margin:0 auto 12px;opacity:.25"></i>No points records yet</td></tr>`}
               </tbody>
             </table>
           </div>
         </div>
       </div>`;
+    if(isAdmin) initDnD('pointsLogTbody', 'pointsLog', renderPoints);
   }
 
   window.editPointsLog = (logId) => {
@@ -897,17 +1011,23 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openLawModal()"><i class="ti ti-plus"></i> Add Law</button>':''}
         </div>
         <div class="card-body">
-          ${laws.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No laws found</p>' :
-            laws.map(l=>`
-            <div class="officer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+          ${laws.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No laws found</p>' : `
+          <div id="lawsList">
+            ${laws.map(l=>`
+            <div class="officer-row" data-id="${l.id}" style="flex-direction:column;align-items:flex-start;gap:8px;cursor:default" draggable="true">
               <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
-                <b>${esc(l.title)}</b>
+                <div style="display:flex;align-items:center;gap:10px">
+                  ${isAdmin?'<span class="drag-handle ti ti-grip-vertical" title="Drag to reorder"></span>':''}
+                  <b>${esc(l.title)}</b>
+                </div>
                 ${isAdmin?`<div><button class="btn btn-sm btn-warning" onclick="openLawModal(${l.id})"><i class="ti ti-edit"></i></button>
                 <button class="btn btn-sm btn-danger" onclick="deleteLaw(${l.id})"><i class="ti ti-trash"></i></button></div>`:''}
               </div>
-              <p style="color:#8fa0bd;font-size:13px">${esc(l.content||'')}</p>
+              <p style="color:#8fa0bd;font-size:13px;padding-left:${isAdmin?'28px':'0'}">${esc(l.content||'')}</p>
             </div><div class="divider"></div>`).join('')}
+          </div>`}
         </div></div>`;
+    if(isAdmin && laws.length > 1) initDnDDiv('lawsList', 'laws', renderLaws);
   }
 
   window.deleteLaw = async id => {
@@ -940,10 +1060,11 @@
   function renderUniforms(){
     const uniforms = store.uniforms || [];
     const rows = uniforms.map(u=>`
-      <tr>
+      <tr data-id="${u.id}" style="transition:.2s">
+        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical"></span>':''}</td>
         <td><b>${esc(u.rank||'')}</b></td>
         <td><div style="line-height:1.8">${(u.male||'').split(',').map(s=>s.trim()).filter(Boolean).map(s=>`<div style="font-size:13px">${esc(s)}</div>`).join('')||esc(u.male||'-')}</div></td>
-        <td><div style="line-height:1.8"><div style="color:#8fa0bd;font-size:11px;font-weight:600;margin-bottom:2px">Female:</div>${(u.female||'').split(',').map(s=>s.trim()).filter(Boolean).map(s=>`<div style="font-size:13px">${esc(s)}</div>`).join('')||esc(u.female||'-')}</div></td>
+        <td><div style="line-height:1.8">${(u.female||'').split(',').map(s=>s.trim()).filter(Boolean).map(s=>`<div style="font-size:13px">${esc(s)}</div>`).join('')||esc(u.female||'-')}</div></td>
         <td>
           ${isAdmin?`<button class="btn btn-sm btn-warning" onclick="openUniformModal(${u.id})"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteUniform(${u.id})"><i class="ti ti-trash"></i></button>`:''}
@@ -954,8 +1075,9 @@
         <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
         </div>
-        <div class="card-body"><table><thead><tr><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
+        <div class="card-body"><table><thead><tr><th></th><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+        <tbody id="uniformsTbody">${rows || '<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
+    if(isAdmin) initDnD('uniformsTbody', 'uniforms', renderUniforms);
   }
 
   window.deleteUniform = async id => {
@@ -995,7 +1117,8 @@
   function renderCodes(){
     const codes = store.codes || [];
     const rows = codes.map(c=>`
-      <tr>
+      <tr data-id="${c.id}">
+        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical"></span>':''}</td>
         <td><b>${esc(c.code||'')}</b></td>
         <td>${esc(c.description||'')}</td>
         <td><span class="badge badge-${c.priority==='danger'?'danger':c.priority==='warning'?'warning':'info'}">${esc(c.priority||'info')}</span></td>
@@ -1012,11 +1135,12 @@
         </div>
         <div class="card-body">
           <table>
-            <thead><tr><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No codes found</td>'}</tbody>
+            <thead><tr><th></th><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
+            <tbody id="codesTbody">${rows || '<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No codes found</td>'}</tbody>
           </table>
         </div>
       </div>`;
+    if(isAdmin) initDnD('codesTbody', 'codes', renderCodes);
   }
 
   window.deleteCode = async id => {
@@ -1061,7 +1185,8 @@
     const wanted = store.wanted || [];
     const impound = store.impound || [];
     const wRows = wanted.map(w=>`
-      <tr>
+      <tr data-id="${w.id}">
+        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical"></span>':''}</td>
         <td><b>${esc(w.name||'')}</b></td>
         <td>${esc(w.plate||'-')}</td>
         <td>${esc(w.reason||'-')}</td>
@@ -1071,7 +1196,8 @@
         <td>${isAdmin?`<button class="btn btn-sm btn-danger" onclick="deleteWanted(${w.id})"><i class="ti ti-trash"></i></button>`:''}</td>
       </tr>`).join('');
     const iRows = impound.map(i=>`
-      <tr>
+      <tr data-id="${i.id}">
+        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical"></span>':''}</td>
         <td><b>${esc(i.plate||'')}</b></td>
         <td>${esc(i.model||'-')}</td>
         <td>${esc(i.reason||'-')}</td>
@@ -1079,15 +1205,15 @@
         <td>${esc(i.by||'-')}</td>
         <td>${fmtTime(i.time)}</td>
         <td>${isAdmin?`<button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})"><i class="ti ti-check"></i> Release</button>`:''}</td>
-      <tr>`).join('');
+      </tr>`).join('');
     qs('#wanted').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-car"></i> Wanted List</h3>
           ${isAdmin?'<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>':''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody>${wRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No wanted records</td>'}</tbody></table>
+          <table><thead><tr><th></th><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody id="wantedTbody">${wRows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No wanted records</td>'}</tbody></table>
         </div>
       </div>
       <div class="card">
@@ -1095,10 +1221,11 @@
           ${isAdmin?'<button class="btn btn-primary" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Add Impound</button>':''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody>${iRows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No impound records</td>'}</tbody></table>
+          <table><thead><tr><th></th><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody id="impoundTbody">${iRows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No impound records</td>'}</tbody></table>
         </div>
       </div>`;
+    if(isAdmin){ initDnD('wantedTbody','wanted',renderWanted); initDnD('impoundTbody','impound',renderWanted); }
   }
 
   window.deleteWanted = async id => {
@@ -1159,7 +1286,8 @@
   function renderCases(){
     const cases = store.cases || [];
     const rows = cases.map(c=>`
-      <tr>
+      <tr data-id="${c.id}">
+        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical"></span>':''}</td>
         <td>
           <b>${esc(c.title||'')}</b>
           ${c.caseType?`<div style="font-size:11px;color:#8fa0bd">${esc(c.caseType)}</div>`:''}
@@ -1183,10 +1311,11 @@
           <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title / Type</th><th>Criminals / Location</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No cases found</td>'}</tbody></table>
+          <table><thead><tr><th></th><th>Title / Type</th><th>Criminals / Location</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="casesTbody">${rows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No cases found</td>'}</tbody></table>
         </div>
       </div>`;
+    if(isAdmin) initDnD('casesTbody','cases',renderCases);
   }
 
   window.viewCase = id => {
@@ -1269,7 +1398,8 @@
   function renderReports(){
     const reports = store.reports || [];
     const rows = reports.map(r=>`
-      <tr>
+      <tr data-id="${r.id}">
+        <td style="width:28px"><span class="drag-handle ti ti-grip-vertical"></span></td>
         <td>
           <b>${esc(r.title||'')}</b>
           ${r.caseType?`<div style="font-size:11px;color:#8fa0bd">${esc(r.caseType)}</div>`:''}
@@ -1292,10 +1422,11 @@
           <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Title / Type</th><th>Criminals / Location</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
+          <table><thead><tr><th></th><th>Title / Type</th><th>Criminals / Location</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="reportsTbody">${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
         </div>
       </div>`;
+    initDnD('reportsTbody','reports',renderReports);
   }
 
   window.viewReport = id => {
@@ -1447,18 +1578,59 @@
   };
 
   function renderLogs(){
-    const activity = store.activity || [];
-    const rows = activity.slice(0,100).map(a=>`
-      <tr>
+    const activity = (store.activity || []).slice(0, 100);
+    const TYPE_COLORS = {
+      officer_add:'#2ecc71', officer_update:'#f1c40f', officer_delete:'#e74c3c',
+      rank_add:'#3498db', rank_update:'#f1c40f', rank_delete:'#e74c3c', rank_reorder:'#9b59b6',
+      points:'#9b59b6', pointslog_edit:'#f1c40f', pointslog_delete:'#e74c3c',
+      report:'#2ecc71', report_update:'#f1c40f', report_delete:'#e74c3c',
+      case_open:'#2ecc71', case_update:'#f1c40f', case_delete:'#e74c3c',
+      wanted_add:'#e74c3c', wanted_remove:'#2ecc71',
+      impound_add:'#e67e22', impound_release:'#2ecc71',
+      uniform_add:'#3498db', uniform_update:'#f1c40f', uniform_delete:'#e74c3c',
+      laws_update:'#1abc9c', code_add:'#3498db', code_update:'#f1c40f', code_delete:'#e74c3c',
+      adminrole_create:'#9b59b6', adminrole_update:'#f1c40f', adminrole_delete:'#e74c3c', adminrole_revoke:'#e74c3c',
+      settings:'#1abc9c', database_reset:'#c0392b', webhooks_update:'#ff69b4',
+      user_revoke:'#e74c3c', nickname_set:'#3498db', logo_update:'#1abc9c',
+      login:'#2ecc71', logout:'#e67e22', session_invalidate:'#e74c3c',
+      seed:'#95a5a6', system:'#95a5a6',
+    };
+    const TYPE_ICONS = {
+      officer_add:'ti-user-plus', officer_update:'ti-user-edit', officer_delete:'ti-user-minus',
+      rank_add:'ti-stairs-up', rank_update:'ti-edit', rank_delete:'ti-trash', rank_reorder:'ti-arrows-sort',
+      points:'ti-chart-bar', pointslog_edit:'ti-edit', pointslog_delete:'ti-trash',
+      report:'ti-file-plus', report_update:'ti-file-pencil', report_delete:'ti-file-minus',
+      case_open:'ti-folder-plus', case_update:'ti-folder-pencil', case_delete:'ti-folder-minus',
+      wanted_add:'ti-alert-triangle', wanted_remove:'ti-check',
+      impound_add:'ti-car', impound_release:'ti-car-off',
+      uniform_add:'ti-shirt', uniform_update:'ti-shirt', uniform_delete:'ti-shirt',
+      laws_update:'ti-book', code_add:'ti-radio', code_update:'ti-radio', code_delete:'ti-radio',
+      adminrole_create:'ti-shield-plus', adminrole_update:'ti-shield-check', adminrole_delete:'ti-shield-minus', adminrole_revoke:'ti-shield-off',
+      settings:'ti-settings', database_reset:'ti-database', webhooks_update:'ti-webhook',
+      user_revoke:'ti-user-off', nickname_set:'ti-at', logo_update:'ti-photo',
+      login:'ti-login', logout:'ti-logout', default:'ti-info-circle',
+    };
+    const rows = activity.map(a => {
+      const color = TYPE_COLORS[a.type] || '#8fa0bd';
+      const icon  = TYPE_ICONS[a.type] || TYPE_ICONS.default;
+      const byUser = a.by ? (store.users||[]).find(u=>u.id===a.by) : null;
+      return `<tr>
+        <td style="width:36px;text-align:center">
+          <span class="ti ${esc(icon)}" style="font-size:16px;color:${color}"></span>
+        </td>
         <td>${esc(a.msg||'')}</td>
-        <td><span class="badge badge-info">${esc(a.type||'system')}</span></td>
-        <td>${fmtTime(a.time)}</td>
-      </tr>`).join('');
+        <td><span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${esc(a.type||'system')}</span></td>
+        <td style="color:#8fa0bd;font-size:12px">
+          ${byUser?(byUser.avatar?`<img src="${esc(byUser.avatar)}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:5px;object-fit:cover">`:'')+esc(getNick(a.by,byUser.username)):a.by?esc(String(a.by)).slice(0,8)+'…':'system'}
+        </td>
+        <td style="white-space:nowrap;font-size:12px;color:#8fa0bd">${fmtTime(a.time)}</td>
+      </tr>`;
+    }).join('');
     qs('#logs').innerHTML = `
       <div class="card">
         <div class="card-header"><h3><i class="ti ti-history"></i> System Logs</h3>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span style="color:#8fa0bd;font-size:13px">Showing last ${Math.min(100,activity.length)} entries</span>
+            <span style="color:#8fa0bd;font-size:13px">Showing last ${activity.length} entries</span>
             ${isOwner?`
             <button class="btn btn-sm btn-success" onclick="exportLogs('json')"><i class="ti ti-download"></i> JSON</button>
             <button class="btn btn-sm btn-success" onclick="exportLogs('txt')"><i class="ti ti-download"></i> TXT</button>
@@ -1466,8 +1638,8 @@
           </div>
         </div>
         <div class="card-body">
-          <table><thead><tr><th>Message</th><th>Type</th><th>Date</th></tr></thead>
-          <tbody>${rows||'<tr><td colspan="3" style="color:#8fa0bd;text-align:center">No logs found</td>'}</tbody></table>
+          <table><thead><tr><th style="width:36px"></th><th>Message</th><th>Type</th><th>Actor</th><th>Date</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No logs found</td>'}</tbody></table>
         </div>
       </div>`;
   }
@@ -1745,9 +1917,40 @@
     if(!isOwner){ toast('Owner only','#ff5a67'); return; }
     const role = id ? (store.adminRoles||[]).find(r=>r.id===id) : null;
     qs('#modalTitle').textContent = id ? 'Edit Admin Role' : 'Create Admin Role';
+
+    // Build current members display from KV users
+    const currentMembers = role?.members || [];
+    let selectedMembers = [...currentMembers];
+
+    function renderMembersList() {
+      return selectedMembers.map(mid => {
+        const u = (store.users||[]).find(x=>x.id===mid);
+        const display = getNick(mid, u?.username || mid);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:10px;margin-bottom:6px" data-member="${esc(mid)}">
+          ${u?.avatar?`<img src="${esc(u.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`:'<div style="width:28px;height:28px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:11px;font-weight:700">${esc((display)[0]?.toUpperCase()||'?')}</div>'}
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${esc(display)}</div>
+            <div style="font-size:11px;color:#53617a">${esc(mid)}</div>
+          </div>
+          <button class="btn btn-sm btn-danger" style="padding:4px 8px" onclick="window._removeAdminMember('${esc(mid)}')"><i class="ti ti-x"></i></button>
+        </div>`;
+      }).join('') || '<p style="color:#53617a;font-size:13px;text-align:center;padding:12px">No members added yet</p>';
+    }
+
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="arName" value="${esc(role?.name||'')}" placeholder="e.g. Supervisor"></div>
-      <div class="form-group"><label>Members (Discord IDs, comma-separated)</label><input id="arMembers" value="${esc((role?.members||[]).join(', '))}" placeholder="123456, 789012"></div>
+      <div class="form-group">
+        <label>Add Members</label>
+        <div style="position:relative">
+          <input id="arMemberSearch" placeholder="Search by Discord username..." autocomplete="off" style="padding-right:40px">
+          <div id="arSearchResults" style="position:absolute;top:100%;left:0;right:0;background:#101827;border:1px solid rgba(255,255,255,.12);border-radius:14px;z-index:100;max-height:220px;overflow-y:auto;display:none;margin-top:4px;box-shadow:0 12px 32px rgba(0,0,0,.4)"></div>
+        </div>
+        <p style="font-size:11px;color:#53617a;margin-top:4px">Search Discord server members and click to add.</p>
+      </div>
+      <div class="form-group">
+        <label>Current Members</label>
+        <div id="arMembersList" style="min-height:40px">${renderMembersList()}</div>
+      </div>
       <div class="form-group"><label>Permissions</label>
         <div style="display:grid;gap:12px;margin-top:8px">
           ${PERM_GROUPS.map(g=>`
@@ -1767,13 +1970,87 @@
             </div>`).join('')}
         </div>
       </div>`;
+
+    // ── Member search live ──
+    window._selectedAdminMembers = selectedMembers;
+    window._removeAdminMember = (mid) => {
+      window._selectedAdminMembers = window._selectedAdminMembers.filter(m=>m!==mid);
+      const list = qs('#arMembersList');
+      if(list) list.innerHTML = window._selectedAdminMembers.map(m=>{
+        const u=(store.users||[]).find(x=>x.id===m);
+        const display=getNick(m,u?.username||m);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:10px;margin-bottom:6px" data-member="${esc(m)}">
+          ${u?.avatar?`<img src="${esc(u.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`:'<div style="width:28px;height:28px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:11px;font-weight:700">'+esc(display[0]?.toUpperCase()||'?')+'</div>'}
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(display)}</div><div style="font-size:11px;color:#53617a">${esc(m)}</div></div>
+          <button class="btn btn-sm btn-danger" style="padding:4px 8px" onclick="window._removeAdminMember('${esc(m)}')"><i class="ti ti-x"></i></button>
+        </div>`;
+      }).join('') || '<p style="color:#53617a;font-size:13px;text-align:center;padding:12px">No members added yet</p>';
+    };
+
+    let searchTimeout;
+    const searchInput = qs('#arMemberSearch');
+    const resultsDiv  = qs('#arSearchResults');
+    if(searchInput && resultsDiv) {
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        const q = searchInput.value.trim();
+        if(!q){ resultsDiv.style.display='none'; return; }
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = '<div style="padding:12px;color:#53617a;font-size:13px;text-align:center"><span class="spinner"></span></div>';
+        searchTimeout = setTimeout(async () => {
+          const res = await api('GET', `/api/discord/members?q=${encodeURIComponent(q)}`);
+          if(!res.ok){ resultsDiv.innerHTML='<div style="padding:12px;color:#ff5a67;font-size:13px;text-align:center">Search failed</div>'; return; }
+          const members = res.data || [];
+          if(!members.length){ resultsDiv.innerHTML='<div style="padding:12px;color:#53617a;font-size:13px;text-align:center">No members found</div>'; return; }
+          resultsDiv.innerHTML = members.map(m=>`
+            <div onclick="window._addAdminMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:.15s;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
+              <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div>
+                <div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div>
+              </div>
+              ${window._selectedAdminMembers.includes(m.id)?'<span style="font-size:11px;color:#2ecc71;font-weight:700">✓ Added</span>':''}
+            </div>`).join('');
+        }, 400);
+      });
+      document.addEventListener('click', (e) => {
+        if(!resultsDiv.contains(e.target) && e.target !== searchInput) resultsDiv.style.display='none';
+      }, { once: true });
+    }
+
+    window._addAdminMember = (member) => {
+      if(window._selectedAdminMembers.includes(member.id)){ toast('Already added','#f3c75a'); return; }
+      window._selectedAdminMembers.push(member.id);
+      // Merge into store.users for display
+      if(!(store.users||[]).find(u=>u.id===member.id)){
+        store.users = store.users || [];
+        store.users.push({ id:member.id, username:member.username, avatar:member.avatar });
+      }
+      const list = qs('#arMembersList');
+      if(list){
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:10px;margin-bottom:6px';
+        div.setAttribute('data-member', member.id);
+        div.innerHTML = `<img src="${esc(member.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(member.displayName)}</div><div style="font-size:11px;color:#53617a">${esc(member.id)}</div></div>
+          <button class="btn btn-sm btn-danger" style="padding:4px 8px" onclick="window._removeAdminMember('${esc(member.id)}')"><i class="ti ti-x"></i></button>`;
+        const empty = list.querySelector('p');
+        if(empty) empty.remove();
+        list.appendChild(div);
+      }
+      const resultsDiv2 = qs('#arSearchResults');
+      if(resultsDiv2) resultsDiv2.style.display='none';
+      const si = qs('#arMemberSearch');
+      if(si) si.value = '';
+      toast(`${member.displayName} added ✓`, '#2ecc71');
+    };
+
     qs('#modalConfirmBtn').onclick = async () => {
       const name = qs('#arName').value.trim();
       if(!name){ toast('Name required','#ff5a67'); return; }
-      const members = qs('#arMembers').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const members = window._selectedAdminMembers || [];
       const permissions = [...document.querySelectorAll('.ar-perm:checked')].map(c=>c.value);
       const payload = { name, members, permissions };
-      // ✅ FIX: Check if current user is being removed from this role
       const existingRole = id ? (store.adminRoles||[]).find(r=>r.id===id) : null;
       const currentUserWasInRole = existingRole?.members?.includes(currentUser?.id);
       const currentUserRevoked = currentUserWasInRole && !members.includes(currentUser?.id);
@@ -1787,9 +2064,7 @@
         else { toast('Error: '+(r.reason||'failed'),'#ff5a67'); return; }
       }
       renderAdminRoles(); closeModal(); toast('Saved ✓');
-      // ✅ FIX: If current user's own role was revoked, re-validate and update UI immediately
       if(currentUserRevoked){
-        console.warn('[AdminRoles] Current user removed from role — re-validating session immediately');
         const valid = await validateSessionWithServer();
         if(!valid){ clearSession(); location.reload(); return; }
         bootApp();
