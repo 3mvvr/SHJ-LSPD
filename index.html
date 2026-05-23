@@ -189,6 +189,40 @@
     ::-webkit-scrollbar-thumb { background:rgba(47,124,255,.35); border-radius:99px; }
     ::-webkit-scrollbar-thumb:hover { background:rgba(47,124,255,.6); }
     * { scrollbar-width:thin; scrollbar-color:rgba(47,124,255,.35) rgba(7,11,19,.5); }
+
+    /* ── RTL Full Support ── */
+    [dir="rtl"] .sidebar { border-right:none; border-left:1px solid rgba(255,255,255,.08); }
+    [dir="rtl"] .nav button { text-align:right; }
+    [dir="rtl"] .brand { flex-direction:row-reverse; }
+    [dir="rtl"] .top-bar { flex-direction:row-reverse; }
+    [dir="rtl"] .user-info { flex-direction:row-reverse; }
+    [dir="rtl"] .card-header { flex-direction:row-reverse; }
+    [dir="rtl"] .btn { flex-direction:row-reverse; }
+    [dir="rtl"] #langSelectorBtn { right:auto; left:16px; }
+    [dir="rtl"] #langDropdown { right:auto; left:16px; }
+    [dir="rtl"] #toastContainer { right:auto; left:24px; }
+    [dir="rtl"] .toast-item { transform:translateX(-120%); border-left:none; border-right:4px solid #2f7cff; }
+    [dir="rtl"] .toast-item.show { transform:translateX(0); }
+    [dir="rtl"] .toast-item.hide { transform:translateX(-120%); }
+    [dir="rtl"] th, [dir="rtl"] td { text-align:right; }
+    [dir="rtl"] .modal-footer { flex-direction:row-reverse; }
+    [dir="rtl"] .drag-handle { order:-1; }
+    [dir="rtl"] .points-bar-fill { margin-left:auto; }
+    [dir="rtl"] @media(max-width:800px){
+      [dir="rtl"] .sidebar { position:fixed; right:auto; left:-280px; }
+      [dir="rtl"] .sidebar.open { left:0; }
+    }
+
+    /* ── Performance: GPU accelerated transitions ── */
+    .page, .modal, .toast-item, .sidebar, .nav button {
+      will-change: transform;
+      backface-visibility: hidden;
+    }
+
+    /* ── Console Terminal ── */
+    #consoleInput:focus { border-bottom-color:#2f7cff !important; outline:none; box-shadow:0 2px 0 #2f7cff; }
+    #consoleOutput::-webkit-scrollbar { width:4px; }
+    #consoleOutput { scrollbar-width:thin; scrollbar-color:rgba(47,124,255,.3) transparent; }
   </style>
 </head>
 <body>
@@ -241,6 +275,7 @@
       <button data-page="logs" data-admin-only style="display:none"><i class="ti ti-history"></i> <span data-i18n="system_logs">System Logs</span></button>
       <button data-page="settings" data-admin-only style="display:none"><i class="ti ti-settings"></i> <span data-i18n="settings">Settings</span></button>
       <button data-page="adminRoles" data-owner-only style="display:none"><i class="ti ti-shield-lock"></i> <span data-i18n="admin_roles">Admin Roles</span></button>
+      <button data-page="console" data-admin-only style="display:none"><i class="ti ti-terminal-2"></i> <span data-i18n="console">Console</span></button>
     </nav>
   </aside>
 
@@ -272,7 +307,8 @@
       <div id="websiteRoles" class="page"></div>
       <div id="logs"         class="page"></div>
       <div id="settings"     class="page"></div>
-      <div id="adminRoles"   class="page"></div>
+      <div id="adminRoles" class="page"></div>
+      <div id="console"    class="page"></div>
     </div>
   </main>
 </div>
@@ -444,23 +480,26 @@
   }
 
   async function loadAllData(){
-    const data = await api('GET', '/api/data');
+    // ✅ PERFORMANCE: Parallel requests instead of sequential
+    const [data, nickRes, logoRes] = await Promise.all([
+      api('GET', '/api/data'),
+      api('GET', '/api/nicknames'),
+      api('GET', '/api/logo'),
+    ]);
     if(data.ok){
       ['officers','ranks','pointsLog','laws','uniforms','codes',
        'wanted','impound','cases','reports','users','activity','settings'
       ].forEach(k => { if(data[k] !== undefined) store[k] = data[k]; });
     }
-    // Load nicknames
-    const nickRes = await api('GET', '/api/nicknames');
     if(nickRes.ok) store.nicknames = nickRes.data || {};
-    // Load logo
-    const logoRes = await api('GET', '/api/logo');
     if(logoRes.ok && logoRes.data) applyLogo(logoRes.data);
-    // تحميل adminRoles إذا كان owner أو full access
+    // Load admin-only data in parallel
     if(isOwner || isFullAccess){
-      const arRes = await api('GET','/api/admin-roles');
+      const [arRes, whRes] = await Promise.all([
+        api('GET','/api/admin-roles'),
+        api('GET','/api/webhooks'),
+      ]);
       if(arRes.ok) store.adminRoles = arRes.data;
-      const whRes = await api('GET','/api/webhooks');
       if(whRes.ok) store.webhooks = whRes.data;
     } else if(isAdmin){
       const whRes = await api('GET','/api/webhooks');
@@ -658,6 +697,7 @@
     logs:         renderLogs,
     settings:     renderSettings,
     adminRoles:   renderAdminRoles,
+    console:      renderConsole,
   };
 
   function navigate(pageId){
@@ -745,10 +785,20 @@
 
   window.editOfficer = id => openOfficerModal(id);
   window.deleteOfficer = async id => {
-    if(!confirm('Delete officer?')) return;
-    const r = await api('DELETE','/api/officers',{ id });
-    if(r.ok){ store.officers = (store.officers||[]).filter(o=>o.id!==id); renderOfficers(); renderDashboard(); toast('Officer deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const o = (store.officers||[]).find(x=>x.id===id);
+    if(!o) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Officer';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p style="font-size:15px;margin-bottom:8px">Delete officer <b>${esc(o.name)}</b>?</p><p style="color:#ff5a67;font-size:13px">This action cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/officers',{ id });
+      if(r.ok){ store.officers = (store.officers||[]).filter(o=>o.id!==id); renderOfficers(); renderDashboard(); closeModal(); toast('Officer deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.openOfficerModal = (id=null) => {
@@ -901,10 +951,20 @@
   };
 
   window.deleteRank = async id => {
-    if(!confirm('Delete Rank?')) return;
-    const r = await api('DELETE','/api/ranks',{ id });
-    if(r.ok){ store.ranks = (store.ranks||[]).filter(x=>x.id!==id); renderRanks(); toast('Rank deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const rank = (store.ranks||[]).find(x=>x.id===id);
+    if(!rank) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Rank';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p style="font-size:15px;margin-bottom:8px">Delete rank <b>${esc(rank.name)}</b>?</p><p style="color:#ff5a67;font-size:13px">This action cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/ranks',{ id });
+      if(r.ok){ store.ranks = (store.ranks||[]).filter(x=>x.id!==id); renderRanks(); closeModal(); toast('Rank deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.openRankModal = (id=null) => {
     const rank = id ? (store.ranks||[]).find(r=>r.id===id) : null;
@@ -1104,14 +1164,22 @@
   window.deletePointsLog = async (logId) => {
     const entry = (store.pointsLog||[]).find(e => e.id === logId);
     if(!entry){ toast('Record not found','#ff5a67'); return; }
-    if(!confirm(`Delete points record for "${entry.officer}" (${Number(entry.change)>0?'+':''}${entry.change} pts)?\nThis cannot be undone.`)) return;
-    const r = await api('DELETE', '/api/pointsLog', { id: logId });
-    if(r.ok){
-      store.pointsLog = (store.pointsLog||[]).filter(e=>e.id!==logId);
-      renderPoints(); toast('Record deleted','#ff5a67');
-    } else {
-      toast('Error: '+(r.reason||'failed'),'#ff5a67');
-    }
+    qs('#modalTitle').textContent = '⚠️ Delete Points Record';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete points record for <b>${esc(entry.officer)}</b><br><span style="color:${Number(entry.change)>0?'#2ecc71':'#ff5a67'}">(${Number(entry.change)>0?'+':''}${entry.change} pts)</span>?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE', '/api/pointsLog', { id: logId });
+      if(r.ok){
+        store.pointsLog = (store.pointsLog||[]).filter(e=>e.id!==logId);
+        renderPoints(); closeModal(); toast('Record deleted','#ff5a67');
+      } else {
+        toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      }
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.openPointsModal = () => {
@@ -1172,11 +1240,21 @@
   }
 
   window.deleteLaw = async id => {
-    if(!confirm('Delete law?')) return;
-    const laws = (store.laws||[]).filter(l=>l.id!==id);
-    const r = await api('POST','/api/laws',{ laws });
-    if(r.ok){ store.laws=laws; renderLaws(); toast('Law deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const law = (store.laws||[]).find(l=>l.id===id);
+    if(!law) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Law';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p style="font-size:15px;margin-bottom:8px">Delete "<b>${esc(law.title)}</b>"?</p><p style="color:#ff5a67;font-size:13px">This action cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const laws = (store.laws||[]).filter(l=>l.id!==id);
+      const r = await api('POST','/api/laws',{ laws });
+      if(r.ok){ store.laws=laws; renderLaws(); closeModal(); toast('Law deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.openLawModal = (id=null) => {
     const law = id ? (store.laws||[]).find(l=>l.id===id) : null;
@@ -1222,10 +1300,20 @@
   }
 
   window.deleteUniform = async id => {
-    if(!confirm('Delete Uniform configuration?')) return;
-    const r = await api('DELETE','/api/uniforms',{ id });
-    if(r.ok){ store.uniforms = (store.uniforms||[]).filter(x=>x.id!==id); renderUniforms(); toast('Deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const u = (store.uniforms||[]).find(x=>x.id===id);
+    if(!u) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Uniform';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete uniform config for <b>${esc(u.rank)}</b>?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/uniforms',{ id });
+      if(r.ok){ store.uniforms = (store.uniforms||[]).filter(x=>x.id!==id); renderUniforms(); closeModal(); toast('Deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.openUniformModal = (id=null) => {
     const u = id ? (store.uniforms||[]).find(x=>x.id===id) : null;
@@ -1285,10 +1373,20 @@
   }
 
   window.deleteCode = async id => {
-    if(!confirm('Delete code?')) return;
-    const r = await api('DELETE','/api/codes',{ id });
-    if(r.ok){ store.codes = (store.codes||[]).filter(c=>c.id!==id); renderCodes(); toast('Deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const c = (store.codes||[]).find(x=>x.id===id);
+    if(!c) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Code';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete code <b>${esc(c.code)}</b>?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/codes',{ id });
+      if(r.ok){ store.codes = (store.codes||[]).filter(c=>c.id!==id); renderCodes(); closeModal(); toast('Deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.openCodeModal = (id=null) => {
     const c = id ? (store.codes||[]).find(x=>x.id===id) : null;
@@ -1327,7 +1425,7 @@
     const impound = store.impound || [];
     const wRows = wanted.map(w=>`
       <tr data-id="${w.id}">
-        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical"></span>':''}</td>
+        <td style="width:28px">${isAdmin?'<span class="drag-handle ti ti-grip-vertical" title="Drag to reorder"></span>':''}</td>
         <td><b>${esc(w.name||'')}</b></td>
         <td>${esc(w.plate||'-')}</td>
         <td>${esc(w.reason||'-')}</td>
@@ -1370,16 +1468,36 @@
   }
 
   window.deleteWanted = async id => {
-    if(!confirm('Remove from wanted list?')) return;
-    const r = await api('DELETE','/api/wanted',{ id });
-    if(r.ok){ store.wanted=(store.wanted||[]).filter(w=>w.id!==id); renderWanted(); toast('Removed','#2ecc71'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const w = (store.wanted||[]).find(x=>x.id===id);
+    if(!w) return;
+    qs('#modalTitle').textContent = '⚠️ Remove Wanted';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Remove <b>${esc(w.name)}</b> from wanted list?</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-success';
+    qs('#modalConfirmBtn').textContent = 'Remove';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/wanted',{ id });
+      if(r.ok){ store.wanted=(store.wanted||[]).filter(x=>x.id!==id); renderWanted(); closeModal(); toast('Removed from wanted list','#2ecc71'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.releaseImpound = async id => {
-    if(!confirm('Release vehicle?')) return;
-    const r = await api('DELETE','/api/impound',{ id });
-    if(r.ok){ store.impound=(store.impound||[]).filter(i=>i.id!==id); renderWanted(); toast('Vehicle released','#2ecc71'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const i = (store.impound||[]).find(x=>x.id===id);
+    if(!i) return;
+    qs('#modalTitle').textContent = '🚗 Release Vehicle';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🔑</div><p>Release vehicle <b>${esc(i.plate)}</b>?</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-success';
+    qs('#modalConfirmBtn').textContent = 'Release';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/impound',{ id });
+      if(r.ok){ store.impound=(store.impound||[]).filter(x=>x.id!==id); renderWanted(); closeModal(); toast('Vehicle released ✓','#2ecc71'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.openWantedModal = () => {
     qs('#modalTitle').textContent = 'Add Wanted';
@@ -1487,10 +1605,20 @@
   };
 
   window.deleteCase = async id => {
-    if(!confirm('Delete case?')) return;
-    const r = await api('DELETE','/api/cases',{ id });
-    if(r.ok){ store.cases=(store.cases||[]).filter(c=>c.id!==id); renderCases(); toast('Deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const c = (store.cases||[]).find(x=>x.id===id);
+    if(!c) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Case';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete case <b>${esc(c.title)}</b>?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/cases',{ id });
+      if(r.ok){ store.cases=(store.cases||[]).filter(c=>c.id!==id); renderCases(); closeModal(); toast('Deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
   window.openCaseModal = (id=null) => {
     const c = id ? (store.cases||[]).find(x=>x.id===id) : null;
@@ -1596,10 +1724,20 @@
   };
 
   window.deleteReport = async id => {
-    if(!confirm('Delete report?')) return;
-    const r = await api('DELETE','/api/reports',{ id });
-    if(r.ok){ store.reports=(store.reports||[]).filter(x=>x.id!==id); renderReports(); toast('Report deleted','#ff5a67'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    const r2 = (store.reports||[]).find(x=>x.id===id);
+    if(!r2) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Report';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete report <b>${esc(r2.title)}</b>?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/reports',{ id });
+      if(r.ok){ store.reports=(store.reports||[]).filter(x=>x.id!==id); renderReports(); closeModal(); toast('Report deleted','#ff5a67'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.openReportModal = (id=null) => {
@@ -1802,12 +1940,18 @@
     const settings = store.settings || { webhookUrl:'', logsEnabled:true };
     const wh = store.webhooks || {};
     const webhookTypes = [
-      { key:'login',    label:'Login Logs Webhook' },
-      { key:'logout',   label:'Logout Logs Webhook' },
-      { key:'reports',  label:'Reports Logs Webhook' },
-      { key:'cases',    label:'Cases Logs Webhook' },
-      { key:'admin',    label:'Admin Actions Webhook' },
-      { key:'database', label:'Database Logs Webhook' },
+      { key:'login',       label:'🔑 Login Logs Webhook',        color:'#2ecc71' },
+      { key:'logout',      label:'🚪 Logout Logs Webhook',       color:'#e67e22' },
+      { key:'officers',    label:'👮 Officer Logs Webhook',       color:'#3498db' },
+      { key:'admin',       label:'⚡ Admin Actions Webhook',      color:'#f3c75a' },
+      { key:'website_roles',label:'🔐 Website Roles Logs Webhook', color:'#9b59b6' },
+      { key:'server_roles', label:'🛡️ Server Roles Logs Webhook',  color:'#8e44ad' },
+      { key:'discord_users',label:'👥 Discord Users Logs Webhook', color:'#7289da' },
+      { key:'punishment',  label:'⚠️ Punishment Logs Webhook',    color:'#e74c3c' },
+      { key:'cases',       label:'📁 Cases Logs Webhook',         color:'#f39c12' },
+      { key:'reports',     label:'📋 Reports Logs Webhook',       color:'#1abc9c' },
+      { key:'settings',    label:'⚙️ Settings Logs Webhook',      color:'#95a5a6' },
+      { key:'database',    label:'🗄️ Database Logs Webhook',      color:'#c0392b' },
     ];
     qs('#settings').innerHTML = `
       <div class="card">
@@ -1872,7 +2016,7 @@
         <div class="card-header"><h3><i class="ti ti-webhook"></i> Webhook System</h3></div>
         <div class="card-body">
           ${webhookTypes.map(wt=>`
-            <div style="border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px;margin-bottom:12px">
+            <div style="border:1px solid rgba(255,255,255,.08);border-left:3px solid ${wt.color||'#2f7cff'};border-radius:14px;padding:14px 16px;margin-bottom:12px">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
                 <b style="font-size:14px">${esc(wt.label)}</b>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
@@ -1924,7 +2068,7 @@
 
   window.saveWebhooks = async () => {
     const wh = store.webhooks || {};
-    const keys = ['login','logout','reports','cases','admin','database'];
+    const keys = ['login','logout','officers','admin','website_roles','server_roles','discord_users','punishment','cases','reports','settings','database'];
     const payload = {};
     keys.forEach(k=>{
       payload[k] = {
@@ -1950,10 +2094,18 @@
   };
 
   window.resetDatabase = async () => {
-    if(!confirm('Reset ALL database to defaults? This CANNOT be undone!')) return;
-    const r = await api('POST','/api/database/reset');
-    if(r.ok){ await loadAllData(); navigate('dashboard'); toast('Database reset ✓','#f3c75a'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    qs('#modalTitle').textContent = '⚠️ Reset Database';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:48px;margin-bottom:12px">💥</div><p style="font-size:15px;font-weight:700;color:#ff5a67;margin-bottom:8px">DANGER: Reset ALL Database!</p><p style="color:#8fa0bd;font-size:13px">This will permanently delete ALL data and reset to defaults. This CANNOT be undone!</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = '💥 Reset Everything';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('POST','/api/database/reset');
+      if(r.ok){ await loadAllData(); navigate('dashboard'); closeModal(); toast('Database reset ✓','#f3c75a'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.saveSettings = async () => {
@@ -1967,41 +2119,86 @@
   };
 
   window.seedDatabase = async () => {
-    if(!confirm('Reset ALL data to defaults? This cannot be undone!')) return;
-    const r = await api('POST','/api/seed');
-    if(r.ok){ await loadAllData(); navigate('dashboard'); toast('Database reset ✓','#f3c75a'); }
-    else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    qs('#modalTitle').textContent = '⚠️ Reset to Defaults';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:48px;margin-bottom:12px">🔄</div><p style="font-size:15px;margin-bottom:8px">Reset ALL data to default seed values?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Reset';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('POST','/api/seed');
+      if(r.ok){ await loadAllData(); navigate('dashboard'); closeModal(); toast('Database reset ✓','#f3c75a'); }
+      else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   // ═══════════════════════════ ADMIN ROLES (OWNER ONLY) ════════════════════════════
-  // ═══════════════════════════ PERMISSION SYSTEM v2 ═══════════════════════════
+  // ═══════════════════════════ ADVANCED PERMISSION SYSTEM v3 ═══════════════════════════
   const ALL_PERMISSIONS = [
-    'access_panel','view_dashboard',
-    'create_reports','edit_reports','delete_reports',
-    'create_cases','edit_cases','delete_cases',
-    'manage_points','view_logs','manage_logs',
+    // Dashboard
+    'view_dashboard',
+    // Officers
+    'view_officers','create_officers','edit_officers','delete_officers','reorder_officers',
+    // Ranks
+    'view_ranks','create_ranks','edit_ranks','delete_ranks','reorder_ranks',
+    // Cases
+    'view_cases','create_cases','edit_cases','delete_cases','approve_cases',
+    // Reports
+    'view_reports','create_reports','edit_reports','delete_reports','export_reports',
+    // Wanted & Impound
+    'view_wanted','manage_wanted',
+    // Police Codes
+    'view_codes','manage_codes','reorder_codes',
+    // Uniforms
+    'view_uniforms','manage_uniforms',
+    // Laws
+    'view_laws','manage_laws',
+    // Points
+    'view_points','manage_points',
+    // Administration
     'manage_users','manage_settings','manage_database',
-    'manage_roles','manage_webhooks','full_access'
+    'manage_roles','manage_webhooks',
+    'view_logs','manage_logs','export_logs',
+    'view_console','use_console',
+    'manage_localization','manage_theme',
+    'access_panel','full_access',
   ];
   const PERM_GROUPS = [
     { label:'General Access', icon:'ti-lock-open', color:'#3498db',
       perms:['access_panel','view_dashboard'] },
-    { label:'Reports', icon:'ti-file-text', color:'#2ecc71',
-      perms:['create_reports','edit_reports','delete_reports'] },
+    { label:'Officers', icon:'ti-users', color:'#2ecc71',
+      perms:['view_officers','create_officers','edit_officers','delete_officers','reorder_officers'] },
+    { label:'Ranks', icon:'ti-stairs-up', color:'#9b59b6',
+      perms:['view_ranks','create_ranks','edit_ranks','delete_ranks','reorder_ranks'] },
     { label:'Cases', icon:'ti-folder', color:'#f3c75a',
-      perms:['create_cases','edit_cases','delete_cases'] },
-    { label:'Points & Logs', icon:'ti-chart-bar', color:'#9b59b6',
-      perms:['manage_points','view_logs','manage_logs'] },
-    { label:'Administration', icon:'ti-shield-lock', color:'#e74c3c',
-      perms:['manage_users','manage_settings','manage_database','manage_roles','manage_webhooks','full_access'] },
+      perms:['view_cases','create_cases','edit_cases','delete_cases','approve_cases'] },
+    { label:'Reports', icon:'ti-file-text', color:'#1abc9c',
+      perms:['view_reports','create_reports','edit_reports','delete_reports','export_reports'] },
+    { label:'Points & Logs', icon:'ti-chart-bar', color:'#e67e22',
+      perms:['view_points','manage_points','view_logs','manage_logs','export_logs'] },
+    { label:'Wanted & Codes & Uniforms', icon:'ti-car', color:'#e74c3c',
+      perms:['view_wanted','manage_wanted','view_codes','manage_codes','view_uniforms','manage_uniforms','view_laws','manage_laws'] },
+    { label:'Administration', icon:'ti-shield-lock', color:'#c0392b',
+      perms:['manage_users','manage_settings','manage_database','manage_roles','manage_webhooks','view_console','use_console','manage_localization','manage_theme','full_access'] },
   ];
   const PERM_COLOR = {
     access_panel:'#3498db', view_dashboard:'#3498db',
-    create_reports:'#2ecc71', edit_reports:'#f1c40f', delete_reports:'#e74c3c',
-    create_cases:'#2ecc71', edit_cases:'#f1c40f', delete_cases:'#e74c3c',
-    manage_points:'#9b59b6', view_logs:'#1abc9c', manage_logs:'#1abc9c',
+    view_officers:'#2ecc71', create_officers:'#2ecc71', edit_officers:'#f1c40f', delete_officers:'#e74c3c', reorder_officers:'#9b59b6',
+    view_ranks:'#9b59b6', create_ranks:'#9b59b6', edit_ranks:'#f1c40f', delete_ranks:'#e74c3c', reorder_ranks:'#8e44ad',
+    view_cases:'#f3c75a', create_cases:'#2ecc71', edit_cases:'#f1c40f', delete_cases:'#e74c3c', approve_cases:'#3498db',
+    view_reports:'#1abc9c', create_reports:'#2ecc71', edit_reports:'#f1c40f', delete_reports:'#e74c3c', export_reports:'#3498db',
+    view_points:'#e67e22', manage_points:'#e67e22',
+    view_logs:'#1abc9c', manage_logs:'#1abc9c', export_logs:'#3498db',
+    view_wanted:'#e74c3c', manage_wanted:'#e74c3c',
+    view_codes:'#3498db', manage_codes:'#3498db', reorder_codes:'#8e44ad',
+    view_uniforms:'#95a5a6', manage_uniforms:'#95a5a6',
+    view_laws:'#1abc9c', manage_laws:'#1abc9c',
     manage_users:'#e67e22', manage_settings:'#e67e22', manage_database:'#c0392b',
-    manage_roles:'#c0392b', manage_webhooks:'#ff69b4', full_access:'#c0392b'
+    manage_roles:'#c0392b', manage_webhooks:'#ff69b4',
+    view_console:'#8e44ad', use_console:'#c0392b',
+    manage_localization:'#3498db', manage_theme:'#9b59b6',
+    full_access:'#c0392b'
   };
 
   // ═══════════════════════════ PROTECTED ROLE SYSTEM ═══════════════════════════
@@ -2062,22 +2259,30 @@
   }
 
   window.deleteAdminRole = async id => {
-    if(!confirm('Delete this admin role?')) return;
-    // ✅ FIX: Get the role before deleting to check if current user is a member
     const roleToDelete = (store.adminRoles||[]).find(x=>x.id===id);
-    const r = await api('DELETE','/api/admin-roles',{ id });
-    if(r.ok){
-      store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id);
-      renderAdminRoles();
-      toast('Role deleted','#ff5a67');
-      // ✅ FIX: If current user was a member of this role, re-validate their session immediately
-      if(roleToDelete?.members?.includes(currentUser?.id)){
-        console.warn('[AdminRoles] Current user was in deleted role — re-validating session');
-        const valid = await validateSessionWithServer();
-        if(!valid){ clearSession(); location.reload(); return; }
-        bootApp(); // ✅ Re-render UI with updated permissions
-      }
-    } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+    if(!roleToDelete) return;
+    qs('#modalTitle').textContent = '⚠️ Delete Admin Role';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete role <b>${esc(roleToDelete.name)}</b>?</p><p style="color:#f3c75a;font-size:13px">All ${(roleToDelete.members||[]).length} member(s) will lose this role.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('DELETE','/api/admin-roles',{ id });
+      if(r.ok){
+        store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id);
+        renderAdminRoles();
+        closeModal();
+        toast('Role deleted','#ff5a67');
+        if(roleToDelete?.members?.includes(currentUser?.id)){
+          console.warn('[AdminRoles] Current user was in deleted role — re-validating session');
+          const valid = await validateSessionWithServer();
+          if(!valid){ clearSession(); location.reload(); return; }
+          bootApp();
+        }
+      } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
+      qs('#modalConfirmBtn').className = 'btn btn-primary';
+      qs('#modalConfirmBtn').textContent = 'Confirm';
+    };
+    openModal();
   };
 
   window.openAdminRoleModal = (id=null) => {
@@ -2292,6 +2497,7 @@
             <span class="role-color-dot" style="background:${color}"></span>
             <b>${esc(r.name)}</b>
             ${r.managed?'<span class="badge badge-info" style="font-size:10px">managed</span>':''}
+            ${r.isAboveBot?'':'<span class="badge badge-warning" style="font-size:10px">⬆ above bot</span>'}
           </div>
         </td>
         <td>
@@ -2302,11 +2508,11 @@
         <td><div style="display:flex;gap:4px;flex-wrap:wrap">${permsTags||'<span style="color:#53617a;font-size:12px">none</span>'}</div></td>
         <td style="color:#8fa0bd;font-size:12px">${r.position}</td>
         <td>
-          ${(isOwner||isFullAccess)&&!r.managed&&r.id!=='@everyone'?`
+          ${(isOwner||isFullAccess)&&r.id!=='@everyone'&&r.isAboveBot!==false?`
             <button class="btn btn-sm btn-warning" onclick="editServerRole('${esc(r.id)}','${esc(r.name)}',${r.color||0})" title="Edit"><i class="ti ti-edit"></i></button>
             <button class="btn btn-sm btn-success" onclick="addMemberToRole('${esc(r.id)}','${esc(r.name)}')" title="Add Member"><i class="ti ti-user-plus"></i></button>
             <button class="btn btn-sm btn-danger" onclick="deleteServerRole('${esc(r.id)}','${esc(r.name)}')" title="Delete"><i class="ti ti-trash"></i></button>
-          `:'<span style="color:#53617a;font-size:12px">—</span>'}
+          `:(isOwner||isFullAccess)?'<span style="color:#f3c75a;font-size:11px">⬆ Higher than bot</span>':'<span style="color:#53617a;font-size:12px">—</span>'}
         </td>
       </tr>`;
     }).join('');
@@ -2370,13 +2576,38 @@
     qs('#modalTitle').textContent = 'Create Server Role';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="srName" placeholder="Role name"></div>
-      <div class="form-group"><label>Color (hex e.g. #2f7cff)</label><input id="srColor" value="#2f7cff" type="color"></div>`;
+      <div class="form-group"><label>Color</label><input id="srColor" value="#2f7cff" type="color"></div>
+      <div style="border:1px solid rgba(47,124,255,.2);border-radius:14px;padding:16px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <i class="ti ti-link" style="color:#2f7cff"></i>
+          <b style="font-size:13px;color:#2f7cff">Link Website Permissions</b>
+          <span style="font-size:11px;color:#53617a;margin-left:auto">Optional</span>
+        </div>
+        <p style="font-size:12px;color:#53617a;margin-bottom:12px">Link website permissions to this Discord role. Members with this role will automatically get these website permissions.</p>
+        <div style="display:grid;gap:8px;max-height:240px;overflow-y:auto">
+          ${PERM_GROUPS.map(g=>`
+            <div style="border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <i class="ti ${g.icon}" style="color:${g.color};font-size:14px"></i>
+                <b style="font-size:12px;color:${g.color}">${g.label}</b>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                ${g.perms.map(p=>`
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.02);transition:.1s" onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background='rgba(255,255,255,.02)'">
+                    <input type="checkbox" value="${p}" class="sr-link-perm" style="width:auto;padding:0;margin:0">
+                    <span style="flex:1">${p.replace(/_/g,' ')}</span>
+                  </label>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const name = qs('#srName').value.trim();
       if(!name){ toast('Name required','#ff5a67'); return; }
       const colorHex = qs('#srColor').value.trim();
       const color = parseInt(colorHex.replace('#',''),16) || 0;
-      const r = await api('POST','/api/server-roles',{ name, color });
+      const linkedPerms = [...document.querySelectorAll('.sr-link-perm:checked')].map(c=>c.value);
+      const r = await api('POST','/api/server-roles',{ name, color, linkedWebsitePermissions: linkedPerms });
       if(r.ok){ renderServerRoles(); closeModal(); toast('Role created ✓','#2ecc71'); }
       else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
@@ -2388,11 +2619,34 @@
     const colorHex = '#'+color.toString(16).padStart(6,'0');
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="srEditName" value="${esc(name)}"></div>
-      <div class="form-group"><label>Color</label><input id="srEditColor" type="color" value="${esc(colorHex)}"></div>`;
+      <div class="form-group"><label>Color</label><input id="srEditColor" type="color" value="${esc(colorHex)}"></div>
+      <div style="border:1px solid rgba(47,124,255,.2);border-radius:14px;padding:16px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <i class="ti ti-link" style="color:#2f7cff"></i>
+          <b style="font-size:13px;color:#2f7cff">Link Website Permissions</b>
+        </div>
+        <div style="display:grid;gap:8px;max-height:220px;overflow-y:auto">
+          ${PERM_GROUPS.map(g=>`
+            <div style="border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <i class="ti ${g.icon}" style="color:${g.color};font-size:13px"></i>
+                <b style="font-size:12px;color:${g.color}">${g.label}</b>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+                ${g.perms.map(p=>`
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.02)">
+                    <input type="checkbox" value="${p}" class="sr-edit-link-perm" style="width:auto;padding:0;margin:0">
+                    <span>${p.replace(/_/g,' ')}</span>
+                  </label>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const n = qs('#srEditName').value.trim();
       const c = parseInt(qs('#srEditColor').value.replace('#',''),16) || 0;
-      const r = await api('PUT','/api/server-roles',{ id, name: n, color: c });
+      const linkedPerms = [...document.querySelectorAll('.sr-edit-link-perm:checked')].map(x=>x.value);
+      const r = await api('PUT','/api/server-roles',{ id, name: n, color: c, linkedWebsitePermissions: linkedPerms });
       if(r.ok){ renderServerRoles(); closeModal(); toast('Role updated ✓'); }
       else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
@@ -2677,6 +2931,230 @@
     openModal();
   };
 
+  // ═══════════════════════════ CONSOLE PAGE ═══════════════════════════
+  const CONSOLE_COMMANDS = [
+    { cmd: 'help', desc: 'Show all available commands', icon: 'ti-help', color: '#3498db' },
+    { cmd: 'status', desc: 'Show system status & stats', icon: 'ti-info-circle', color: '#2ecc71' },
+    { cmd: 'reload', desc: 'Reload all data from server', icon: 'ti-refresh', color: '#f3c75a' },
+    { cmd: 'clear', desc: 'Clear console output', icon: 'ti-eraser', color: '#8fa0bd' },
+    { cmd: 'officers list', desc: 'List all officers', icon: 'ti-users', color: '#2f7cff' },
+    { cmd: 'ranks list', desc: 'List all ranks', icon: 'ti-stairs-up', color: '#9b59b6' },
+    { cmd: 'cases list', desc: 'List open cases', icon: 'ti-folder', color: '#f3c75a' },
+    { cmd: 'reports list', desc: 'List all reports', icon: 'ti-file-text', color: '#1abc9c' },
+    { cmd: 'logs recent', desc: 'Show recent system logs', icon: 'ti-history', color: '#e67e22' },
+    { cmd: 'wanted list', desc: 'Show wanted persons', icon: 'ti-alert-triangle', color: '#e74c3c' },
+    { cmd: 'users list', desc: 'List Discord users', icon: 'ti-brand-discord', color: '#7289da' },
+  ];
+
+  let _consoleHistory = [];
+  let _consoleHistIdx = -1;
+  let _consoleOutput = [];
+
+  function renderConsole(){
+    if(!isAdmin && !isOwner){ qs('#console').innerHTML = '<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">⛔ Access denied — Admin only.</p></div></div>'; return; }
+    qs('#console').innerHTML = `
+      <div class="page-bg-logo">
+      <div class="card" style="border-color:rgba(47,124,255,.2)">
+        <div class="card-header" style="background:rgba(7,11,19,.6)">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:36px;height:36px;background:rgba(47,124,255,.15);border:1px solid rgba(47,124,255,.3);border-radius:10px;display:grid;place-items:center">
+              <i class="ti ti-terminal-2" style="color:#2f7cff;font-size:18px"></i>
+            </div>
+            <div>
+              <h3 style="margin:0">SHJ LSPD Console</h3>
+              <div style="font-size:11px;color:#53617a;margin-top:2px">Command Execution Terminal</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:rgba(46,204,113,.1);color:#2ecc71;border:1px solid rgba(46,204,113,.2)" onclick="consoleExec('status')"><i class="ti ti-pulse"></i> Status</button>
+            <button class="btn btn-sm" onclick="consoleClear()"><i class="ti ti-eraser"></i> Clear</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <!-- Output Area -->
+          <div id="consoleOutput" style="font-family:'Courier New',monospace;font-size:13px;background:#040810;padding:20px;min-height:300px;max-height:480px;overflow-y:auto;border-bottom:1px solid rgba(255,255,255,.06)">
+            <div style="color:#2f7cff;margin-bottom:8px">╔══════════════════════════════════════╗</div>
+            <div style="color:#2f7cff">║   SHJ LSPD Command Terminal v3.0     ║</div>
+            <div style="color:#2f7cff;margin-bottom:8px">╚══════════════════════════════════════╝</div>
+            <div style="color:#53617a">Type <span style="color:#f3c75a">'help'</span> to see all available commands.</div>
+            <div style="color:#53617a;margin-top:4px">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+            ${_consoleOutput.map(l=>l).join('')}
+          </div>
+          <!-- Input Area -->
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:rgba(7,11,19,.8)">
+            <span style="color:#2f7cff;font-family:monospace;font-size:14px;font-weight:700;flex-shrink:0">LSPD:~$</span>
+            <input id="consoleInput" placeholder="Enter command..." autocomplete="off" spellcheck="false"
+              style="flex:1;background:transparent;border:none;border-bottom:1px solid rgba(47,124,255,.3);border-radius:0;padding:6px 0;font-family:'Courier New',monospace;font-size:13px;color:#edf3ff;outline:none"
+              onkeydown="handleConsoleKey(event)">
+            <button class="btn btn-primary btn-sm" onclick="consoleExecInput()"><i class="ti ti-send"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Commands Panel -->
+      <div class="card">
+        <div class="card-header"><h3><i class="ti ti-command"></i> Quick Commands</h3></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+            ${CONSOLE_COMMANDS.map(c=>`
+              <button class="btn" onclick="consoleExec('${esc(c.cmd)}')" style="justify-content:flex-start;gap:10px;padding:10px 14px;text-align:left;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;transition:.15s" onmouseover="this.style.borderColor='${c.color}44'" onmouseout="this.style.borderColor='rgba(255,255,255,.07)'">
+                <i class="ti ${c.icon}" style="color:${c.color};font-size:16px;flex-shrink:0"></i>
+                <div style="text-align:left">
+                  <div style="font-size:12px;font-weight:700;font-family:monospace;color:${c.color}">${esc(c.cmd)}</div>
+                  <div style="font-size:11px;color:#53617a;margin-top:2px">${esc(c.desc)}</div>
+                </div>
+              </button>`).join('')}
+          </div>
+        </div>
+      </div>
+      </div>`;
+
+    // Scroll to bottom
+    const out = document.getElementById('consoleOutput');
+    if(out) out.scrollTop = out.scrollHeight;
+  }
+
+  function consolePrint(html){ _consoleOutput.push(html); }
+
+  function consoleClear(){
+    _consoleOutput = [];
+    const out = document.getElementById('consoleOutput');
+    if(out){
+      out.innerHTML = '<div style="color:#53617a;font-family:monospace;font-size:13px">Console cleared. Type <span style="color:#f3c75a">help</span> for commands.</div>';
+    }
+  }
+
+  window.consoleClear = consoleClear;
+
+  function consoleAppend(html){
+    const out = document.getElementById('consoleOutput');
+    if(!out) return;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    out.appendChild(div);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  async function consoleExec(cmd){
+    const input = document.getElementById('consoleInput');
+    const trimmed = (cmd || '').trim().toLowerCase();
+    if(!trimmed) return;
+
+    // Echo command
+    consoleAppend(`<div style="margin-top:10px;font-family:monospace;font-size:13px"><span style="color:#2f7cff">LSPD:~$</span> <span style="color:#edf3ff">${esc(trimmed)}</span></div>`);
+    _consoleHistory.unshift(trimmed);
+    _consoleHistIdx = -1;
+    if(input) input.value = '';
+
+    const ts = `<span style="color:#53617a;font-size:11px">[${new Date().toLocaleTimeString()}]</span> `;
+
+    if(trimmed === 'clear'){ consoleClear(); return; }
+
+    if(trimmed === 'help'){
+      const rows = CONSOLE_COMMANDS.map(c=>`<div style="display:flex;gap:16px;padding:3px 0"><span style="color:#f3c75a;font-family:monospace;min-width:130px">${esc(c.cmd)}</span><span style="color:#8fa0bd">${esc(c.desc)}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:12px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid rgba(255,255,255,.07)">${rows}</div>`);
+      return;
+    }
+
+    if(trimmed === 'status'){
+      const o = store.officers||[]; const r = store.ranks||[]; const c = store.cases||[];
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;color:#2ecc71">
+        ${ts}✅ System Online<br>
+        <span style="color:#8fa0bd">Officers: <span style="color:#edf3ff">${o.length}</span> | Active: <span style="color:#2ecc71">${o.filter(x=>x.status==='active').length}</span></span><br>
+        <span style="color:#8fa0bd">Ranks: <span style="color:#edf3ff">${r.length}</span> | Cases: <span style="color:#edf3ff">${c.length}</span></span><br>
+        <span style="color:#8fa0bd">Reports: <span style="color:#edf3ff">${(store.reports||[]).length}</span> | Users: <span style="color:#edf3ff">${(store.users||[]).length}</span></span><br>
+        <span style="color:#8fa0bd">Session: <span style="color:#2ecc71">${currentUser?.username}</span> | Role: <span style="color:#f3c75a">${isOwner?'Owner':isAdmin?'Admin':'Officer'}</span></span>
+      </div>`);
+      return;
+    }
+
+    if(trimmed === 'reload'){
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;color:#f3c75a">${ts}⟳ Reloading data...</div>`);
+      await loadAllData();
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;color:#2ecc71">${ts}✅ Data reloaded successfully.</div>`);
+      return;
+    }
+
+    if(trimmed === 'officers list'){
+      const o = store.officers || [];
+      const rows = o.map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#2f7cff;min-width:60px;display:inline-block">#${x.badge}</span><span style="color:#edf3ff;min-width:160px;display:inline-block">${esc(x.name)}</span><span>${esc(x.rank||'')}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(47,124,255,.06);border-radius:8px">${rows||'No officers found'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'ranks list'){
+      const r = store.ranks || [];
+      const rows = r.map((x,i)=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#9b59b6;min-width:30px;display:inline-block">${i+1}.</span><span style="color:#edf3ff;min-width:160px;display:inline-block">${esc(x.name)}</span><span>${x.pointsReq||0} pts</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(155,89,182,.06);border-radius:8px">${rows||'No ranks found'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'cases list'){
+      const c = (store.cases||[]).filter(x=>x.status==='open');
+      const rows = c.map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#f3c75a;min-width:120px;display:inline-block">${esc(x.title)}</span><span>${esc(x.criminals||'-')}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(243,199,90,.06);border-radius:8px">${rows||'No open cases'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'reports list'){
+      const r = store.reports || [];
+      const rows = r.slice(0,10).map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#1abc9c;min-width:160px;display:inline-block">${esc(x.title)}</span><span>${esc(x.by||'-')}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(26,188,156,.06);border-radius:8px">${rows||'No reports'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'wanted list'){
+      const w = store.wanted || [];
+      const rows = w.map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#e74c3c;min-width:160px;display:inline-block">${esc(x.name)}</span><span style="color:#f3c75a">Level ${x.level||1}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(231,76,60,.06);border-radius:8px">${rows||'No wanted persons'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'logs recent'){
+      const a = (store.activity||[]).slice(0,15);
+      const rows = a.map(x=>`<div style="padding:2px 0;color:#8fa0bd;font-size:11px"><span style="color:#53617a">${new Date(x.time).toLocaleTimeString()}</span> <span style="color:#edf3ff">${esc(x.msg||'')}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px">${rows||'No logs'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'users list'){
+      const u = store.users || [];
+      const rows = u.map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#7289da;min-width:180px;display:inline-block">${esc(x.username)}</span><span style="color:${x.isOwner?'#f3c75a':x.isAdmin?'#e67e22':'#8fa0bd'}">${x.isOwner?'Owner':x.isAdmin?'Admin':'Officer'}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(114,137,218,.06);border-radius:8px">${rows||'No users'}</div>`);
+      return;
+    }
+
+    consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;color:#ff5a67">${ts}❌ Unknown command: <span style="color:#edf3ff">'${esc(trimmed)}'</span>. Type <span style="color:#f3c75a">help</span> for available commands.</div>`);
+  }
+
+  window.consoleExec = consoleExec;
+
+  window.consoleExecInput = () => {
+    const input = document.getElementById('consoleInput');
+    if(!input) return;
+    consoleExec(input.value.trim());
+  };
+
+  window.handleConsoleKey = (e) => {
+    const input = document.getElementById('consoleInput');
+    if(!input) return;
+    if(e.key === 'Enter'){ consoleExec(input.value.trim()); return; }
+    if(e.key === 'ArrowUp'){
+      e.preventDefault();
+      _consoleHistIdx = Math.min(_consoleHistIdx+1, _consoleHistory.length-1);
+      if(_consoleHistory[_consoleHistIdx]) input.value = _consoleHistory[_consoleHistIdx];
+      return;
+    }
+    if(e.key === 'ArrowDown'){
+      e.preventDefault();
+      _consoleHistIdx = Math.max(_consoleHistIdx-1, -1);
+      input.value = _consoleHistIdx >= 0 ? (_consoleHistory[_consoleHistIdx]||'') : '';
+    }
+  };
+
+  // ═══════════════════════════ ENHANCED WEBHOOK SYSTEM ═══════════════════════════
+  // (Extended webhook types — the renderSettings webhookTypes array is defined inside renderSettings)
+
   // ═══════════════════════════ LANGUAGE SYSTEM (i18n) ═══════════════════════════
   const LANGUAGES = [
     { code:'en', name:'English', flag:'🇺🇸' },
@@ -2712,6 +3190,7 @@
       cases: 'Cases', reports: 'Reports', discord_users: 'Discord Users',
       server_roles: 'Server Roles', website_roles: 'Website Roles',
       system_logs: 'System Logs', settings: 'Settings', admin_roles: 'Admin Roles',
+      console: 'Console',
       add: 'Add', edit: 'Edit', delete: 'Delete', save: 'Save', cancel: 'Cancel',
       confirm: 'Confirm', search: 'Search', no_data: 'No data found',
       saved: 'Saved ✓', deleted: 'Deleted', error: 'Error', loading: 'Loading...',
@@ -2727,6 +3206,7 @@
       cases: 'القضايا', reports: 'التقارير', discord_users: 'مستخدمو Discord',
       server_roles: 'رتب السيرفر', website_roles: 'رتب الموقع',
       system_logs: 'سجلات النظام', settings: 'الإعدادات', admin_roles: 'صلاحيات الإدارة',
+      console: 'لوحة الأوامر',
       add: 'إضافة', edit: 'تعديل', delete: 'حذف', save: 'حفظ', cancel: 'إلغاء',
       confirm: 'تأكيد', search: 'بحث', no_data: 'لا توجد بيانات',
       saved: 'تم الحفظ ✓', deleted: 'تم الحذف', error: 'خطأ', loading: 'جار التحميل...',
