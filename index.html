@@ -680,19 +680,33 @@
     btn.disabled = false;
     btn.style.opacity = '';
     btn.style.pointerEvents = '';
+    // Remove any spinner we added
+    const sp = btn.querySelector('._cd-spinner');
+    if (sp) sp.remove();
   }
 
   function lockConfirmBtn(seconds = 5) {
     const btn = qs('#modalConfirmBtn');
     if (!btn || _confirmCooldown) return;
     _confirmCooldown = true;
-    btn.disabled = true;
-    btn.style.opacity = '0.55';
-    btn.style.pointerEvents = 'none';
+    // Do NOT change opacity, color, text, or disabled state
+    // Only add a tiny spinner as visual cue
+    if (!btn.querySelector('._cd-spinner')) {
+      const sp = document.createElement('span');
+      sp.className = 'spinner _cd-spinner';
+      sp.style.cssText = 'width:14px;height:14px;border-width:2px;margin-left:6px;vertical-align:middle';
+      btn.appendChild(sp);
+    }
     clearTimeout(_confirmTimer);
     _confirmTimer = setTimeout(() => {
       _confirmCooldown = false;
-      if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.style.pointerEvents = '';
+        const sp = btn.querySelector('._cd-spinner');
+        if (sp) sp.remove();
+      }
     }, seconds * 1000);
   }
 
@@ -1275,27 +1289,40 @@
   function renderLaws(){
     const laws = store.laws || [];
     qs('#laws').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-book"></i> Laws & Regulations</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openLawModal()"><i class="ti ti-plus"></i> Add Law</button>':''}
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-book"></i></div>
+        <div class="tactical-header-text">
+          <h2>Laws & Regulations</h2>
+          <div class="subtitle">Legal framework & rules of conduct</div>
         </div>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-scale" style="font-size:13px"></i> ${laws.length} Laws</span>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openLawModal()"><i class="ti ti-plus"></i> Add Law</button>`:''}
+        </div>
+      </div>
+      <div class="card">
         <div class="card-body">
-          ${laws.length === 0 ? '<p style="color:#8fa0bd;text-align:center">No laws found</p>' : `
+          ${laws.length === 0 ? '<p style="color:#8fa0bd;text-align:center;padding:24px 0">No laws found</p>' : `
           <div id="lawsList">
-            ${laws.map(l=>`
-            <div class="officer-row" data-id="${l.id}" style="flex-direction:column;align-items:flex-start;gap:8px;cursor:default" draggable="true">
+            ${laws.map((l,idx)=>`
+            <div class="officer-row sortable-row" data-id="${l.id}" style="flex-direction:column;align-items:flex-start;gap:8px;cursor:default;padding:16px 8px;border-radius:10px;transition:background .15s" onmouseover="this.style.background='rgba(47,124,255,.05)'" onmouseout="this.style.background=''">
               <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
                 <div style="display:flex;align-items:center;gap:10px">
-                  ${isAdmin?'<span class="drag-handle ti ti-grip-vertical" title="Drag to reorder"></span>':''}
-                  <b>${esc(l.title)}</b>
+                  ${isAdmin?'<span class="drag-handle ti ti-grip-vertical" title="Drag to reorder" style="font-size:18px;color:#53617a"></span>':''}
+                  <span style="background:rgba(47,124,255,.1);border:1px solid rgba(47,124,255,.2);border-radius:6px;padding:2px 8px;font-size:11px;color:#2f7cff;font-weight:700;font-family:monospace">${String(idx+1).padStart(2,'0')}</span>
+                  <b style="font-size:14px">${esc(l.title)}</b>
                 </div>
-                ${isAdmin?`<div><button class="btn btn-sm btn-warning" onclick="openLawModal(${l.id})"><i class="ti ti-edit"></i></button>
-                <button class="btn btn-sm btn-danger" onclick="deleteLaw(${l.id})"><i class="ti ti-trash"></i></button></div>`:''}
+                ${isAdmin?`<div style="display:flex;gap:6px">
+                  <button class="btn btn-sm btn-warning" onclick="openLawModal(${l.id})"><i class="ti ti-edit"></i></button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteLaw(${l.id})"><i class="ti ti-trash"></i></button>
+                </div>`:''}
               </div>
-              <p style="color:#8fa0bd;font-size:13px;padding-left:${isAdmin?'28px':'0'}">${esc(l.content||'')}</p>
+              <p style="color:#8fa0bd;font-size:13px;padding-left:${isAdmin?'58px':'0'};line-height:1.6">${esc(l.content||'')}</p>
             </div><div class="divider"></div>`).join('')}
           </div>`}
-        </div></div>`;
+        </div>
+      </div>
     if(isAdmin && laws.length > 1) initDnDDiv('lawsList', 'laws', renderLaws);
   }
 
@@ -1350,12 +1377,21 @@
         </td>
       </tr>`).join('');
     qs('#uniform').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-shirt"></i> Uniform Guide</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>':''}
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-shirt"></i></div>
+        <div class="tactical-header-text">
+          <h2>Uniform Guide</h2>
+          <div class="subtitle">Official uniform standards by rank</div>
         </div>
-        <div class="card-body"><table><thead><tr><th></th><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
-        <tbody id="uniformsTbody">${rows || '<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No uniforms found</td>'}</tbody></table></div></div>`;
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-hanger" style="font-size:13px"></i> ${uniforms.length} Guides</span>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openUniformModal()"><i class="ti ti-plus"></i> Add Guide</button>`:''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body"><table><thead><tr><th style="width:28px"></th><th>Rank</th><th>Male Uniform</th><th>Female Uniform</th><th>Actions</th></tr></thead>
+        <tbody id="uniformsTbody">${rows || '<tr><td colspan="5" style="color:#8fa0bd;text-align:center;padding:24px">No uniforms found</td></tr>'}</tbody></table></div></div>`;
     if(isAdmin) initDnD('uniformsTbody', 'uniforms', renderUniforms);
   }
 
@@ -1417,15 +1453,23 @@
         </td>
       </tr>`).join('');
     qs('#codes').innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <h3><i class="ti ti-radio"></i> Police Codes</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openCodeModal()"><i class="ti ti-plus"></i> Add Code</button>':''}
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-radio"></i></div>
+        <div class="tactical-header-text">
+          <h2>Police Codes</h2>
+          <div class="subtitle">Radio codes & priority levels</div>
         </div>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-broadcast" style="font-size:13px"></i> ${codes.length} Codes</span>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openCodeModal()"><i class="ti ti-plus"></i> Add Code</button>`:''}
+        </div>
+      </div>
+      <div class="card">
         <div class="card-body">
           <table>
-            <thead><tr><th></th><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
-            <tbody id="codesTbody">${rows || '<tr><td colspan="5" style="color:#8fa0bd;text-align:center">No codes found</td>'}</tbody>
+            <thead><tr><th style="width:28px"></th><th>Code</th><th>Description</th><th>Priority</th><th>Actions</th></tr></thead>
+            <tbody id="codesTbody">${rows || '<tr><td colspan="5" style="color:#8fa0bd;text-align:center;padding:24px">No codes found</td></tr>'}</tbody>
           </table>
         </div>
       </div>`;
@@ -1506,22 +1550,37 @@
         <td>${isAdmin?`<button class="btn btn-sm btn-success" onclick="releaseImpound(${i.id})"><i class="ti ti-check"></i> Release</button>`:''}</td>
       </tr>`).join('');
     qs('#wanted').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-car"></i> Wanted List</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>':''}
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-car-crash"></i></div>
+        <div class="tactical-header-text">
+          <h2>Wanted & Impound</h2>
+          <div class="subtitle">Active warrants & impounded vehicles</div>
         </div>
-        <div class="card-body">
-          <table><thead><tr><th></th><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody id="wantedTbody">${wRows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No wanted records</td>'}</tbody></table>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-alert-triangle" style="font-size:13px"></i> ${wanted.length} Wanted</span>
+          <span class="tactical-glow-badge" style="background:rgba(230,126,34,.1);border-color:rgba(230,126,34,.25);color:#e67e22"><i class="ti ti-car" style="font-size:13px"></i> ${impound.length} Impound</span>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>`:''}
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><h3><i class="ti ti-car"></i> Impound List</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Add Impound</button>':''}
+        <div class="card-header" style="background:rgba(255,90,103,.04);border-color:rgba(255,90,103,.15)">
+          <h3 style="color:#ff5a67"><i class="ti ti-alert-triangle"></i> Wanted List</h3>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openWantedModal()"><i class="ti ti-plus"></i> Add Wanted</button>`:''}
         </div>
         <div class="card-body">
-          <table><thead><tr><th></th><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
-          <tbody id="impoundTbody">${iRows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No impound records</td>'}</tbody></table>
+          <table><thead><tr><th style="width:28px"></th><th>Name</th><th>Plate</th><th>Reason</th><th>Level</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody id="wantedTbody">${wRows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center;padding:24px">No wanted records</td></tr>'}</tbody></table>
+        </div>
+      </div>
+      <div class="card" style="margin-top:0">
+        <div class="card-header" style="background:rgba(230,126,34,.04);border-color:rgba(230,126,34,.15)">
+          <h3 style="color:#e67e22"><i class="ti ti-car"></i> Impound List</h3>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openImpoundModal()"><i class="ti ti-plus"></i> Add Impound</button>`:''}
+        </div>
+        <div class="card-body">
+          <table><thead><tr><th style="width:28px"></th><th>Plate</th><th>Model</th><th>Reason</th><th>Fee</th><th>By</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody id="impoundTbody">${iRows||'<tr><td colspan="8" style="color:#8fa0bd;text-align:center;padding:24px">No impound records</td></tr>'}</tbody></table>
         </div>
       </div>`;
     if(isAdmin){ initDnD('wantedTbody','wanted',renderWanted); initDnD('impoundTbody','impound',renderWanted); }
@@ -1600,6 +1659,50 @@
     openModal();
   };
 
+  // ─── Evidence Media Preview Helper ───
+  function renderEvidenceMedia(evidenceStr) {
+    if(!evidenceStr) return '';
+    // Split by newlines or commas to support multiple URLs
+    const lines = evidenceStr.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+    const out = lines.map(line => {
+      // Check if it looks like a URL
+      const isUrl = /^https?:\/\//i.test(line);
+      if(!isUrl) return `<div style="font-size:13px;padding:4px 0;color:#edf3ff">${esc(line)}</div>`;
+      // Detect image URLs
+      if(/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(line) ||
+         /imgur\.com|i\.gyazo|prnt\.sc|gyazo|pbs\.twimg|cdn\.discordapp|media\.discordapp/i.test(line)) {
+        return `<div style="margin:6px 0">
+          <a href="${esc(line)}" target="_blank" rel="noopener" style="display:inline-block;max-width:100%">
+            <img src="${esc(line)}" style="max-width:100%;max-height:320px;border-radius:10px;border:1px solid rgba(255,255,255,.1);cursor:zoom-in;object-fit:contain;background:#040810" onerror="this.parentElement.parentElement.innerHTML='<a href=\\'${esc(line).replace(/'/g,'\\\'')}\\'  target=\\'_blank\\' style=\\'color:#2f7cff;font-size:13px;word-break:break-all\\'>${esc(line)}</a>'">
+          </a>
+        </div>`;
+      }
+      // Detect video URLs
+      if(/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(line)) {
+        return `<div style="margin:6px 0">
+          <video controls style="max-width:100%;max-height:320px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:#040810">
+            <source src="${esc(line)}">
+            <a href="${esc(line)}" target="_blank" style="color:#2f7cff">Open Video</a>
+          </video>
+        </div>`;
+      }
+      // YouTube embed
+      const ytMatch = line.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+      if(ytMatch) {
+        return `<div style="margin:6px 0;position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:10px;max-width:560px">
+          <iframe src="https://www.youtube.com/embed/${ytMatch[1]}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;border-radius:10px" allowfullscreen loading="lazy"></iframe>
+        </div>`;
+      }
+      // Generic URL — show as clickable link
+      return `<div style="margin:4px 0">
+        <a href="${esc(line)}" target="_blank" rel="noopener" style="color:#2f7cff;font-size:13px;word-break:break-all;display:flex;align-items:center;gap:6px">
+          <i class="ti ti-external-link" style="font-size:14px;flex-shrink:0"></i> ${esc(line)}
+        </a>
+      </div>`;
+    }).join('');
+    return out || esc(evidenceStr);
+  }
+
   function renderCases(){
     const cases = store.cases || [];
     const rows = cases.map(c=>`
@@ -1623,13 +1726,22 @@
         </td>
       </tr>`).join('');
     qs('#cases').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-folder"></i> Cases</h3>
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-folder-open"></i></div>
+        <div class="tactical-header-text">
+          <h2>Cases</h2>
+          <div class="subtitle">Active investigations & case files</div>
+        </div>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-folder" style="font-size:13px"></i> ${cases.length} Cases</span>
           <button class="btn btn-primary" onclick="openCaseModal()"><i class="ti ti-plus"></i> New Case</button>
         </div>
+      </div>
+      <div class="card">
         <div class="card-body">
-          <table><thead><tr><th></th><th>Title / Type</th><th>Criminals / Location</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody id="casesTbody">${rows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center">No cases found</td>'}</tbody></table>
+          <table><thead><tr><th style="width:28px"></th><th>Title / Type</th><th>Criminals / Location</th><th>Status</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="casesTbody">${rows||'<tr><td colspan="7" style="color:#8fa0bd;text-align:center;padding:24px">No cases found</td></tr>'}</tbody></table>
         </div>
       </div>`;
     if(isAdmin) initDnD('casesTbody','cases',renderCases);
@@ -1647,7 +1759,9 @@
         ${c.criminals?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CRIMINALS</label><div style="color:#f3c75a">${esc(c.criminals)}</div></div>`:''}
         ${c.officers?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">OFFICERS INVOLVED</label><div style="color:#2ecc71">${esc(c.officers)}</div></div>`:''}
         ${c.location?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">LOCATION</label><div style="color:#3498db">${esc(c.location)}</div></div>`:''}
-        ${c.evidence?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">EVIDENCE</label><div>${esc(c.evidence)}</div></div>`:''}
+        ${c.evidence?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">EVIDENCE</label>
+          <div>${renderEvidenceMedia(c.evidence)}</div>
+        </div>`:''}
         ${c.notes?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">NOTES</label><div>${esc(c.notes)}</div></div>`:''}
         <div style="display:flex;gap:16px;flex-wrap:wrap">
           <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">STATUS</label><div><span class="badge badge-${c.status==='open'?'active':c.status==='closed'?'inactive':'warning'}">${esc(c.status||'open')}</span></div></div>
@@ -1688,7 +1802,7 @@
       <div class="form-group"><label>Officers Involved</label><input id="caseOfficers" value="${esc(c?.officers||'')}" placeholder="e.g. Officer Kane, Sgt. Williams"></div>
       <div class="form-group"><label>Location</label><input id="caseLocation" value="${esc(c?.location||'')}" placeholder="e.g. Downtown LS"></div>
       <div class="form-group"><label>Case Type</label><input id="caseCaseType" value="${esc(c?.caseType||'')}" placeholder="e.g. Robbery, Murder"></div>
-      <div class="form-group"><label>Evidence</label><textarea id="caseEvidence">${esc(c?.evidence||'')}</textarea></div>
+      <div class="form-group"><label>Evidence <span style="color:#8fa0bd;font-size:11px;font-weight:400">(URLs to images/videos, one per line)</span></label><textarea id="caseEvidence" placeholder="https://example.com/screenshot.png&#10;https://youtube.com/watch?v=...">${esc(c?.evidence||'')}</textarea></div>
       <div class="form-group"><label>Notes</label><textarea id="caseNotes">${esc(c?.notes||'')}</textarea></div>
       <div class="form-group"><label>Status</label><select id="caseStatus">
         <option value="open" ${c?.status==='open'||!c?'selected':''}>Open</option>
@@ -1744,13 +1858,22 @@
         </td>
       </tr>`).join('');
     qs('#reports').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-file-text"></i> Reports</h3>
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-file-description"></i></div>
+        <div class="tactical-header-text">
+          <h2>Reports</h2>
+          <div class="subtitle">Incident reports & field documentation</div>
+        </div>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-file-text" style="font-size:13px"></i> ${reports.length} Reports</span>
           <button class="btn btn-primary" onclick="openReportModal()"><i class="ti ti-plus"></i> New Report</button>
         </div>
+      </div>
+      <div class="card">
         <div class="card-body">
-          <table><thead><tr><th></th><th>Title / Type</th><th>Criminals / Location</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody id="reportsTbody">${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center">No reports found</td>'}</tbody></table>
+          <table><thead><tr><th style="width:28px"></th><th>Title / Type</th><th>Criminals / Location</th><th>By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="reportsTbody">${rows||'<tr><td colspan="6" style="color:#8fa0bd;text-align:center;padding:24px">No reports found</td></tr>'}</tbody></table>
         </div>
       </div>`;
     initDnD('reportsTbody','reports',renderReports);
@@ -1768,7 +1891,9 @@
         ${r.criminals?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">CRIMINALS</label><div style="color:#f3c75a">${esc(r.criminals)}</div></div>`:''}
         ${r.officers?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">OFFICERS INVOLVED</label><div style="color:#2ecc71">${esc(r.officers)}</div></div>`:''}
         ${r.location?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">LOCATION</label><div style="color:#3498db">${esc(r.location)}</div></div>`:''}
-        ${r.evidence?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">EVIDENCE / NOTES</label><div>${esc(r.evidence)}</div></div>`:''}
+        ${r.evidence?`<div><label style="color:#8fa0bd;font-size:12px;font-weight:600">EVIDENCE / NOTES</label>
+          <div>${renderEvidenceMedia(r.evidence)}</div>
+        </div>`:''}
         <div style="display:flex;gap:16px;flex-wrap:wrap">
           <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">BY</label><div>${esc(r.by||'-')}</div></div>
           <div><label style="color:#8fa0bd;font-size:12px;font-weight:600">DATE</label><div>${fmtTime(r.time)}</div></div>
@@ -1808,7 +1933,7 @@
       <div class="form-group"><label>Officers Involved</label><input id="repOfficers" value="${esc(rep?.officers||'')}" placeholder="e.g. Officer Kane"></div>
       <div class="form-group"><label>Location</label><input id="repLocation" value="${esc(rep?.location||'')}" placeholder="e.g. Downtown LS"></div>
       <div class="form-group"><label>Case Type</label><input id="repCaseType" value="${esc(rep?.caseType||'')}" placeholder="e.g. Robbery"></div>
-      <div class="form-group"><label>Evidence / Notes</label><textarea id="repEvidence">${esc(rep?.evidence||rep?.notes||'')}</textarea></div>`;
+      <div class="form-group"><label>Evidence / Notes <span style="color:#8fa0bd;font-size:11px;font-weight:400">(URLs to images/videos, one per line)</span></label><textarea id="repEvidence" placeholder="https://example.com/screenshot.png&#10;https://youtube.com/watch?v=...">${esc(rep?.evidence||rep?.notes||'')}</textarea></div>`;
     qs('#modalConfirmBtn').onclick = async () => {
       const payload = {
         title:     qs('#repTitle').value.trim(),
@@ -2014,18 +2139,26 @@
     const settings = store.settings || { webhookUrl:'', logsEnabled:true };
     const wh = store.webhooks || {};
     const webhookTypes = [
-      { key:'login',       label:'🔑 Login Logs Webhook',        color:'#2ecc71' },
-      { key:'logout',      label:'🚪 Logout Logs Webhook',       color:'#e67e22' },
-      { key:'officers',    label:'👮 Officer Logs Webhook',       color:'#3498db' },
-      { key:'admin',       label:'⚡ Admin Actions Webhook',      color:'#f3c75a' },
-      { key:'website_roles',label:'🔐 Website Roles Logs Webhook', color:'#9b59b6' },
-      { key:'server_roles', label:'🛡️ Server Roles Logs Webhook',  color:'#8e44ad' },
-      { key:'discord_users',label:'👥 Discord Users Logs Webhook', color:'#7289da' },
-      { key:'punishment',  label:'⚠️ Punishment Logs Webhook',    color:'#e74c3c' },
-      { key:'cases',       label:'📁 Cases Logs Webhook',         color:'#f39c12' },
-      { key:'reports',     label:'📋 Reports Logs Webhook',       color:'#1abc9c' },
-      { key:'settings',    label:'⚙️ Settings Logs Webhook',      color:'#95a5a6' },
-      { key:'database',    label:'🗄️ Database Logs Webhook',      color:'#c0392b' },
+      { key:'login',          label:'🔑 Login Logs Webhook',              color:'#2ecc71',  icon:'🔑' },
+      { key:'logout',         label:'🚪 Logout Logs Webhook',             color:'#e67e22',  icon:'🚪' },
+      { key:'officers',       label:'👮 Officer Actions Webhook',         color:'#3498db',  icon:'👮' },
+      { key:'admin',          label:'⚡ Admin Actions Webhook',           color:'#f3c75a',  icon:'⚡' },
+      { key:'ownership',      label:'👑 Ownership Actions Webhook',       color:'#f39c12',  icon:'👑' },
+      { key:'website_roles',  label:'🔐 Website Roles Webhook',           color:'#9b59b6',  icon:'🔐' },
+      { key:'server_roles',   label:'🛡️ Server Roles Webhook',            color:'#8e44ad',  icon:'🛡️' },
+      { key:'discord_users',  label:'👥 Discord Users Webhook',           color:'#7289da',  icon:'👥' },
+      { key:'punishment',     label:'⚠️ Punishment / Moderation Webhook', color:'#e74c3c',  icon:'⚠️' },
+      { key:'cases',          label:'📁 Cases Webhook',                   color:'#f39c12',  icon:'📁' },
+      { key:'reports',        label:'📋 Reports Webhook',                 color:'#1abc9c',  icon:'📋' },
+      { key:'laws',           label:'⚖️ Laws & Rules Webhook',            color:'#2980b9',  icon:'⚖️' },
+      { key:'codes',          label:'📻 Police Codes Webhook',            color:'#16a085',  icon:'📻' },
+      { key:'wanted',         label:'🚨 Wanted & Impound Webhook',        color:'#c0392b',  icon:'🚨' },
+      { key:'uniforms',       label:'👔 Uniform Guide Webhook',           color:'#2c3e50',  icon:'👔' },
+      { key:'points',         label:'🏆 Points Logs Webhook',             color:'#d35400',  icon:'🏆' },
+      { key:'console',        label:'💻 Console Actions Webhook',         color:'#27ae60',  icon:'💻' },
+      { key:'discord_control',label:'🎛️ Discord Control Center Webhook',  color:'#5865f2',  icon:'🎛️' },
+      { key:'settings',       label:'⚙️ Settings Webhook',                color:'#95a5a6',  icon:'⚙️' },
+      { key:'database',       label:'🗄️ Database Webhook',                color:'#c0392b',  icon:'🗄️' },
     ];
     const branding = store._branding || {};
     qs('#settings').innerHTML = `
@@ -2290,7 +2423,7 @@
 
   window.saveWebhooks = async () => {
     const wh = store.webhooks || {};
-    const keys = ['login','logout','officers','admin','website_roles','server_roles','discord_users','punishment','cases','reports','settings','database'];
+    const keys = ['login','logout','officers','admin','ownership','website_roles','server_roles','discord_users','punishment','cases','reports','laws','codes','wanted','uniforms','points','console','discord_control','settings','database'];
     const payload = {};
     keys.forEach(k=>{
       payload[k] = {
@@ -2431,20 +2564,20 @@
     return ROOT_OWNER_IDS.includes(currentUser?.id);
   }
 
-  function isProtectedRole(role) {
+  window.isProtectedRole = function isProtectedRole(role) {
     if (!role) return false;
     return !!(role.protected || role.system || role.managed);
   }
 
-  function canEditProtectedRole() {
+  window.canEditProtectedRole = function canEditProtectedRole() {
     // Only hardcoded root owners can touch protected roles
     return isRootOwner();
   }
 
   // Returns false and shows toast if role is protected and user can't edit it
-  function checkProtectedAccess(role, action = 'modify') {
-    if (!isProtectedRole(role)) return true;
-    if (canEditProtectedRole()) return true;
+  window.checkProtectedAccess = function checkProtectedAccess(role, action = 'modify') {
+    if (!window.isProtectedRole(role)) return true;
+    if (window.canEditProtectedRole()) return true;
     toast(`🔒 This role is protected and cannot be ${action}ed`, '#f3c75a');
     return false;
   }
@@ -2693,71 +2826,128 @@
   // ═══════════════════════════ DISCORD PERMISSIONS SYSTEM ═══════════════════════════
   const DISCORD_PERM_GROUPS = [
     {
-      label: 'General Server', color: '#f3c75a', icon: 'ti-settings',
+      label: 'General Permissions', color: '#f3c75a', icon: 'ti-settings',
       perms: [
-        { name:'Administrator', bit:'8', desc:'Full server control' },
-        { name:'Manage Server', bit:'32', desc:'Edit server settings' },
-        { name:'Manage Roles', bit:'268435456', desc:'Create/edit/delete roles below own' },
-        { name:'Manage Channels', bit:'16', desc:'Create/edit/delete channels' },
-        { name:'View Audit Log', bit:'128', desc:'View server audit logs' },
-        { name:'Manage Webhooks', bit:'536870912', desc:'Manage server webhooks' },
-        { name:'Manage Expressions', bit:'8192', desc:'Manage emojis & stickers' },
-        { name:'Manage Events', bit:'8589934592', desc:'Manage scheduled events' },
+        { name:'Administrator', bit:'8', desc:'Full unrestricted server control — inherits all permissions' },
+        { name:'View Audit Log', bit:'128', desc:'View changes in the audit log' },
+        { name:'View Server Insights', bit:'524288', desc:'View Server Insights analytics' },
+        { name:'Manage Server', bit:'32', desc:'Edit server settings and integrations' },
+        { name:'Manage Roles', bit:'268435456', desc:'Create, edit, delete roles below own highest' },
+        { name:'Manage Channels', bit:'16', desc:'Create, edit, and delete channels' },
+        { name:'Manage Webhooks', bit:'536870912', desc:'Create, edit, and delete webhooks' },
+        { name:'Manage Expressions', bit:'8192', desc:'Manage emojis, stickers, and soundboard sounds' },
+        { name:'Create Expressions', bit:'8796093022208', desc:'Upload emojis and stickers' },
+        { name:'Manage Events', bit:'8589934592', desc:'Create and manage scheduled events' },
+        { name:'Create Events', bit:'17592186044416', desc:'Create scheduled events' },
+        { name:'View Creator Monetization Analytics', bit:'2199023255552', desc:'View monetization analytics' },
       ]
     },
     {
-      label: 'Member Control', color: '#e74c3c', icon: 'ti-users',
+      label: 'Membership Permissions', color: '#e74c3c', icon: 'ti-users',
       perms: [
-        { name:'Kick Members', bit:'2', desc:'Remove members from server' },
-        { name:'Ban Members', bit:'4', desc:'Ban members from server' },
-        { name:'Timeout Members', bit:'1099511627776', desc:'Timeout members' },
-        { name:'Moderate Members', bit:'1099511627776', desc:'Apply moderation actions' },
-        { name:'Manage Nicknames', bit:'134217728', desc:'Change others\' nicknames' },
-        { name:'Create Invite', bit:'1', desc:'Create server invites' },
-        { name:'Change Nickname', bit:'67108864', desc:'Change own nickname' },
-        { name:'Mention Everyone', bit:'131072', desc:'Mention @everyone and @here' },
+        { name:'Create Invite', bit:'1', desc:'Create instant invite links to the server' },
+        { name:'Change Nickname', bit:'67108864', desc:'Change own server nickname' },
+        { name:'Manage Nicknames', bit:'134217728', desc:'Change other members\' nicknames' },
+        { name:'Kick Members', bit:'2', desc:'Remove members from the server (they can rejoin)' },
+        { name:'Ban Members', bit:'4', desc:'Ban members from the server permanently' },
+        { name:'Moderate Members', bit:'1099511627776', desc:'Timeout members — temporarily mute them' },
+        { name:'Mention @everyone, @here', bit:'131072', desc:'Ping everyone or all online members' },
       ]
     },
     {
-      label: 'Text Channels', color: '#3498db', icon: 'ti-message',
+      label: 'Text Channel Permissions', color: '#3498db', icon: 'ti-message',
       perms: [
+        { name:'View Channels', bit:'1024', desc:'See channels and read messages in them' },
         { name:'Send Messages', bit:'2048', desc:'Send messages in text channels' },
-        { name:'Send Messages in Threads', bit:'274877906944', desc:'Send messages in threads' },
-        { name:'Create Public Threads', bit:'34359738368', desc:'Create public threads' },
-        { name:'Create Private Threads', bit:'137438953472', desc:'Create private threads' },
-        { name:'Embed Links', bit:'16384', desc:'Embed links in messages' },
-        { name:'Attach Files', bit:'32768', desc:'Attach files to messages' },
-        { name:'Add Reactions', bit:'64', desc:'Add reactions to messages' },
+        { name:'Send Messages in Threads', bit:'274877906944', desc:'Send messages inside existing threads' },
+        { name:'Create Public Threads', bit:'34359738368', desc:'Create new public threads in channels' },
+        { name:'Create Private Threads', bit:'137438953472', desc:'Create new private threads in channels' },
+        { name:'Embed Links', bit:'16384', desc:'Embed website previews when posting links' },
+        { name:'Attach Files', bit:'32768', desc:'Upload files to messages' },
+        { name:'Add Reactions', bit:'64', desc:'Add emoji reactions to messages' },
         { name:'Use External Emojis', bit:'262144', desc:'Use emojis from other servers' },
-        { name:'Manage Messages', bit:'8192', desc:'Delete/pin any messages' },
-        { name:'Manage Threads', bit:'17592186044416', desc:'Archive/delete any thread' },
-        { name:'Read Message History', bit:'65536', desc:'Read previous messages' },
-        { name:'View Channel', bit:'1024', desc:'View channels and messages' },
+        { name:'Use External Stickers', bit:'137438953472', desc:'Use stickers from other servers' },
+        { name:'Manage Messages', bit:'8192', desc:'Delete or pin any message in the channel' },
+        { name:'Manage Threads', bit:'17592186044416', desc:'Archive, delete, or rename any thread' },
+        { name:'Read Message History', bit:'65536', desc:'Read messages sent before logging in' },
+        { name:'Send TTS Messages', bit:'4096', desc:'Send text-to-speech messages' },
+        { name:'Use Application Commands', bit:'2147483648', desc:'Use slash commands and context menus' },
       ]
     },
     {
-      label: 'Voice Channels', color: '#2ecc71', icon: 'ti-microphone',
+      label: 'Voice Channel Permissions', color: '#2ecc71', icon: 'ti-microphone',
       perms: [
-        { name:'Connect', bit:'1048576', desc:'Connect to voice channels' },
-        { name:'Speak', bit:'2097152', desc:'Speak in voice channels' },
-        { name:'Video', bit:'512', desc:'Use video in voice channels' },
-        { name:'Stream', bit:'512', desc:'Stream in voice channels' },
-        { name:'Mute Members', bit:'4194304', desc:'Mute others in voice' },
-        { name:'Deafen Members', bit:'8388608', desc:'Deafen others in voice' },
+        { name:'Connect', bit:'1048576', desc:'Connect and join voice channels' },
+        { name:'Speak', bit:'2097152', desc:'Talk in voice channels' },
+        { name:'Video', bit:'512', desc:'Share video in voice channels' },
+        { name:'Stream', bit:'512', desc:'Go live / screen share in voice channels' },
+        { name:'Use Soundboard', bit:'4294967296', desc:'Play sounds from the server soundboard' },
+        { name:'Use External Sounds', bit:'34359738368', desc:'Use soundboard sounds from other servers' },
+        { name:'Use Voice Activity', bit:'33554432', desc:'Use voice activity detection (not push-to-talk)' },
+        { name:'Priority Speaker', bit:'256', desc:'Speak louder than others when active' },
+        { name:'Mute Members', bit:'4194304', desc:'Server-mute members in voice channels' },
+        { name:'Deafen Members', bit:'8388608', desc:'Server-deafen members in voice channels' },
         { name:'Move Members', bit:'16777216', desc:'Move members between voice channels' },
-        { name:'Priority Speaker', bit:'256', desc:'Priority in voice transmission' },
-        { name:'Use Soundboard', bit:'4294967296', desc:'Use soundboard in voice' },
-        { name:'Use External Sounds', bit:'34359738368', desc:'Use sounds from other servers' },
-        { name:'Request to Speak', bit:'4294967296', desc:'Request to speak in stage' },
-        { name:'Manage Events (Voice)', bit:'8589934592', desc:'Manage voice events' },
       ]
     },
     {
-      label: 'Applications & Bots', color: '#9b59b6', icon: 'ti-robot',
+      label: 'Stage Channel Permissions', color: '#9b59b6', icon: 'ti-broadcast',
       perms: [
-        { name:'Use Application Commands', bit:'2147483648', desc:'Use slash commands' },
-        { name:'Use Embedded Activities', bit:'549755813888', desc:'Use voice channel activities' },
+        { name:'Request to Speak', bit:'4294967296', desc:'Request speaker status in stage channels' },
+        { name:'Manage Events (Stage)', bit:'8589934592', desc:'Start, end, and manage stage events' },
+      ]
+    },
+    {
+      label: 'Thread Permissions', color: '#1abc9c', icon: 'ti-messages',
+      perms: [
+        { name:'Create Public Threads', bit:'34359738368', desc:'Create new public threads in channels' },
+        { name:'Create Private Threads', bit:'137438953472', desc:'Create new private threads in channels' },
+        { name:'Send Messages in Threads', bit:'274877906944', desc:'Send messages inside existing threads' },
+        { name:'Manage Threads', bit:'17592186044416', desc:'Archive, delete, or rename any thread' },
+      ]
+    },
+    {
+      label: 'Event Permissions', color: '#e67e22', icon: 'ti-calendar-event',
+      perms: [
+        { name:'Manage Events', bit:'8589934592', desc:'Manage scheduled guild events' },
+        { name:'Create Events', bit:'17592186044416', desc:'Create new scheduled events' },
+      ]
+    },
+    {
+      label: 'Soundboard Permissions', color: '#e91e63', icon: 'ti-music',
+      perms: [
+        { name:'Use Soundboard', bit:'4294967296', desc:'Play sounds from the server soundboard' },
+        { name:'Use External Sounds', bit:'34359738368', desc:'Use sounds from other servers\' soundboards' },
+        { name:'Manage Expressions', bit:'8192', desc:'Add, rename, and delete soundboard sounds' },
+        { name:'Create Expressions', bit:'8796093022208', desc:'Upload custom sounds to the soundboard' },
+      ]
+    },
+    {
+      label: 'Moderation Permissions', color: '#ff5722', icon: 'ti-shield-lock',
+      perms: [
+        { name:'Kick Members', bit:'2', desc:'Remove members from the server' },
+        { name:'Ban Members', bit:'4', desc:'Permanently ban members' },
+        { name:'Moderate Members (Timeout)', bit:'1099511627776', desc:'Apply temporary mute via timeout' },
+        { name:'Manage Messages', bit:'8192', desc:'Delete any message in any channel' },
+        { name:'View Audit Log', bit:'128', desc:'View server audit log history' },
+        { name:'Manage Roles', bit:'268435456', desc:'Edit roles below own highest role' },
+        { name:'Manage Nicknames', bit:'134217728', desc:'Change other members\' nicknames' },
+        { name:'Mute Members (Voice)', bit:'4194304', desc:'Server-mute members in voice' },
+        { name:'Deafen Members (Voice)', bit:'8388608', desc:'Server-deafen members in voice' },
+        { name:'Move Members (Voice)', bit:'16777216', desc:'Move members between voice channels' },
+      ]
+    },
+    {
+      label: 'Advanced Guild Permissions', color: '#607d8b', icon: 'ti-crown',
+      perms: [
+        { name:'Administrator', bit:'8', desc:'Grants ALL permissions — use with extreme caution' },
+        { name:'Manage Server', bit:'32', desc:'Full server settings access' },
+        { name:'Manage Webhooks', bit:'536870912', desc:'Create and manage all webhooks' },
+        { name:'Manage Channels', bit:'16', desc:'Full channel management' },
+        { name:'View Server Insights', bit:'524288', desc:'Access server analytics' },
+        { name:'Use Embedded Activities', bit:'549755813888', desc:'Launch activities in voice channels' },
         { name:'Use External Applications', bit:'549755813888', desc:'Use external application commands' },
+        { name:'View Creator Monetization Analytics', bit:'2199023255552', desc:'View monetization reports' },
       ]
     },
   ];
@@ -3497,7 +3687,7 @@
     out.scrollTop = out.scrollHeight;
   }
 
-  async function consoleExec(cmd){
+  window.consoleExec = async function consoleExec(cmd){
     const input = document.getElementById('consoleInput');
     const trimmed = (cmd || '').trim().toLowerCase();
     if(!trimmed) return;
@@ -3652,7 +3842,26 @@
     consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;color:#ff5a67">${ts}❌ Unknown command: <span style="color:#edf3ff">'${esc(trimmed)}'</span>. Type <span style="color:#f3c75a">help</span> for available commands.</div>`);
   }
 
-  // ═══════════════════════════ DISCORD CONTROL CENTER ═══════════════════════════
+  window.consoleExecInput = function() {
+    const input = document.getElementById('consoleInput');
+    if(input) window.consoleExec(input.value);
+  };
+
+  window.handleConsoleKey = function(e) {
+    const input = document.getElementById('consoleInput');
+    if(e.key === 'Enter') { window.consoleExecInput(); }
+    else if(e.key === 'ArrowUp') {
+      if(_consoleHistory.length && _consoleHistIdx < _consoleHistory.length-1){
+        _consoleHistIdx++;
+        if(input) input.value = _consoleHistory[_consoleHistIdx];
+      }
+      e.preventDefault();
+    } else if(e.key === 'ArrowDown') {
+      if(_consoleHistIdx > 0){ _consoleHistIdx--; if(input) input.value = _consoleHistory[_consoleHistIdx]; }
+      else { _consoleHistIdx=-1; if(input) input.value=''; }
+      e.preventDefault();
+    }
+  };
   async function renderDiscordControl(){
     if(!isAdmin){ qs('#discordControl').innerHTML='<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">Access denied — Admin only.</p></div></div>'; return; }
     const el = qs('#discordControl');
@@ -3699,17 +3908,29 @@
   }
 
   async function dccLoadStats(){
-    const [membersRes, rolesRes] = await Promise.all([
-      api('GET', '/api/discord/members?q='),
+    const [membersRes, rolesRes, voiceRes] = await Promise.all([
+      api('GET', '/api/discord/members?q=&limit=1000'),
       api('GET', '/api/server-roles'),
+      api('GET', '/api/discord/voice').catch(()=>({ok:false})),
     ]);
     if(membersRes.ok){
       const m = membersRes.data || [];
-      const el = qs('#dcc-members'); if(el) el.textContent = m.length;
+      const el = qs('#dcc-members'); if(el) el.textContent = m.length || '0';
+    } else {
+      const el = qs('#dcc-members'); if(el) el.textContent = '—';
     }
     if(rolesRes.ok){
       const r = rolesRes.data || [];
       const rel = qs('#dcc-roles'); if(rel) rel.textContent = r.length;
+    }
+    // Voice: count members in voice channels
+    if(voiceRes.ok && voiceRes.data){
+      const channels = voiceRes.data || [];
+      const voiceCount = channels.reduce((s,ch) => s + (ch.members?.length||0), 0);
+      const vel = qs('#dcc-voice'); if(vel) vel.textContent = voiceCount;
+    } else {
+      // Fallback: approximate from member statuses if voice API not available
+      const vel = qs('#dcc-voice'); if(vel && vel.textContent === '—') vel.textContent = '0';
     }
   }
 
@@ -3843,46 +4064,57 @@
     }
 
     if(tab === 'voice'){
-      const voiceRes = await api('GET', '/api/discord/members?q=');
-      const voiceMembers = voiceRes.ok ? (voiceRes.data || []) : [];
+      // Try to load dedicated voice states first, fallback to all members for controls
+      const [voiceRes, allMembersRes] = await Promise.all([
+        api('GET', '/api/discord/voice').catch(()=>({ok:false})),
+        api('GET', '/api/discord/members?q=&limit=500'),
+      ]);
+      const allMembers = allMembersRes.ok ? (allMembersRes.data || []) : [];
+      // Build voice count from voice state data
+      let voiceChannels = [];
+      if(voiceRes.ok && Array.isArray(voiceRes.data)) {
+        voiceChannels = voiceRes.data;
+        const totalInVoice = voiceChannels.reduce((s,ch)=>s+(ch.members?.length||0),0);
+        const vel = qs('#dcc-voice'); if(vel) vel.textContent = totalInVoice;
+      } else {
+        const vel = qs('#dcc-voice'); if(vel) vel.textContent = '0';
+      }
+      // Show voice channels if available, otherwise fall back to all-members moderation panel
+      const voiceMembersInChannels = voiceChannels.flatMap(ch =>
+        (ch.members||[]).map(m=>({...m, channelName: ch.name, channelId: ch.id}))
+      );
+      const displayMembers = voiceMembersInChannels.length > 0 ? voiceMembersInChannels : allMembers;
       content.innerHTML = `<div class="card">
         <div class="card-header">
-          <h3><i class="ti ti-microphone"></i> Voice Controls</h3>
+          <h3><i class="ti ti-microphone"></i> Voice Controls ${voiceChannels.length > 0 ? `<span style="font-size:12px;color:#8fa0bd;margin-left:8px">(${voiceMembersInChannels.length} in voice)</span>` : ''}</h3>
           <input id="dcc-voice-search" placeholder="🔍 Search member..." style="width:200px;padding:7px 12px;border-radius:10px;background:#0b1220;border:1px solid rgba(255,255,255,.12);color:white;font-size:13px" oninput="dccFilterVoice(this.value)">
         </div>
+        ${voiceChannels.length > 0 ? `
+        <div style="padding:12px 16px;background:rgba(47,124,255,.05);border-bottom:1px solid rgba(47,124,255,.1);font-size:12px;color:#8fa0bd">
+          <i class="ti ti-microphone" style="color:#2ecc71"></i> Active voice channels:
+          ${voiceChannels.map(ch=>`<span style="margin:0 8px;color:#edf3ff">${esc(ch.name)} <span style="color:#2ecc71">(${ch.members?.length||0})</span></span>`).join(' · ')}
+        </div>` : ''}
         <div class="card-body" style="padding:0;max-height:480px;overflow-y:auto">
           <table style="margin:0">
-            <thead><tr><th>Member</th><th>Server Mute</th><th>Server Deafen</th><th>Timeout</th><th>Disconnect</th><th>Kick</th><th>Ban</th></tr></thead>
+            <thead><tr><th>Member${voiceChannels.length?'/Channel':''}</th><th>Server Mute</th><th>Server Deafen</th><th>Timeout</th><th>Disconnect</th><th>Kick</th><th>Ban</th></tr></thead>
             <tbody id="dcc-voice-tbody">
-              ${voiceMembers.map(m=>`
-                <tr data-name="${esc(m.username.toLowerCase())} ${esc(m.displayName.toLowerCase())}">
+              ${displayMembers.map(m=>`
+                <tr data-name="${esc((m.username||'').toLowerCase())} ${esc((m.displayName||'').toLowerCase())}">
                   <td>
                     <div style="display:flex;align-items:center;gap:8px">
-                      <img src="${esc(m.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                      <img src="${esc(m.avatar||'')}" style="width:28px;height:28px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
                       <div>
-                        <div style="font-weight:600;font-size:12px">${esc(m.displayName)}</div>
-                        <div style="font-size:10px;color:#53617a">@${esc(m.username)}</div>
+                        <div style="font-weight:600;font-size:12px">${esc(m.displayName||m.username||'')}</div>
+                        <div style="font-size:10px;color:#53617a">@${esc(m.username||'')}${m.channelName?` · <span style="color:#2ecc71">🔊 ${esc(m.channelName)}</span>`:''}</div>
                       </div>
                     </div>
                   </td>
-                  <td>
-                    <button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName)}','mute')" title="Server Mute"><i class="ti ti-microphone-off"></i></button>
-                  </td>
-                  <td>
-                    <button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName)}','deafen')" title="Server Deafen"><i class="ti ti-ear-off"></i></button>
-                  </td>
-                  <td>
-                    <button class="btn btn-sm" style="background:rgba(243,199,90,.15);color:#f3c75a;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','timeout')" title="Timeout"><i class="ti ti-clock-pause"></i></button>
-                  </td>
-                  <td>
-                    <button class="btn btn-sm" style="background:rgba(230,126,34,.15);color:#e67e22;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName)}','disconnect')" title="Disconnect from Voice"><i class="ti ti-logout"></i></button>
-                  </td>
-                  <td>
-                    <button class="btn btn-sm" style="background:rgba(255,90,103,.15);color:#ff5a67;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','kick')" title="Kick"><i class="ti ti-user-minus"></i></button>
-                  </td>
-                  <td>
-                    <button class="btn btn-sm" style="background:rgba(192,57,43,.15);color:#c0392b;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName)}','ban')" title="Ban"><i class="ti ti-ban"></i></button>
-                  </td>
+                  <td><button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName||m.username||'')}','mute')" title="Server Mute"><i class="ti ti-microphone-off"></i></button></td>
+                  <td><button class="btn btn-sm" style="background:rgba(231,76,60,.15);color:#e74c3c;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName||m.username||'')}','deafen')" title="Server Deafen"><i class="ti ti-ear-off"></i></button></td>
+                  <td><button class="btn btn-sm" style="background:rgba(243,199,90,.15);color:#f3c75a;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName||m.username||'')}','timeout')" title="Timeout"><i class="ti ti-clock-pause"></i></button></td>
+                  <td><button class="btn btn-sm" style="background:rgba(230,126,34,.15);color:#e67e22;font-size:11px" onclick="dccVoiceAction('${esc(m.id)}','${esc(m.displayName||m.username||'')}','disconnect')" title="Disconnect from Voice"><i class="ti ti-logout"></i></button></td>
+                  <td><button class="btn btn-sm" style="background:rgba(255,90,103,.15);color:#ff5a67;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName||m.username||'')}','kick')" title="Kick"><i class="ti ti-user-minus"></i></button></td>
+                  <td><button class="btn btn-sm" style="background:rgba(192,57,43,.15);color:#c0392b;font-size:11px" onclick="dccMemberAction('${esc(m.id)}','${esc(m.displayName||m.username||'')}','ban')" title="Ban"><i class="ti ti-ban"></i></button></td>
                 </tr>`).join('') || '<tr><td colspan="7" style="color:#8fa0bd;text-align:center;padding:20px">No members found</td></tr>'}
             </tbody>
           </table>
@@ -4191,54 +4423,38 @@
 
   // ═══════════════════════════════════════════════════════════
 
-  window.consoleExecInput = () => {
-    const input = document.getElementById('consoleInput');
-    if(!input) return;
-    consoleExec(input.value.trim());
-  };
-
-  window.handleConsoleKey = (e) => {
-    const input = document.getElementById('consoleInput');
-    if(!input) return;
-    if(e.key === 'Enter'){ consoleExec(input.value.trim()); return; }
-    if(e.key === 'ArrowUp'){
-      e.preventDefault();
-      _consoleHistIdx = Math.min(_consoleHistIdx+1, _consoleHistory.length-1);
-      if(_consoleHistory[_consoleHistIdx]) input.value = _consoleHistory[_consoleHistIdx];
-      return;
-    }
-    if(e.key === 'ArrowDown'){
-      e.preventDefault();
-      _consoleHistIdx = Math.max(_consoleHistIdx-1, -1);
-      input.value = _consoleHistIdx >= 0 ? (_consoleHistory[_consoleHistIdx]||'') : '';
-    }
-  };
+  // consoleExecInput and handleConsoleKey defined near consoleExec above
 
   // ═══════════════════════════ ENHANCED WEBHOOK SYSTEM ═══════════════════════════
   // (Extended webhook types — the renderSettings webhookTypes array is defined inside renderSettings)
 
   // ═══════════════════════════ LANGUAGE SYSTEM (i18n) v2 — REBUILT ═══════════════════════════
   const LANGUAGES = [
-    { code:'en', name:'English', flag:'🇺🇸' },
-    { code:'ar', name:'العربية', flag:'🇸🇦' },
-    { code:'fr', name:'Français', flag:'🇫🇷' },
-    { code:'es', name:'Español', flag:'🇪🇸' },
-    { code:'de', name:'Deutsch', flag:'🇩🇪' },
-    { code:'tr', name:'Türkçe', flag:'🇹🇷' },
-    { code:'ru', name:'Русский', flag:'🇷🇺' },
-    { code:'zh', name:'中文', flag:'🇨🇳' },
-    { code:'ja', name:'日本語', flag:'🇯🇵' },
-    { code:'ko', name:'한국어', flag:'🇰🇷' },
-    { code:'pt', name:'Português', flag:'🇧🇷' },
-    { code:'it', name:'Italiano', flag:'🇮🇹' },
-    { code:'nl', name:'Nederlands', flag:'🇳🇱' },
-    { code:'pl', name:'Polski', flag:'🇵🇱' },
-    { code:'sv', name:'Svenska', flag:'🇸🇪' },
-    { code:'fa', name:'فارسی', flag:'🇮🇷' },
-    { code:'ur', name:'اردو', flag:'🇵🇰' },
-    { code:'hi', name:'हिंदी', flag:'🇮🇳' },
-    { code:'id', name:'Bahasa Indonesia', flag:'🇮🇩' },
-    { code:'ms', name:'Bahasa Melayu', flag:'🇲🇾' },
+    { code:'en',    name:'English',               flag:'🇺🇸', dir:'ltr' },
+    { code:'ar',    name:'العربية (الإمارات)',     flag:'🇦🇪', dir:'rtl' },
+    { code:'ar_sa', name:'العربية السعودية',       flag:'🇸🇦', dir:'rtl' },
+    { code:'ar_kw', name:'الكويتية',               flag:'🇰🇼', dir:'rtl' },
+    { code:'ar_qa', name:'القطرية',                flag:'🇶🇦', dir:'rtl' },
+    { code:'ar_bh', name:'البحرينية',              flag:'🇧🇭', dir:'rtl' },
+    { code:'ar_om', name:'العمانية',               flag:'🇴🇲', dir:'rtl' },
+    { code:'fr',    name:'Français',               flag:'🇫🇷', dir:'ltr' },
+    { code:'es',    name:'Español',                flag:'🇪🇸', dir:'ltr' },
+    { code:'de',    name:'Deutsch',                flag:'🇩🇪', dir:'ltr' },
+    { code:'tr',    name:'Türkçe',                 flag:'🇹🇷', dir:'ltr' },
+    { code:'ru',    name:'Русский',                flag:'🇷🇺', dir:'ltr' },
+    { code:'zh',    name:'中文',                   flag:'🇨🇳', dir:'ltr' },
+    { code:'ja',    name:'日本語',                 flag:'🇯🇵', dir:'ltr' },
+    { code:'ko',    name:'한국어',                 flag:'🇰🇷', dir:'ltr' },
+    { code:'pt',    name:'Português',              flag:'🇧🇷', dir:'ltr' },
+    { code:'it',    name:'Italiano',               flag:'🇮🇹', dir:'ltr' },
+    { code:'nl',    name:'Nederlands',             flag:'🇳🇱', dir:'ltr' },
+    { code:'pl',    name:'Polski',                 flag:'🇵🇱', dir:'ltr' },
+    { code:'sv',    name:'Svenska',                flag:'🇸🇪', dir:'ltr' },
+    { code:'fa',    name:'فارسی',                  flag:'🇮🇷', dir:'rtl' },
+    { code:'ur',    name:'اردو',                   flag:'🇵🇰', dir:'rtl' },
+    { code:'hi',    name:'हिंदी',                  flag:'🇮🇳', dir:'ltr' },
+    { code:'id',    name:'Bahasa Indonesia',        flag:'🇮🇩', dir:'ltr' },
+    { code:'ms',    name:'Bahasa Melayu',           flag:'🇲🇾', dir:'ltr' },
   ];
 
   // ════ FULL i18n MASTER TABLE — every key, every language ════
@@ -4498,14 +4714,20 @@
   };
 
   // RTL languages
-  const RTL_LANGS = new Set(['ar','fa','ur','he']);
+  const RTL_LANGS = new Set(['ar','ar_sa','ar_kw','ar_qa','ar_bh','ar_om','fa','ur','he']);
 
   let _currentLang = localStorage.getItem('lspd_lang') || 'en';
 
   function t(key) {
-    const lang = I18N_BASE[_currentLang] || {};
-    const en   = I18N_BASE.en;
-    return lang[key] !== undefined ? lang[key] : (en[key] !== undefined ? en[key] : key);
+    const direct = I18N_BASE[_currentLang] || {};
+    if(direct[key] !== undefined) return direct[key];
+    // Gulf Arabic variants fall back to base Arabic
+    if(_currentLang.startsWith('ar_')){
+      const arBase = I18N_BASE['ar'] || {};
+      if(arBase[key] !== undefined) return arBase[key];
+    }
+    const en = I18N_BASE.en;
+    return en[key] !== undefined ? en[key] : key;
   }
 
   function applyTranslations() {
@@ -4520,8 +4742,9 @@
     document.querySelectorAll('[data-i18n-ph]').forEach(el => {
       el.placeholder = t(el.dataset.i18nPh);
     });
-    // RTL / LTR
-    const isRTL = RTL_LANGS.has(_currentLang);
+    // RTL / LTR — use LANGUAGES dir field first, then RTL_LANGS as fallback
+    const langDef = LANGUAGES.find(l=>l.code===_currentLang);
+    const isRTL = langDef ? langDef.dir === 'rtl' : RTL_LANGS.has(_currentLang);
     document.documentElement.dir  = isRTL ? 'rtl' : 'ltr';
     document.documentElement.lang = _currentLang;
     // Update lang selector button label
