@@ -99,10 +99,21 @@
     .modal-footer { border-bottom:none; border-top:1px solid rgba(255,255,255,.08); justify-content:flex-end; gap:12px; }
     .modal-body { padding:24px; }
 
-    .toast { position:fixed; bottom:24px; left:24px; background:#1b2942;
-      border-left:4px solid #2f7cff; padding:12px 20px; border-radius:12px;
-      display:none; z-index:1100; box-shadow:0 8px 24px rgba(0,0,0,.3); }
-    .toast.show { display:block; }
+    /* ── Toast System ── */
+    #toastContainer { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+    .toast-item {
+      background:#1b2942; border-left:4px solid #2f7cff;
+      padding:14px 20px; border-radius:14px; min-width:260px; max-width:360px;
+      box-shadow:0 8px 32px rgba(0,0,0,.5); pointer-events:all;
+      display:flex; align-items:center; gap:12px; font-size:14px; font-weight:600;
+      transform:translateX(120%); opacity:0;
+      transition:transform .35s cubic-bezier(.22,.61,.36,1), opacity .35s ease;
+    }
+    .toast-item.show { transform:translateX(0); opacity:1; }
+    .toast-item.hide { transform:translateX(120%); opacity:0; }
+    .toast-item i { font-size:20px; flex-shrink:0; }
+    /* legacy single toast — keep for compatibility but hidden */
+    .toast { display:none !important; }
 
     .login-container { min-height:100vh; display:grid; place-items:center; padding:24px; }
     .login-card { max-width:460px; background:linear-gradient(145deg,#101827,#070b13);
@@ -125,7 +136,19 @@
 
     .mobile-menu { display:none; }
 
-    /* ── Background Logo Effect (shared across pages) ── */
+    /* ── Protected Role System ── */
+    .role-protected-lock { display:inline-flex; align-items:center; gap:5px; background:rgba(243,199,90,.12); border:1px solid rgba(243,199,90,.3); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; color:#f3c75a; }
+    [data-protected="true"] { border-color:rgba(243,199,90,.25) !important; background:rgba(243,199,90,.04) !important; }
+
+    /* ── Language Selector ── */
+    #langSelectorBtn { position:fixed; top:16px; right:16px; z-index:9998; background:rgba(10,15,25,.92); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:8px 14px; display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:#edf3ff; backdrop-filter:blur(12px); transition:.2s; }
+    #langSelectorBtn:hover { background:rgba(47,124,255,.15); border-color:rgba(47,124,255,.3); }
+    #langDropdown { position:fixed; top:54px; right:16px; z-index:9997; background:#101827; border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:8px; min-width:200px; max-height:320px; overflow-y:auto; display:none; box-shadow:0 12px 40px rgba(0,0,0,.5); backdrop-filter:blur(12px); }
+    #langDropdown.open { display:block; }
+    #langDropdown input { margin-bottom:8px; }
+    .lang-option { padding:9px 12px; border-radius:10px; cursor:pointer; font-size:13px; font-weight:500; transition:.15s; display:flex; align-items:center; gap:10px; }
+    .lang-option:hover { background:rgba(47,124,255,.12); }
+    .lang-option.active { background:rgba(47,124,255,.18); color:#2f7cff; font-weight:700; }
     .page-bg-logo {
       position:relative; overflow:hidden;
     }
@@ -145,11 +168,11 @@
     .hier-badge { display:inline-flex; align-items:center; gap:4px; background:rgba(47,124,255,.12); border:1px solid rgba(47,124,255,.2); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; color:#2f7cff; }
 
     /* ── Drag & Drop ── */
-    .drag-handle { cursor:grab; color:#53617a; padding:0 8px; font-size:18px; user-select:none; transition:.15s; }
+    .drag-handle { cursor:grab; color:#53617a; padding:0 8px; font-size:18px; user-select:none; transition:.15s; touch-action:none; }
     .drag-handle:hover { color:#8fa0bd; }
     .drag-handle:active { cursor:grabbing; }
-    .dragging { opacity:.45; background:rgba(47,124,255,.08) !important; border:2px dashed rgba(47,124,255,.4) !important; border-radius:14px; }
-    .drag-over { border-top:2px solid #2f7cff !important; }
+    .dragging { opacity:.4; background:rgba(47,124,255,.06) !important; outline:2px dashed rgba(47,124,255,.4) !important; outline-offset:-2px; border-radius:10px; }
+    .drag-over { outline:2px solid #2f7cff !important; outline-offset:-2px; border-radius:10px; }
 
     @media(max-width:800px){
       .app { grid-template-columns:1fr; }
@@ -163,13 +186,24 @@
 </head>
 <body>
 
+<div id="langSelectorBtn" onclick="toggleLangDropdown()">
+  <i class="ti ti-world"></i> <span id="currentLangLabel">English</span> <i class="ti ti-chevron-down" style="font-size:11px;opacity:.6"></i>
+</div>
+<div id="langDropdown">
+  <input id="langSearch" placeholder="🔍 Search language..." autocomplete="off" oninput="filterLangs(this.value)" style="margin-bottom:6px">
+  <div id="langList"></div>
+</div>
+
+<div id="toastContainer"></div>
+<div id="toastMessage" class="toast"></div>
+
 <div id="loginContainer" class="login-container">
   <div class="login-card">
     <div style="width:80px;height:80px;background:#0b1730;border:2px solid #f3c75a;border-radius:50%;display:grid;place-items:center;font-size:40px;margin:0 auto 20px">🛡️</div>
-    <h1 style="font-size:28px;font-weight:900">SHJ LSPD</h1>
-    <p style="color:#8fa0bd;margin:8px 0 24px">Complete Police Management System</p>
+    <h1 style="font-size:28px;font-weight:900" data-i18n="login_title">SHJ LSPD</h1>
+    <p style="color:#8fa0bd;margin:8px 0 24px" data-i18n="login_sub">Complete Police Management System</p>
     <button id="discordLoginBtn" class="btn btn-primary" style="width:100%;justify-content:center">
-      <i class="ti ti-brand-discord"></i> Login with Discord
+      <i class="ti ti-brand-discord"></i> <span data-i18n="login_btn">Login with Discord</span>
     </button>
     <p id="loginMessage" style="margin-top:16px;font-size:13px;color:#8fa0bd"></p>
   </div>
@@ -182,24 +216,24 @@
       <div><h1>SHJ LSPD</h1><p>Command Center</p></div>
     </div>
     <nav class="nav">
-      <div class="nav-title">Main</div>
-      <button class="active" data-page="dashboard"><i class="ti ti-dashboard"></i> Dashboard</button>
-      <button data-page="officers"><i class="ti ti-users"></i> Officers</button>
-      <button data-page="ranks"><i class="ti ti-stairs-up"></i> Ranks</button>
-      <button data-page="points"><i class="ti ti-chart-bar"></i> Points Logs</button>
-      <button data-page="laws"><i class="ti ti-book"></i> Laws & Rules</button>
-      <button data-page="uniform"><i class="ti ti-shirt"></i> Uniform Guide</button>
-      <button data-page="codes"><i class="ti ti-radio"></i> Police Codes</button>
-      <button data-page="wanted"><i class="ti ti-car"></i> Wanted & Impound</button>
-      <button data-page="cases"><i class="ti ti-folder"></i> Cases</button>
-      <button data-page="reports"><i class="ti ti-file-text"></i> Reports</button>
-      <div class="nav-title">Administration</div>
-      <button data-page="discordUsers" data-admin-only style="display:none"><i class="ti ti-brand-discord"></i> Discord Users</button>
-      <button data-page="serverRoles" data-admin-only style="display:none"><i class="ti ti-shield-star"></i> Server Roles</button>
-      <button data-page="websiteRoles" data-owner-only style="display:none"><i class="ti ti-lock-access"></i> Website Roles</button>
-      <button data-page="logs" data-admin-only style="display:none"><i class="ti ti-history"></i> System Logs</button>
-      <button data-page="settings" data-admin-only style="display:none"><i class="ti ti-settings"></i> Settings</button>
-      <button data-page="adminRoles" data-owner-only style="display:none"><i class="ti ti-shield-lock"></i> Admin Roles</button>
+      <div class="nav-title" data-i18n="main">Main</div>
+      <button class="active" data-page="dashboard"><i class="ti ti-dashboard"></i> <span data-i18n="dashboard">Dashboard</span></button>
+      <button data-page="officers"><i class="ti ti-users"></i> <span data-i18n="officers">Officers</span></button>
+      <button data-page="ranks"><i class="ti ti-stairs-up"></i> <span data-i18n="ranks">Ranks</span></button>
+      <button data-page="points"><i class="ti ti-chart-bar"></i> <span data-i18n="points_logs">Points Logs</span></button>
+      <button data-page="laws"><i class="ti ti-book"></i> <span data-i18n="laws">Laws & Rules</span></button>
+      <button data-page="uniform"><i class="ti ti-shirt"></i> <span data-i18n="uniform">Uniform Guide</span></button>
+      <button data-page="codes"><i class="ti ti-radio"></i> <span data-i18n="codes">Police Codes</span></button>
+      <button data-page="wanted"><i class="ti ti-car"></i> <span data-i18n="wanted">Wanted & Impound</span></button>
+      <button data-page="cases"><i class="ti ti-folder"></i> <span data-i18n="cases">Cases</span></button>
+      <button data-page="reports"><i class="ti ti-file-text"></i> <span data-i18n="reports">Reports</span></button>
+      <div class="nav-title" data-i18n="administration">Administration</div>
+      <button data-page="discordUsers" data-admin-only style="display:none"><i class="ti ti-brand-discord"></i> <span data-i18n="discord_users">Discord Users</span></button>
+      <button data-page="serverRoles" data-admin-only style="display:none"><i class="ti ti-shield-star"></i> <span data-i18n="server_roles">Server Roles</span></button>
+      <button data-page="websiteRoles" data-owner-only style="display:none"><i class="ti ti-lock-access"></i> <span data-i18n="website_roles">Website Roles</span></button>
+      <button data-page="logs" data-admin-only style="display:none"><i class="ti ti-history"></i> <span data-i18n="system_logs">System Logs</span></button>
+      <button data-page="settings" data-admin-only style="display:none"><i class="ti ti-settings"></i> <span data-i18n="settings">Settings</span></button>
+      <button data-page="adminRoles" data-owner-only style="display:none"><i class="ti ti-shield-lock"></i> <span data-i18n="admin_roles">Admin Roles</span></button>
     </nav>
   </aside>
 
@@ -249,7 +283,7 @@
     </div>
   </div>
 </div>
-<div id="toastMessage" class="toast"></div>
+<!-- toast notifications handled by #toastContainer injected above -->
 
 <script>
 (function(){
@@ -282,10 +316,24 @@
   const qs  = (s,p=document) => p.querySelector(s);
   const qsa = (s,p=document) => [...p.querySelectorAll(s)];
   function esc(str){ return String(str??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]); }
-  function toast(msg,color='#2f7cff'){
-    const t=qs('#toastMessage');
-    if(t){ t.textContent=msg; t.style.borderLeftColor=color; t.classList.add('show');
-      setTimeout(()=>t.classList.remove('show'),3000); }
+  // ═══════════════════════════ TOAST SYSTEM ════════════════════════════
+  let _toastCounter = 0;
+  function toast(msg, color='#2f7cff'){
+    const container = document.getElementById('toastContainer');
+    if(!container) return;
+    const id = 'toast-' + (++_toastCounter);
+    const icon = color === '#2ecc71' ? 'ti-circle-check' : color === '#ff5a67' ? 'ti-circle-x' : color === '#f3c75a' ? 'ti-alert-triangle' : 'ti-info-circle';
+    const el = document.createElement('div');
+    el.className = 'toast-item';
+    el.id = id;
+    el.style.borderLeftColor = color;
+    el.innerHTML = `<i class="ti ${icon}" style="color:${color}"></i><span>${msg}</span>`;
+    container.appendChild(el);
+    requestAnimationFrame(() => { requestAnimationFrame(() => { el.classList.add('show'); }); });
+    setTimeout(() => {
+      el.classList.add('hide');
+      setTimeout(() => el.remove(), 400);
+    }, 3200);
   }
   function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-US') : '-'; }
 
@@ -294,36 +342,63 @@
     const tbody = document.getElementById(tableBodyId);
     if (!tbody) return;
     let dragged = null;
+    let dragY = 0;
+
     tbody.querySelectorAll('tr[data-id]').forEach(row => {
       row.setAttribute('draggable', 'true');
+
       row.addEventListener('dragstart', e => {
         dragged = row;
-        row.classList.add('dragging');
+        dragY = e.clientY;
         e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', row.dataset.id);
+        setTimeout(() => row.classList.add('dragging'), 0);
       });
+
       row.addEventListener('dragend', () => {
-        row.classList.remove('dragging');
+        if(dragged) dragged.classList.remove('dragging');
         tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
         dragged = null;
       });
+
       row.addEventListener('dragover', e => {
         e.preventDefault();
-        if (dragged && row !== dragged) {
-          tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+        e.dataTransfer.dropEffect = 'move';
+        if (!dragged || row === dragged) return;
+        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+        const rect = row.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          row.classList.add('drag-over');
+        } else {
           row.classList.add('drag-over');
         }
       });
+
+      row.addEventListener('dragleave', e => {
+        if(!row.contains(e.relatedTarget)) row.classList.remove('drag-over');
+      });
+
       row.addEventListener('drop', async e => {
         e.preventDefault();
+        e.stopPropagation();
         if (!dragged || dragged === row) return;
         row.classList.remove('drag-over');
+        dragged.classList.remove('dragging');
+
+        // Determine insert position
+        const rect = row.getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2;
+
+        if (insertBefore) {
+          tbody.insertBefore(dragged, row);
+        } else {
+          const next = row.nextElementSibling;
+          if (next) tbody.insertBefore(dragged, next);
+          else tbody.appendChild(dragged);
+        }
+
         const rows = [...tbody.querySelectorAll('tr[data-id]')];
-        const fromIdx = rows.indexOf(dragged);
-        const toIdx   = rows.indexOf(row);
-        if (fromIdx === -1 || toIdx === -1) return;
-        rows.splice(fromIdx, 1);
-        rows.splice(toIdx, 0, dragged);
-        rows.forEach(r => tbody.appendChild(r));
         const newOrder = rows.map(r => Number(r.dataset.id));
         const endpoint = collection === 'ranks' ? '/api/ranks/reorder' : '/api/reorder';
         const body = collection === 'ranks' ? { order: newOrder } : { collection, order: newOrder };
@@ -331,14 +406,17 @@
         if (res.ok) {
           if (collection === 'ranks') store.ranks = res.data;
           else if (store[collection]) store[collection] = res.data;
-          if (onReorder) onReorder();
           toast('Order saved ✓', '#2ecc71');
         } else {
           toast('Reorder failed', '#ff5a67');
-          if (onReorder) onReorder(); // re-render to restore
+          if (onReorder) onReorder();
         }
+        dragged = null;
       });
     });
+
+    // Also allow drop on tbody itself (for empty space at bottom)
+    tbody.addEventListener('dragover', e => e.preventDefault());
   }
 
   // ═══════════════════════════ API ENGINE ══════════════════════════
@@ -585,8 +663,8 @@
     qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
     qs('#sidebar')?.classList.remove('open');
     if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
-    // Apply bg logo effect to all pages after render
-    const BG_LOGO_PAGES = ['dashboard','officers','ranks','points','laws','uniform','codes','wanted','cases','reports'];
+    // Apply bg logo effect to all main content pages after render
+    const BG_LOGO_PAGES = ['dashboard','officers','ranks','points','laws','uniform','codes','wanted','cases','reports','discordUsers','serverRoles','websiteRoles','logs','settings','adminRoles'];
     if(BG_LOGO_PAGES.includes(pageId)){
       const el = qs(`#${pageId}`);
       if(el && !el.querySelector('.page-bg-logo')){
@@ -745,41 +823,56 @@
     const container = document.getElementById(containerId);
     if (!container) return;
     let dragged = null;
+
     container.querySelectorAll('[data-id]').forEach(el => {
       el.setAttribute('draggable', 'true');
+
       el.addEventListener('dragstart', e => {
         dragged = el;
-        setTimeout(() => el.classList.add('dragging'), 0);
         e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', el.dataset.id);
+        setTimeout(() => el.classList.add('dragging'), 0);
       });
+
       el.addEventListener('dragend', () => {
-        el.classList.remove('dragging');
+        if(dragged) dragged.classList.remove('dragging');
         container.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
         dragged = null;
       });
+
       el.addEventListener('dragover', e => {
         e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
         if (dragged && el !== dragged) {
           container.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
           el.classList.add('drag-over');
         }
       });
+
+      el.addEventListener('dragleave', e => {
+        if(!el.contains(e.relatedTarget)) el.classList.remove('drag-over');
+      });
+
       el.addEventListener('drop', async e => {
         e.preventDefault();
+        e.stopPropagation();
         if (!dragged || dragged === el) return;
         el.classList.remove('drag-over');
+        dragged.classList.remove('dragging');
+
+        const rect = el.getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2;
+        if (insertBefore) {
+          container.insertBefore(dragged, el);
+        } else {
+          const next = el.nextElementSibling;
+          // skip dividers
+          const afterDivider = next?.classList?.contains('divider') ? next.nextElementSibling : next;
+          if(afterDivider) container.insertBefore(dragged, afterDivider);
+          else container.appendChild(dragged);
+        }
+
         const items = [...container.querySelectorAll('[data-id]')];
-        const fromIdx = items.indexOf(dragged);
-        const toIdx   = items.indexOf(el);
-        if (fromIdx === -1 || toIdx === -1) return;
-        items.splice(fromIdx, 1);
-        items.splice(toIdx, 0, dragged);
-        // Re-insert into DOM (skip divider siblings)
-        items.forEach(i => {
-          container.appendChild(i);
-          const next = i.nextElementSibling;
-          if (next && next.classList.contains('divider')) container.appendChild(next);
-        });
         const newOrder = items.map(i => Number(i.dataset.id));
         const res = await api('POST', '/api/reorder', { collection, order: newOrder });
         if (res.ok) {
@@ -789,8 +882,11 @@
           toast('Reorder failed', '#ff5a67');
           if (onReorder) onReorder();
         }
+        dragged = null;
       });
     });
+
+    container.addEventListener('dragover', e => e.preventDefault());
   }
 
   window.moveRank = async (id, dir) => {
@@ -1908,6 +2004,32 @@
     manage_roles:'#c0392b', manage_webhooks:'#ff69b4', full_access:'#c0392b'
   };
 
+  // ═══════════════════════════ PROTECTED ROLE SYSTEM ═══════════════════════════
+  // Hardcoded root owner IDs — ONLY these can bypass protection
+  const ROOT_OWNER_IDS = ['1430628701996843078'];
+
+  function isRootOwner() {
+    return ROOT_OWNER_IDS.includes(currentUser?.id);
+  }
+
+  function isProtectedRole(role) {
+    if (!role) return false;
+    return !!(role.protected || role.system || role.managed);
+  }
+
+  function canEditProtectedRole() {
+    // Only hardcoded root owners can touch protected roles
+    return isRootOwner();
+  }
+
+  // Returns false and shows toast if role is protected and user can't edit it
+  function checkProtectedAccess(role, action = 'modify') {
+    if (!isProtectedRole(role)) return true;
+    if (canEditProtectedRole()) return true;
+    toast(`🔒 This role is protected and cannot be ${action}ed`, '#f3c75a');
+    return false;
+  }
+
   function renderAdminRoles(){
     if(!isOwner){ qs('#adminRoles').innerHTML = '<div class="card"><div class="card-body"><p style="color:#ff5a67;text-align:center">Access denied — Owner only.</p></div></div>'; return; }
     const roles = store.adminRoles || [];
@@ -2062,14 +2184,20 @@
             return;
           }
           resultsDiv.innerHTML = members.map(m=>`
-            <div onclick="window._addAdminMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:.15s;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
-              <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-              <div style="flex:1">
+            <div data-member-id="${esc(m.id)}" data-member-json="${esc(JSON.stringify(m))}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:.15s;border-bottom:1px solid rgba(255,255,255,.06);user-select:none" onmouseenter="this.style.background='rgba(47,124,255,.12)'" onmouseleave="this.style.background=''">
+              <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;pointer-events:none" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+              <div style="flex:1;pointer-events:none">
                 <div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div>
                 <div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div>
               </div>
-              ${window._selectedAdminMembers.includes(m.id)?'<span style="font-size:11px;color:#2ecc71;font-weight:700">✓ Added</span>':'<span style="font-size:10px;color:#53617a">Click to add</span>'}
+              ${window._selectedAdminMembers.includes(m.id)?'<span style="font-size:11px;color:#2ecc71;font-weight:700;pointer-events:none">✓ Added</span>':'<span style="font-size:10px;color:#53617a;pointer-events:none">Click to add</span>'}
             </div>`).join('');
+          resultsDiv.onclick = (e) => {
+            const item = e.target.closest('[data-member-id]');
+            if(!item) return;
+            const m = JSON.parse(item.dataset.memberJson);
+            window._addAdminMember(m);
+          };
         }, 350);
       });
       // ✅ FIX: Use persistent click handler instead of { once: true } to keep search working
@@ -2261,10 +2389,17 @@
         const res = await api('GET',`/api/discord/members?q=${encodeURIComponent(q)}`);
         if(!res.ok||!res.data?.length){ rd.innerHTML='<div style="padding:10px;color:#53617a;text-align:center">No members found</div>'; return; }
         rd.innerHTML = res.data.map(m=>`
-          <div onclick="window._selectSrMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
-            <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-            <div><div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div><div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div></div>
+          <div data-member-id="${esc(m.id)}" data-member-json="${esc(JSON.stringify(m))}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);user-select:none" onmouseenter="this.style.background='rgba(47,124,255,.12)'" onmouseleave="this.style.background=''">
+            <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;pointer-events:none" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+            <div style="pointer-events:none"><div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div><div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div></div>
           </div>`).join('');
+        // Use event delegation on the results container
+        rd.onclick = (e) => {
+          const item = e.target.closest('[data-member-id]');
+          if(!item) return;
+          const m = JSON.parse(item.dataset.memberJson);
+          window._selectSrMember(m);
+        };
       }, 400);
     });
     window._selectSrMember = (m) => {
@@ -2378,6 +2513,7 @@
     const roles = (store.adminRoles||[]);
     const role = roles.find(r=>r.id===id);
     if(!role){ toast('Role not found','#ff5a67'); return; }
+    if(!checkProtectedAccess(role, 'edit')) return;
     qs('#modalTitle').textContent = 'Edit Website Role';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="wrEditName" value="${esc(role.name||'')}"></div>
@@ -2411,6 +2547,8 @@
   };
 
   window.deleteWebsiteRole = async (id, name) => {
+    const role = (store.adminRoles||[]).find(r=>r.id===id);
+    if(!checkProtectedAccess(role, 'delet')) return;
     if(!confirm(`Delete website role "${name}"?\nAll members will lose this role.`)) return;
     const r = await api('DELETE','/api/website-roles',{ id });
     if(r.ok){ store.adminRoles=(store.adminRoles||[]).filter(x=>x.id!==id); renderWebsiteRoles(); toast('Role deleted','#ff5a67'); }
@@ -2442,10 +2580,16 @@
         const res = await api('GET',`/api/discord/members?q=${encodeURIComponent(q)}`);
         if(!res.ok||!res.data?.length){ rd2.innerHTML='<div style="padding:10px;color:#53617a;text-align:center">No members found</div>'; return; }
         rd2.innerHTML = res.data.map(m=>`
-          <div onclick="window._selectWrMember(${JSON.stringify(m)})" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06)" onmouseover="this.style.background='rgba(47,124,255,.1)'" onmouseout="this.style.background=''">
-            <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-            <div><div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div><div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div></div>
+          <div data-member-id="${esc(m.id)}" data-member-json="${esc(JSON.stringify(m))}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);user-select:none" onmouseenter="this.style.background='rgba(47,124,255,.12)'" onmouseleave="this.style.background=''">
+            <img src="${esc(m.avatar)}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;pointer-events:none" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+            <div style="pointer-events:none"><div style="font-size:13px;font-weight:600">${esc(m.displayName)}</div><div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div></div>
           </div>`).join('');
+        rd2.onclick = (e) => {
+          const item = e.target.closest('[data-member-id]');
+          if(!item) return;
+          const m = JSON.parse(item.dataset.memberJson);
+          window._selectWrMember(m);
+        };
       }, 400);
     });
     window._selectWrMember = (m) => {
@@ -2471,8 +2615,171 @@
     openModal();
   };
 
+  // ═══════════════════════════ LANGUAGE SYSTEM (i18n) ═══════════════════════════
+  const LANGUAGES = [
+    { code:'en', name:'English', flag:'🇺🇸' },
+    { code:'ar', name:'العربية', flag:'🇸🇦' },
+    { code:'fr', name:'Français', flag:'🇫🇷' },
+    { code:'es', name:'Español', flag:'🇪🇸' },
+    { code:'de', name:'Deutsch', flag:'🇩🇪' },
+    { code:'tr', name:'Türkçe', flag:'🇹🇷' },
+    { code:'ru', name:'Русский', flag:'🇷🇺' },
+    { code:'zh', name:'中文', flag:'🇨🇳' },
+    { code:'ja', name:'日本語', flag:'🇯🇵' },
+    { code:'ko', name:'한국어', flag:'🇰🇷' },
+    { code:'pt', name:'Português', flag:'🇧🇷' },
+    { code:'it', name:'Italiano', flag:'🇮🇹' },
+    { code:'nl', name:'Nederlands', flag:'🇳🇱' },
+    { code:'pl', name:'Polski', flag:'🇵🇱' },
+    { code:'sv', name:'Svenska', flag:'🇸🇪' },
+    { code:'fa', name:'فارسی', flag:'🇮🇷' },
+    { code:'ur', name:'اردو', flag:'🇵🇰' },
+    { code:'hi', name:'हिंदी', flag:'🇮🇳' },
+    { code:'id', name:'Bahasa Indonesia', flag:'🇮🇩' },
+    { code:'ms', name:'Bahasa Melayu', flag:'🇲🇾' },
+  ];
+
+  // Base English strings (keys used throughout the UI)
+  const I18N_BASE = {
+    en: {
+      login_title: 'SHJ LSPD', login_sub: 'Complete Police Management System',
+      login_btn: 'Login with Discord', control_panel: 'Control Panel',
+      logout: 'Logout', dashboard: 'Dashboard', officers: 'Officers',
+      ranks: 'Ranks', points_logs: 'Points Logs', laws: 'Laws & Rules',
+      uniform: 'Uniform Guide', codes: 'Police Codes', wanted: 'Wanted & Impound',
+      cases: 'Cases', reports: 'Reports', discord_users: 'Discord Users',
+      server_roles: 'Server Roles', website_roles: 'Website Roles',
+      system_logs: 'System Logs', settings: 'Settings', admin_roles: 'Admin Roles',
+      add: 'Add', edit: 'Edit', delete: 'Delete', save: 'Save', cancel: 'Cancel',
+      confirm: 'Confirm', search: 'Search', no_data: 'No data found',
+      saved: 'Saved ✓', deleted: 'Deleted', error: 'Error', loading: 'Loading...',
+      protected: 'Protected', total_officers: 'Total Officers', active: 'Active',
+      administration: 'Administration', main: 'Main',
+    },
+    ar: {
+      login_title: 'SHJ LSPD', login_sub: 'نظام إدارة الشرطة الشامل',
+      login_btn: 'تسجيل الدخول عبر Discord', control_panel: 'لوحة التحكم',
+      logout: 'تسجيل الخروج', dashboard: 'الرئيسية', officers: 'الضباط',
+      ranks: 'الرتب', points_logs: 'سجل النقاط', laws: 'القوانين واللوائح',
+      uniform: 'دليل الزي الرسمي', codes: 'رموز الشرطة', wanted: 'المطلوبون والمحجوزات',
+      cases: 'القضايا', reports: 'التقارير', discord_users: 'مستخدمو Discord',
+      server_roles: 'رتب السيرفر', website_roles: 'رتب الموقع',
+      system_logs: 'سجلات النظام', settings: 'الإعدادات', admin_roles: 'صلاحيات الإدارة',
+      add: 'إضافة', edit: 'تعديل', delete: 'حذف', save: 'حفظ', cancel: 'إلغاء',
+      confirm: 'تأكيد', search: 'بحث', no_data: 'لا توجد بيانات',
+      saved: 'تم الحفظ ✓', deleted: 'تم الحذف', error: 'خطأ', loading: 'جار التحميل...',
+      protected: 'محمي', total_officers: 'إجمالي الضباط', active: 'نشط',
+      administration: 'الإدارة', main: 'الرئيسية',
+    },
+    fr: {
+      login_btn: 'Se connecter avec Discord', control_panel: 'Panneau de contrôle',
+      logout: 'Déconnexion', dashboard: 'Tableau de bord', officers: 'Officiers',
+      ranks: 'Grades', cases: 'Affaires', reports: 'Rapports', settings: 'Paramètres',
+      add: 'Ajouter', edit: 'Modifier', delete: 'Supprimer', save: 'Enregistrer', cancel: 'Annuler',
+      loading: 'Chargement...', administration: 'Administration', main: 'Principal',
+    },
+    es: {
+      login_btn: 'Iniciar sesión con Discord', control_panel: 'Panel de control',
+      logout: 'Cerrar sesión', dashboard: 'Panel', officers: 'Oficiales',
+      ranks: 'Rangos', cases: 'Casos', reports: 'Informes', settings: 'Configuración',
+      add: 'Añadir', edit: 'Editar', delete: 'Eliminar', save: 'Guardar', cancel: 'Cancelar',
+      loading: 'Cargando...', administration: 'Administración', main: 'Principal',
+    },
+    de: {
+      login_btn: 'Mit Discord anmelden', control_panel: 'Kontrollpanel',
+      logout: 'Abmelden', dashboard: 'Dashboard', officers: 'Offiziere',
+      settings: 'Einstellungen', add: 'Hinzufügen', edit: 'Bearbeiten',
+      delete: 'Löschen', save: 'Speichern', cancel: 'Abbrechen', loading: 'Laden...',
+      administration: 'Verwaltung', main: 'Haupt',
+    },
+    tr: {
+      login_btn: "Discord ile Giriş Yap", control_panel: 'Kontrol Paneli',
+      logout: 'Çıkış', dashboard: 'Gösterge', officers: 'Memurlar',
+      settings: 'Ayarlar', add: 'Ekle', edit: 'Düzenle',
+      delete: 'Sil', save: 'Kaydet', cancel: 'İptal', loading: 'Yükleniyor...',
+      administration: 'Yönetim', main: 'Ana',
+    },
+  };
+
+  let _currentLang = localStorage.getItem('lspd_lang') || 'en';
+
+  function t(key) {
+    const lang = I18N_BASE[_currentLang] || {};
+    const en   = I18N_BASE.en || {};
+    return lang[key] || en[key] || key;
+  }
+
+  function applyTranslations() {
+    // Update elements with data-i18n attribute
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.dataset.i18n;
+      el.textContent = t(key);
+    });
+    // Update document direction for RTL languages
+    const rtlLangs = ['ar', 'fa', 'ur', 'he'];
+    document.documentElement.dir = rtlLangs.includes(_currentLang) ? 'rtl' : 'ltr';
+    document.documentElement.lang = _currentLang;
+    // Update lang button label
+    const label = document.getElementById('currentLangLabel');
+    if(label){
+      const lang = LANGUAGES.find(l=>l.code===_currentLang);
+      label.textContent = lang ? `${lang.flag} ${lang.name}` : 'English';
+    }
+  }
+
+  function setLanguage(code) {
+    _currentLang = code;
+    localStorage.setItem('lspd_lang', code);
+    applyTranslations();
+    // Close dropdown
+    const dd = document.getElementById('langDropdown');
+    if(dd) dd.classList.remove('open');
+    // Re-render current page if needed for dynamic content
+    const activePage = document.querySelector('.nav button.active')?.dataset?.page;
+    if(activePage && PAGE_RENDERERS[activePage]) PAGE_RENDERERS[activePage]();
+    toast(`Language: ${LANGUAGES.find(l=>l.code===code)?.name || code}`, '#2f7cff');
+  }
+
+  window.toggleLangDropdown = () => {
+    const dd = document.getElementById('langDropdown');
+    if(!dd) return;
+    dd.classList.toggle('open');
+    if(dd.classList.contains('open')) {
+      buildLangList('');
+      const inp = document.getElementById('langSearch');
+      if(inp) { inp.value=''; inp.focus(); }
+    }
+  };
+
+  window.filterLangs = (q) => buildLangList(q);
+
+  function buildLangList(filter) {
+    const list = document.getElementById('langList');
+    if(!list) return;
+    const f = filter.toLowerCase();
+    const filtered = LANGUAGES.filter(l => l.name.toLowerCase().includes(f) || l.code.includes(f));
+    list.innerHTML = filtered.map(l=>`
+      <div class="lang-option ${l.code===_currentLang?'active':''}" onclick="setLanguage('${l.code}')">
+        <span style="font-size:18px">${l.flag}</span>
+        <span>${l.name}</span>
+        ${l.code===_currentLang?'<i class="ti ti-check" style="margin-left:auto;color:#2f7cff"></i>':''}
+      </div>`).join('');
+  }
+
+  // Close lang dropdown on outside click
+  document.addEventListener('click', e => {
+    const btn = document.getElementById('langSelectorBtn');
+    const dd  = document.getElementById('langDropdown');
+    if(btn && dd && !btn.contains(e.target) && !dd.contains(e.target)) {
+      dd.classList.remove('open');
+    }
+  });
+
   // ═══════════════════════════ INITIALIZATION ═══════════════════════════
   async function init(){
+    // Apply saved language immediately
+    applyTranslations();
+
     const loginBtn = qs('#discordLoginBtn');
     if(loginBtn) loginBtn.onclick = loginDiscord;
 
