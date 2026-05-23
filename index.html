@@ -6,6 +6,7 @@
   <title>SHJ LSPD | Complete Police Command System</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Inter',system-ui,sans-serif; background:#070b13; color:#edf3ff; min-height:100vh; }
@@ -167,11 +168,27 @@
     /* Hierarchy badge */
     .hier-badge { display:inline-flex; align-items:center; gap:4px; background:rgba(47,124,255,.12); border:1px solid rgba(47,124,255,.2); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; color:#2f7cff; }
 
-    /* ── Drag & Drop ── */
+    /* ── Drag & Drop (SortableJS) ── */
     .drag-handle { cursor:grab; color:#53617a; padding:0 8px; font-size:18px; user-select:none; transition:.15s; touch-action:none; }
     .drag-handle:hover { color:#8fa0bd; }
     .drag-handle:active { cursor:grabbing; }
-    .dragging { opacity:.4; background:rgba(47,124,255,.06) !important; outline:2px dashed rgba(47,124,255,.4) !important; outline-offset:-2px; border-radius:10px; }
+    /* SortableJS ghost & chosen states */
+    .sortable-ghost { opacity:0 !important; }
+    .sortable-chosen {
+      opacity:.85;
+      background:rgba(47,124,255,.10) !important;
+      box-shadow:0 8px 32px rgba(47,124,255,.25), 0 0 0 2px rgba(47,124,255,.5) !important;
+      transform:scale(1.01) !important;
+      z-index:999;
+      border-radius:10px;
+      transition:box-shadow .15s, transform .15s !important;
+    }
+    .sortable-drag {
+      opacity:1 !important;
+      filter: drop-shadow(0 12px 24px rgba(47,124,255,.35));
+    }
+    /* Keep old class for any stragglers */
+    .dragging { opacity:.4; }
     .drag-over { outline:2px solid #2f7cff !important; outline-offset:-2px; border-radius:10px; }
 
     @media(max-width:800px){
@@ -223,6 +240,56 @@
     #consoleInput:focus { border-bottom-color:#2f7cff !important; outline:none; box-shadow:0 2px 0 #2f7cff; }
     #consoleOutput::-webkit-scrollbar { width:4px; }
     #consoleOutput { scrollbar-width:thin; scrollbar-color:rgba(47,124,255,.3) transparent; }
+
+    /* ── PATCH 10: Tactical Page Header ── */
+    .tactical-page-header {
+      display:flex; align-items:center; gap:18px;
+      padding:20px 28px;
+      background:linear-gradient(135deg, rgba(16,24,39,.95) 0%, rgba(10,15,28,.98) 100%);
+      border:1px solid rgba(47,124,255,.18);
+      border-radius:20px;
+      margin-bottom:24px;
+      position:relative;
+      overflow:hidden;
+    }
+    .tactical-page-header::before {
+      content:'';
+      position:absolute; inset:0;
+      background:linear-gradient(135deg, rgba(47,124,255,.06) 0%, transparent 60%);
+      pointer-events:none;
+    }
+    .tactical-page-header::after {
+      content:'';
+      position:absolute; top:0; left:0; right:0; height:1px;
+      background:linear-gradient(90deg, transparent, rgba(47,124,255,.5), rgba(243,199,90,.3), transparent);
+    }
+    .tactical-header-icon {
+      width:54px; height:54px; flex-shrink:0;
+      background:linear-gradient(135deg, rgba(47,124,255,.18), rgba(114,88,255,.12));
+      border:1px solid rgba(47,124,255,.3);
+      border-radius:16px;
+      display:grid; place-items:center;
+      box-shadow:0 0 20px rgba(47,124,255,.15), inset 0 1px 0 rgba(255,255,255,.08);
+      position:relative; z-index:1;
+    }
+    .tactical-header-icon i { font-size:26px; color:#2f7cff; }
+    .tactical-header-text { flex:1; position:relative; z-index:1; }
+    .tactical-header-text h2 {
+      font-size:22px; font-weight:800; letter-spacing:-.3px;
+      background:linear-gradient(135deg, #edf3ff 30%, #8fa0bd);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .tactical-header-text .subtitle {
+      font-size:12px; color:#53617a; margin-top:4px; font-weight:500; letter-spacing:.5px; text-transform:uppercase;
+    }
+    .tactical-header-actions { display:flex; gap:10px; flex-shrink:0; position:relative; z-index:1; }
+    .tactical-glow-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      background:rgba(243,199,90,.1); border:1px solid rgba(243,199,90,.25);
+      border-radius:30px; padding:5px 14px; font-size:12px; font-weight:700; color:#f3c75a;
+      box-shadow:0 0 12px rgba(243,199,90,.1);
+    }
   </style>
 </head>
 <body>
@@ -602,7 +669,7 @@
   }
 
   // ═══════════════════ GLOBAL CONFIRM COOLDOWN ═══════════════════
-  // Prevents double-submit, spam, accidental duplicate requests
+  // After action fires, silently block re-press for 5s (no countdown text).
   let _confirmCooldown = false;
   let _confirmTimer = null;
 
@@ -612,68 +679,69 @@
     _confirmCooldown = false;
     btn.disabled = false;
     btn.style.opacity = '';
-    btn.style.position = 'relative';
-    // remove old countdown indicator if any
-    const old = btn.querySelector('.confirm-cd');
-    if (old) old.remove();
+    btn.style.pointerEvents = '';
   }
 
   function lockConfirmBtn(seconds = 5) {
     const btn = qs('#modalConfirmBtn');
-    if (!btn) return;
-    if (_confirmCooldown) return;
+    if (!btn || _confirmCooldown) return;
     _confirmCooldown = true;
-    const origOnclick = btn.onclick;
-    const origText = btn.innerHTML;
-    let remaining = seconds;
-
-    const cd = document.createElement('span');
-    cd.className = 'confirm-cd';
-    cd.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:inherit;border-radius:inherit;font-size:inherit;font-weight:700;gap:6px';
-    cd.innerHTML = `<span class="spinner"></span> ${remaining}s`;
-    btn.style.position = 'relative';
     btn.disabled = true;
-    btn.style.opacity = '0.6';
-    btn.appendChild(cd);
-
-    _confirmTimer = setInterval(() => {
-      remaining--;
-      if (remaining <= 0) {
-        clearInterval(_confirmTimer);
-        _confirmCooldown = false;
-        btn.disabled = false;
-        btn.style.opacity = '';
-        cd.remove();
-      } else {
-        cd.innerHTML = `<span class="spinner"></span> ${remaining}s`;
-      }
-    }, 1000);
+    btn.style.opacity = '0.55';
+    btn.style.pointerEvents = 'none';
+    clearTimeout(_confirmTimer);
+    _confirmTimer = setTimeout(() => {
+      _confirmCooldown = false;
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+    }, seconds * 1000);
   }
 
-  // Patch confirm button — wrap onclick to add cooldown
+  // Patch confirm button — fire action first, then lock
   function patchConfirmWithCooldown() {
     const btn = qs('#modalConfirmBtn');
     if (!btn || btn._cdPatched) return;
     btn._cdPatched = true;
-    const origOnclick = btn.onclick;
     btn.addEventListener('click', function(e) {
       if (_confirmCooldown) { e.stopImmediatePropagation(); return; }
-      lockConfirmBtn(5);
+      setTimeout(() => lockConfirmBtn(5), 0);
     }, true);
   }
 
   function openModal(){
+    // ✅ FIX 7: Reset confirm button to clean state before opening
+    const btn = qs('#modalConfirmBtn');
+    if (btn) {
+      btn.className = 'btn btn-primary';
+      btn.textContent = 'Confirm';
+      btn.onclick = null;
+      btn._cdPatched = false;
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+      btn.style.display = '';
+    }
+    const cancelBtn = qs('#modalCancelBtn');
+    if (cancelBtn) cancelBtn.textContent = 'Cancel';
     qs('#globalModal').classList.add('open');
     armConfirmBtn();
-    // patch after a tick so the caller can set onclick first
     setTimeout(patchConfirmWithCooldown, 0);
   }
   window.closeModal = () => {
     qs('#globalModal').classList.remove('open');
-    clearInterval(_confirmTimer);
+    clearTimeout(_confirmTimer);
     _confirmCooldown = false;
     const btn = qs('#modalConfirmBtn');
-    if (btn) { btn.disabled = false; btn.style.opacity = ''; const cd = btn.querySelector('.confirm-cd'); if(cd) cd.remove(); btn._cdPatched = false; }
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+      btn._cdPatched = false;
+      // ✅ FIX 7: Always reset class + label on close so next modal starts clean
+      btn.className = 'btn btn-primary';
+      btn.textContent = 'Confirm';
+    }
+    const cancelBtn = qs('#modalCancelBtn');
+    if (cancelBtn) cancelBtn.textContent = 'Cancel';
   };
 
   // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
@@ -767,14 +835,21 @@
       </td>`).join('');
     qs('#officers').innerHTML = `
       <div class="page-bg-logo">
-      <div class="card">
-        <div class="card-header">
-          <h3><i class="ti ti-users"></i> Officers Management</h3>
-          ${isAdmin ? '<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> Add Officer</button>' : ''}
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-users"></i></div>
+        <div class="tactical-header-text">
+          <h2>${t('officers')||'Officers'} Management</h2>
+          <div class="subtitle">Personnel command registry</div>
         </div>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-shield" style="font-size:13px"></i> ${officers.length} ${t('officers')||'Officers'}</span>
+          ${isAdmin ? `<button class="btn btn-primary" onclick="openOfficerModal()"><i class="ti ti-plus"></i> ${t('add_officer')||'Add Officer'}</button>` : ''}
+        </div>
+      </div>
+      <div class="card">
         <div class="card-body">
-          <table><thead><tr><th></th><th>Name</th><th>Badge</th><th>Rank</th><th>Dept</th><th>Points</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="officersTbody">${rows || '<tr><td colspan="8" style="color:#8fa0bd;text-align:center">No officers found</td>'}</tbody>
+          <table><thead><tr><th></th><th>${t('name')||'Name'}</th><th>${t('badge')||'Badge'}</th><th>${t('rank')||'Rank'}</th><th>${t('dept')||'Dept'}</th><th>${t('points')||'Points'}</th><th>${t('status')||'Status'}</th><th>${t('actions')||'Actions'}</th></tr></thead>
+          <tbody id="officersTbody">${rows || `<tr><td colspan="8" style="color:#8fa0bd;text-align:center">${t('no_officers')||'No officers found'}</td>`}</tbody>
         </table>
         </div>
       </div></div>`;
@@ -857,165 +932,72 @@
         </td>
       </tr>`).join('');
     qs('#ranks').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3><i class="ti ti-stairs-up"></i> Ranks System</h3>
-          ${isAdmin?'<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> Add Rank</button>':''}
+      <div class="page-bg-logo">
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-stairs-up"></i></div>
+        <div class="tactical-header-text">
+          <h2>${t('ranks')||'Ranks'} System</h2>
+          <div class="subtitle">Hierarchy & promotion structure</div>
         </div>
-        <div class="card-body"><table><thead><tr><th style="width:36px"></th><th>Rank Name</th><th>Required Points</th><th>Actions</th></tr></thead>
-        <tbody id="ranksTbody">${rows || '<tr><td colspan="4" style="color:#8fa0bd;text-align:center">No ranks found</td>'}</tbody></table></div></div>`;
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-list" style="font-size:13px"></i> ${ranks.length} Ranks</span>
+          ${isAdmin?`<button class="btn btn-primary" onclick="openRankModal()"><i class="ti ti-plus"></i> ${t('add_rank')||'Add Rank'}</button>`:''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <table><thead><tr><th style="width:36px"></th><th>${t('rank')||'Rank Name'}</th><th>Required Points</th><th>${t('actions')||'Actions'}</th></tr></thead>
+          <tbody id="ranksTbody">${rows || `<tr><td colspan="4" style="color:#8fa0bd;text-align:center">${t('no_ranks')||'No ranks found'}</td>`}</tbody></table>
+        </div>
+      </div>
+      </div>`;
     initDnD('ranksTbody', 'ranks', renderRanks);
   }
 
-  // ═══════════════════════ UNIFIED REORDER SYSTEM ═══════════════════════
-  // Works for both <table tbody> and <div> containers.
-  // Usage: initDnD(containerId, collectionName, rerenderFn)
-  //        initDnDDiv(containerId, collectionName, rerenderFn)  ← same engine now
+  // ═══════════════════════ UNIFIED REORDER SYSTEM (SortableJS) ═══════════════════════
+  // Proper drag-and-drop using SortableJS — supports mouse + touch, smooth animation,
+  // collision detection, ghost element, lift effect, auto-save.
 
   function initDnD(containerId, collection, onReorder) {
     const tbody = document.getElementById(containerId);
-    if (!tbody) return;
-    let dragSrc = null;
+    if (!tbody || !window.Sortable) return;
+    // Destroy old instance if re-initializing
+    if (tbody._sortable) { tbody._sortable.destroy(); }
 
-    const getRows = () => [...tbody.querySelectorAll('[data-id]')];
-
-    getRows().forEach(row => {
-      const handle = row.querySelector('.drag-handle');
-      if (handle) {
-        handle.addEventListener('mousedown', () => { row.setAttribute('draggable', 'true'); });
-        handle.addEventListener('mouseleave', () => { if (!dragSrc) row.setAttribute('draggable', 'false'); });
-      } else {
-        row.setAttribute('draggable', 'true');
-      }
-
-      row.addEventListener('dragstart', e => {
-        dragSrc = row;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', row.dataset.id);
-        requestAnimationFrame(() => row.classList.add('dragging'));
-      });
-
-      row.addEventListener('dragend', () => {
-        row.classList.remove('dragging');
-        row.setAttribute('draggable', 'false');
-        tbody.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
-        dragSrc = null;
-      });
-
-      row.addEventListener('dragover', e => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        if (dragSrc && row !== dragSrc) {
-          tbody.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
-          row.classList.add('drag-over');
-        }
-      });
-
-      row.addEventListener('dragleave', e => {
-        if (!row.contains(e.relatedTarget)) row.classList.remove('drag-over');
-      });
-
-      row.addEventListener('drop', async e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!dragSrc || dragSrc === row) { row.classList.remove('drag-over'); return; }
-
-        row.classList.remove('drag-over');
-        dragSrc.classList.remove('dragging');
-
-        const rect = row.getBoundingClientRect();
-        const before = e.clientY < rect.top + rect.height / 2;
-        if (before) tbody.insertBefore(dragSrc, row);
-        else {
-          const next = row.nextElementSibling;
-          if (next) tbody.insertBefore(dragSrc, next);
-          else tbody.appendChild(dragSrc);
-        }
-
-        const newOrder = getRows().map(r => Number(r.dataset.id));
+    tbody._sortable = Sortable.create(tbody, {
+      animation: 150,
+      easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+      handle: '.drag-handle',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      forceFallback: false,
+      scrollSensitivity: 80,
+      scrollSpeed: 12,
+      onStart(evt) {
+        // Lift effect — already handled by chosenClass CSS
+      },
+      onEnd(evt) {
+        // noop — handled by onUpdate
+      },
+      async onUpdate(evt) {
+        const rows = [...tbody.querySelectorAll('[data-id]')];
+        const newOrder = rows.map(r => Number(r.dataset.id));
         const res = await api('POST', '/api/reorder', { collection, order: newOrder });
         if (res.ok) {
           if (store[collection]) store[collection] = res.data;
           toast('Order saved ✓', '#2ecc71');
         } else {
-          toast('Reorder failed', '#ff5a67');
+          toast('Reorder failed — reverting', '#ff5a67');
           if (onReorder) onReorder();
         }
-        dragSrc = null;
-      });
+      },
     });
-
-    tbody.addEventListener('dragover', e => e.preventDefault());
   }
 
-  // ── Div-based DnD (for laws etc.) — uses same engine ──
+  // Div-based DnD — same engine (for laws, uniforms, codes list containers)
   function initDnDDiv(containerId, collection, onReorder) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    let dragged = null;
-
-    container.querySelectorAll('[data-id]').forEach(el => {
-      el.setAttribute('draggable', 'true');
-
-      el.addEventListener('dragstart', e => {
-        dragged = el;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', el.dataset.id);
-        setTimeout(() => el.classList.add('dragging'), 0);
-      });
-
-      el.addEventListener('dragend', () => {
-        if(dragged) dragged.classList.remove('dragging');
-        container.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
-        dragged = null;
-      });
-
-      el.addEventListener('dragover', e => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        if (dragged && el !== dragged) {
-          container.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
-          el.classList.add('drag-over');
-        }
-      });
-
-      el.addEventListener('dragleave', e => {
-        if(!el.contains(e.relatedTarget)) el.classList.remove('drag-over');
-      });
-
-      el.addEventListener('drop', async e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!dragged || dragged === el) return;
-        el.classList.remove('drag-over');
-        dragged.classList.remove('dragging');
-
-        const rect = el.getBoundingClientRect();
-        const insertBefore = e.clientY < rect.top + rect.height / 2;
-        if (insertBefore) {
-          container.insertBefore(dragged, el);
-        } else {
-          const next = el.nextElementSibling;
-          // skip dividers
-          const afterDivider = next?.classList?.contains('divider') ? next.nextElementSibling : next;
-          if(afterDivider) container.insertBefore(dragged, afterDivider);
-          else container.appendChild(dragged);
-        }
-
-        const items = [...container.querySelectorAll('[data-id]')];
-        const newOrder = items.map(i => Number(i.dataset.id));
-        const res = await api('POST', '/api/reorder', { collection, order: newOrder });
-        if (res.ok) {
-          if (store[collection]) store[collection] = res.data;
-          toast('Order saved ✓', '#2ecc71');
-        } else {
-          toast('Reorder failed', '#ff5a67');
-          if (onReorder) onReorder();
-        }
-        dragged = null;
-      });
-    });
-
-    container.addEventListener('dragover', e => e.preventDefault());
+    initDnD(containerId, collection, onReorder);
   }
 
   window.moveRank = async (id, dir) => {
@@ -1173,30 +1155,29 @@
           .pts-td:last-child  { padding-right:12px; }
         }
       </style>
-      <div class="card">
-        <div class="card-header" style="padding:20px 24px;gap:16px">
-          <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:42px;height:42px;background:rgba(47,124,255,.12);border:1px solid rgba(47,124,255,.22);border-radius:13px;display:grid;place-items:center;flex-shrink:0">
-              <i class="ti ti-chart-bar" style="font-size:21px;color:#2f7cff"></i>
-            </div>
-            <div>
-              <h3 style="font-size:17px;font-weight:700;line-height:1.2">Points Management</h3>
-              <div style="font-size:12px;color:#53617a;margin-top:3px">${log.length} record${log.length!==1?'s':''} total</div>
-            </div>
-          </div>
+      <div class="tactical-page-header">
+        <div class="tactical-header-icon"><i class="ti ti-chart-bar"></i></div>
+        <div class="tactical-header-text">
+          <h2>Points Management</h2>
+          <div class="subtitle">Officer performance tracking system</div>
+        </div>
+        <div class="tactical-header-actions">
+          <span class="tactical-glow-badge"><i class="ti ti-database" style="font-size:13px"></i> ${log.length} Record${log.length!==1?'s':''}</span>
           ${isAdmin?`<button class="btn btn-primary" onclick="openPointsModal()" style="gap:8px;white-space:nowrap"><i class="ti ti-adjustments"></i> Adjust Points</button>`:''}
         </div>
+      </div>
+      <div class="card">
         <div class="card-body" style="padding:8px 16px 20px">
           <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
             <table class="pts-table">
               <thead>
                 <tr>
-                  <th style="text-align:left;padding-left:18px">Officer</th>
-                  <th style="text-align:center">Change</th>
+                  <th style="text-align:left;padding-left:18px">${t('name')||'Officer'}</th>
+                  <th style="text-align:center">${t('points')||'Change'}</th>
                   <th style="text-align:left" class="pts-hide">Reason</th>
-                  <th style="text-align:left" class="pts-hide">By</th>
-                  <th style="text-align:left">Date</th>
-                  <th style="text-align:center">Actions</th>
+                  <th style="text-align:left" class="pts-hide">${t('by')||'By'}</th>
+                  <th style="text-align:left">${t('date')||'Date'}</th>
+                  <th style="text-align:center">${t('actions')||'Actions'}</th>
                 </tr>
               </thead>
               <tbody id="pointsLogTbody">
@@ -1549,16 +1530,14 @@
   window.deleteWanted = async id => {
     const w = (store.wanted||[]).find(x=>x.id===id);
     if(!w) return;
-    qs('#modalTitle').textContent = '⚠️ Remove Wanted';
-    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Remove <b>${esc(w.name)}</b> from wanted list?</p></div>`;
-    qs('#modalConfirmBtn').className = 'btn btn-success';
-    qs('#modalConfirmBtn').textContent = 'Remove';
+    qs('#modalTitle').textContent = '⚠️ Delete Wanted';
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:40px;margin-bottom:12px">🗑️</div><p>Delete <b>${esc(w.name)}</b> from wanted list?</p><p style="color:#ff5a67;font-size:13px">Cannot be undone.</p></div>`;
+    qs('#modalConfirmBtn').className = 'btn btn-danger';
+    qs('#modalConfirmBtn').textContent = 'Delete';
     qs('#modalConfirmBtn').onclick = async () => {
       const r = await api('DELETE','/api/wanted',{ id });
-      if(r.ok){ store.wanted=(store.wanted||[]).filter(x=>x.id!==id); renderWanted(); closeModal(); toast('Removed from wanted list','#2ecc71'); }
+      if(r.ok){ store.wanted=(store.wanted||[]).filter(x=>x.id!==id); renderWanted(); closeModal(); toast('Deleted from wanted list','#ff5a67'); }
       else toast('Error: '+(r.reason||'failed'),'#ff5a67');
-      qs('#modalConfirmBtn').className = 'btn btn-primary';
-      qs('#modalConfirmBtn').textContent = 'Confirm';
     };
     openModal();
   };
@@ -3180,11 +3159,20 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-shrink:0">
-            ${!r.protected?`
+            ${isOwner ? `
+              <button class="btn btn-sm" title="${r.protected?'Remove Shield (Ownership)':'Add Shield (Ownership)'}"
+                style="background:${r.protected?'rgba(243,199,90,.18)':'rgba(255,255,255,.05)'};color:${r.protected?'#f3c75a':'#53617a'};border:1px solid ${r.protected?'rgba(243,199,90,.35)':'rgba(255,255,255,.1)'}"
+                onclick="toggleWebsiteRoleShield(${r.id},'${esc(r.name)}',${!!r.protected})">
+                <i class="ti ${r.protected?'ti-shield-check':'ti-shield-off'}"></i>
+              </button>
               <button class="btn btn-sm btn-warning" onclick="editWebsiteRole(${r.id})" title="Edit"><i class="ti ti-edit"></i></button>
               <button class="btn btn-sm btn-success" onclick="assignWebsiteRole(${r.id},'${esc(r.name)}')" title="Assign Member"><i class="ti ti-user-plus"></i></button>
               <button class="btn btn-sm btn-danger" onclick="deleteWebsiteRole(${r.id},'${esc(r.name)}')" title="Delete"><i class="ti ti-trash"></i></button>
-            `:'<span style="color:#53617a;font-size:12px">Protected</span>'}
+            ` : !r.protected ? `
+              <button class="btn btn-sm btn-warning" onclick="editWebsiteRole(${r.id})" title="Edit"><i class="ti ti-edit"></i></button>
+              <button class="btn btn-sm btn-success" onclick="assignWebsiteRole(${r.id},'${esc(r.name)}')" title="Assign Member"><i class="ti ti-user-plus"></i></button>
+              <button class="btn btn-sm btn-danger" onclick="deleteWebsiteRole(${r.id},'${esc(r.name)}')" title="Delete"><i class="ti ti-trash"></i></button>
+            ` : '<span class="role-protected-lock"><i class="ti ti-lock" style="font-size:12px"></i> Protected</span>'}
           </div>
         </div>
       </div>`).join('');
@@ -3202,6 +3190,32 @@
       </div>
       </div>`;
   }
+
+  // ✅ PATCH 6: Shield Toggle — Ownership only
+  window.toggleWebsiteRoleShield = async (id, name, isCurrentlyProtected) => {
+    if (!isOwner) { toast('🔒 Only Ownership can toggle shields', '#f3c75a'); return; }
+    const action = isCurrentlyProtected ? 'Remove' : 'Add';
+    const icon = isCurrentlyProtected ? '🔓' : '🛡️';
+    qs('#modalTitle').textContent = `${icon} ${action} Shield: ${name}`;
+    qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0">
+      <div style="font-size:48px;margin-bottom:16px">${icon}</div>
+      <p style="font-size:15px;font-weight:700;margin-bottom:8px">${action} shield for <b>${esc(name)}</b>?</p>
+      <p style="color:#8fa0bd;font-size:13px">${isCurrentlyProtected
+        ? 'This will allow regular admins to edit or delete this role.'
+        : 'This will protect the role — only Ownership can edit or delete it.'}</p>
+    </div>`;
+    qs('#modalConfirmBtn').className = isCurrentlyProtected ? 'btn btn-warning' : 'btn btn-success';
+    qs('#modalConfirmBtn').textContent = `${action} Shield`;
+    qs('#modalConfirmBtn').onclick = async () => {
+      const r = await api('PUT', '/api/website-roles/shield', { id, protected: !isCurrentlyProtected });
+      if (r.ok) {
+        closeModal();
+        toast(`${icon} Shield ${isCurrentlyProtected ? 'removed' : 'activated'} ✓`, isCurrentlyProtected ? '#f3c75a' : '#2ecc71');
+        renderWebsiteRoles();
+      } else toast('Error: ' + (r.reason || 'failed'), '#ff5a67');
+    };
+    openModal();
+  };
 
   window.createWebsiteRole = () => {
     qs('#modalTitle').textContent = 'Create Website Role';
@@ -3387,6 +3401,11 @@
     { cmd: 'logs recent', desc: 'Show recent system logs', icon: 'ti-history', color: '#e67e22' },
     { cmd: 'wanted list', desc: 'Show wanted persons', icon: 'ti-alert-triangle', color: '#e74c3c' },
     { cmd: 'users list', desc: 'List Discord users', icon: 'ti-brand-discord', color: '#7289da' },
+    { cmd: 'ping', desc: 'Ping the API server', icon: 'ti-radar', color: '#2ecc71' },
+    { cmd: 'db stats', desc: 'Show database statistics', icon: 'ti-database', color: '#e67e22' },
+    { cmd: 'session info', desc: 'Show current session info', icon: 'ti-id', color: '#3498db' },
+    { cmd: 'impound list', desc: 'Show impounded vehicles', icon: 'ti-car', color: '#e67e22' },
+    { cmd: 'points stats', desc: 'Show points summary', icon: 'ti-chart-bar', color: '#9b59b6' },
   ];
 
   let _consoleHistory = [];
@@ -3564,6 +3583,69 @@
       const u = store.users || [];
       const rows = u.map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#7289da;min-width:180px;display:inline-block">${esc(x.username)}</span><span style="color:${x.isOwner?'#f3c75a':x.isAdmin?'#e67e22':'#8fa0bd'}">${x.isOwner?'Owner':x.isAdmin?'Admin':'Officer'}</span></div>`).join('');
       consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(114,137,218,.06);border-radius:8px">${rows||'No users'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'ping'){
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;color:#f3c75a">${ts}⟳ Pinging API...</div>`);
+      const t0 = Date.now();
+      try {
+        const r = await api('GET', '/api/me');
+        const ms = Date.now() - t0;
+        consoleAppend(`<div style="font-family:monospace;font-size:12px;color:#2ecc71">${ts}🏓 Pong! API responded in <b style="color:#edf3ff">${ms}ms</b> — Status: ${r.ok ? '✅ Online' : '⚠️ Degraded'}</div>`);
+      } catch(e) { consoleAppend(`<div style="font-family:monospace;font-size:12px;color:#ff5a67">${ts}❌ Ping failed: ${esc(e.message)}</div>`); }
+      return;
+    }
+
+    if(trimmed === 'db stats'){
+      const stats = {
+        officers: (store.officers||[]).length,
+        ranks: (store.ranks||[]).length,
+        cases: (store.cases||[]).length,
+        reports: (store.reports||[]).length,
+        wanted: (store.wanted||[]).length,
+        impound: (store.impound||[]).length,
+        laws: (store.laws||[]).length,
+        codes: (store.codes||[]).length,
+        uniforms: (store.uniforms||[]).length,
+        pointsLog: (store.pointsLog||[]).length,
+        users: (store.users||[]).length,
+        activity: (store.activity||[]).length,
+      };
+      const rows = Object.entries(stats).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:2px 0;color:#8fa0bd"><span>${esc(k)}</span><span style="color:#edf3ff;font-weight:700">${v}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid rgba(255,255,255,.07)">${rows}</div>`);
+      return;
+    }
+
+    if(trimmed === 'session info'){
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(47,124,255,.06);border-radius:8px">
+        <div style="color:#8fa0bd">User: <span style="color:#edf3ff">${esc(currentUser?.username||'—')}</span></div>
+        <div style="color:#8fa0bd">ID: <span style="color:#edf3ff;font-family:monospace">${esc(currentUser?.id||'—')}</span></div>
+        <div style="color:#8fa0bd">Role: <span style="color:${isOwner?'#f3c75a':isAdmin?'#e67e22':'#8fa0bd'}">${isOwner?'👑 Owner':isAdmin?'⚡ Admin':'👮 Officer'}</span></div>
+        <div style="color:#8fa0bd">Token: <span style="color:#53617a">${accessToken?'[present, ' + accessToken.length + ' chars]':'[none]'}</span></div>
+        <div style="color:#8fa0bd">Language: <span style="color:#edf3ff">${esc(_currentLang||'en')}</span></div>
+      </div>`);
+      return;
+    }
+
+    if(trimmed === 'impound list'){
+      const i = store.impound || [];
+      const rows = i.map(x=>`<div style="padding:2px 0;color:#8fa0bd"><span style="color:#e67e22;min-width:100px;display:inline-block">${esc(x.plate)}</span><span style="color:#edf3ff;min-width:120px;display:inline-block">${esc(x.model||'—')}</span><span>$${x.fee||0}</span></div>`).join('');
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(230,126,34,.06);border-radius:8px">${rows||'No impounded vehicles'}</div>`);
+      return;
+    }
+
+    if(trimmed === 'points stats'){
+      const log = store.pointsLog || [];
+      const total = log.reduce((s,e)=>s+(Number(e.change)||0),0);
+      const pos = log.filter(e=>Number(e.change)>0).length;
+      const neg = log.filter(e=>Number(e.change)<0).length;
+      consoleAppend(`<div style="font-family:monospace;font-size:12px;margin-top:6px;padding:10px;background:rgba(155,89,182,.06);border-radius:8px">
+        <div style="color:#8fa0bd">Total Records: <span style="color:#edf3ff">${log.length}</span></div>
+        <div style="color:#8fa0bd">Positive Adjustments: <span style="color:#2ecc71">${pos}</span></div>
+        <div style="color:#8fa0bd">Negative Adjustments: <span style="color:#ff5a67">${neg}</span></div>
+        <div style="color:#8fa0bd">Net Points: <span style="color:${total>=0?'#2ecc71':'#ff5a67'}">${total>=0?'+':''}${total}</span></div>
+      </div>`);
       return;
     }
 
@@ -4456,6 +4538,14 @@
       if(icon) logoutBtn.appendChild(icon);
       logoutBtn.appendChild(document.createTextNode(' ' + t('logout')));
     }
+    // ✅ PATCH 2: Update topbar "Control Panel" text
+    const topbarTitle = document.querySelector('.top-bar > div > b');
+    if(topbarTitle) topbarTitle.textContent = t('control_panel') || 'Control Panel';
+    // Update modal Cancel button if open
+    const cancelBtn = document.getElementById('modalCancelBtn');
+    if(cancelBtn && cancelBtn.textContent === 'Cancel') cancelBtn.textContent = t('cancel') || 'Cancel';
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    if(confirmBtn && confirmBtn.textContent === 'Confirm') confirmBtn.textContent = t('confirm') || 'Confirm';
   }
 
   function setLanguage(code) {
