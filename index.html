@@ -182,6 +182,13 @@
       .stats-grid { grid-template-columns:1fr 1fr; }
       .content { padding:20px; }
     }
+
+    /* ── Custom Scrollbar ── */
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:rgba(7,11,19,.5); border-radius:99px; }
+    ::-webkit-scrollbar-thumb { background:rgba(47,124,255,.35); border-radius:99px; }
+    ::-webkit-scrollbar-thumb:hover { background:rgba(47,124,255,.6); }
+    * { scrollbar-width:thin; scrollbar-color:rgba(47,124,255,.35) rgba(7,11,19,.5); }
   </style>
 </head>
 <body>
@@ -342,14 +349,15 @@
     const tbody = document.getElementById(tableBodyId);
     if (!tbody) return;
     let dragged = null;
-    let dragY = 0;
 
+    // ✅ FIX 5: Set draggable on rows with data-id attribute
     tbody.querySelectorAll('tr[data-id]').forEach(row => {
       row.setAttribute('draggable', 'true');
+      // Prevent text selection during drag
+      row.style.userSelect = 'none';
 
       row.addEventListener('dragstart', e => {
         dragged = row;
-        dragY = e.clientY;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', row.dataset.id);
         setTimeout(() => row.classList.add('dragging'), 0);
@@ -366,13 +374,7 @@
         e.dataTransfer.dropEffect = 'move';
         if (!dragged || row === dragged) return;
         tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
-        const rect = row.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        if (e.clientY < midY) {
-          row.classList.add('drag-over');
-        } else {
-          row.classList.add('drag-over');
-        }
+        row.classList.add('drag-over');
       });
 
       row.addEventListener('dragleave', e => {
@@ -663,14 +665,12 @@
     qsa('.page').forEach(p=>p.classList.toggle('active', p.id===pageId));
     qs('#sidebar')?.classList.remove('open');
     if(PAGE_RENDERERS[pageId]) PAGE_RENDERERS[pageId]();
-    // Apply bg logo effect to all main content pages after render
-    const BG_LOGO_PAGES = ['dashboard','officers','ranks','points','laws','uniform','codes','wanted','cases','reports','discordUsers','serverRoles','websiteRoles','logs','settings','adminRoles'];
-    if(BG_LOGO_PAGES.includes(pageId)){
-      const el = qs(`#${pageId}`);
-      if(el && !el.querySelector('.page-bg-logo')){
-        const inner = el.innerHTML;
-        el.innerHTML = `<div class="page-bg-logo">${inner}</div>`;
-      }
+    // Apply bg logo effect to ALL main content pages after render
+    // ✅ FIX 10: Military background applied globally to every page
+    const el = qs(`#${pageId}`);
+    if(el && !el.querySelector('.page-bg-logo')){
+      const inner = el.innerHTML;
+      if(inner.trim()) el.innerHTML = `<div class="page-bg-logo">${inner}</div>`;
     }
   }
 
@@ -2276,12 +2276,12 @@
     const rows = roles.map(r => {
       const color = hexColor(r.color);
       const permsNum = BigInt(r.permissions||'0');
-      const isAdmin = (permsNum & 8n) > 0n;
+      const isAdminPerm = (permsNum & 8n) > 0n;
       const canBan  = (permsNum & 4n) > 0n;
       const canKick = (permsNum & 2n) > 0n;
       const canManageRoles = (permsNum & 268435456n) > 0n;
       const permsTags = [
-        isAdmin && '<span class="badge badge-danger" style="font-size:10px">ADMIN</span>',
+        isAdminPerm && '<span class="badge badge-danger" style="font-size:10px">ADMIN</span>',
         canBan  && '<span class="badge badge-warning" style="font-size:10px">BAN</span>',
         canKick && '<span class="badge badge-info" style="font-size:10px">KICK</span>',
         canManageRoles && '<span class="badge" style="background:rgba(155,89,182,.15);color:#9b59b6;font-size:10px">MANAGE ROLES</span>',
@@ -2294,7 +2294,11 @@
             ${r.managed?'<span class="badge badge-info" style="font-size:10px">managed</span>':''}
           </div>
         </td>
-        <td style="color:#8fa0bd;font-size:12px">${r.memberCount}</td>
+        <td>
+          <button class="btn btn-sm" style="background:rgba(47,124,255,.1);color:#2f7cff;font-size:11px;padding:4px 8px" onclick="viewRoleMembers('${esc(r.id)}','${esc(r.name)}')">
+            <i class="ti ti-users"></i> ${r.memberCount}
+          </button>
+        </td>
         <td><div style="display:flex;gap:4px;flex-wrap:wrap">${permsTags||'<span style="color:#53617a;font-size:12px">none</span>'}</div></td>
         <td style="color:#8fa0bd;font-size:12px">${r.position}</td>
         <td>
@@ -2323,6 +2327,44 @@
       </div>
       </div>`;
   }
+
+  // ✅ FIX 4: View real members of a role with avatar/username/nickname
+  window.viewRoleMembers = async (roleId, roleName) => {
+    qs('#modalTitle').textContent = `Members: ${roleName}`;
+    qs('#modalBody').innerHTML = '<div style="text-align:center;padding:20px"><span class="spinner"></span> Loading...</div>';
+    qs('#modalConfirmBtn').style.display = 'none';
+    qs('#modalCancelBtn').textContent = 'Close';
+    openModal();
+    const res = await api('GET', `/api/server-roles/members?roleId=${encodeURIComponent(roleId)}`);
+    if(!res.ok){
+      qs('#modalBody').innerHTML = `<p style="color:#ff5a67;text-align:center">Failed to load: ${esc(res.reason||'error')}</p>`;
+    } else {
+      const members = res.data || [];
+      qs('#modalBody').innerHTML = members.length === 0
+        ? '<p style="color:#8fa0bd;text-align:center">No members with this role</p>'
+        : `<div style="display:grid;gap:8px">
+            ${members.map(m=>`
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px">
+                <img src="${esc(m.avatar)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                <div style="flex:1">
+                  <div style="font-weight:600">${esc(m.nickname||m.username)}</div>
+                  <div style="font-size:11px;color:#53617a">@${esc(m.username)} · ${esc(m.id)}</div>
+                </div>
+                ${(isOwner||isFullAccess)?`<button class="btn btn-sm btn-danger" title="Remove role" onclick="removeRoleMember('${esc(roleId)}','${esc(m.id)}','${esc(m.nickname||m.username)}')"><i class="ti ti-user-minus"></i></button>`:''}
+              </div>`).join('')}
+          </div>
+          <div style="color:#8fa0bd;font-size:12px;text-align:center;margin-top:12px">${members.length} member${members.length!==1?'s':''}</div>`;
+    }
+    qs('#modalConfirmBtn').style.display = '';
+    qs('#modalCancelBtn').textContent = 'Cancel';
+  };
+
+  window.removeRoleMember = async (roleId, userId, displayName) => {
+    if(!confirm(`Remove "${displayName}" from this role?`)) return;
+    const r = await api('DELETE', '/api/server-roles/member', { roleId, userId });
+    if(r.ok){ toast('Member removed ✓', '#2ecc71'); closeModal(); renderServerRoles(); }
+    else toast('Error: '+(r.reason||r.details||'failed'),'#ff5a67');
+  };
 
   window.createServerRole = () => {
     qs('#modalTitle').textContent = 'Create Server Role';
@@ -2482,17 +2524,23 @@
   window.createWebsiteRole = () => {
     qs('#modalTitle').textContent = 'Create Website Role';
     qs('#modalBody').innerHTML = `
-      <div class="form-group"><label>Role Name</label><input id="wrName" placeholder="Role name"></div>
+      <div class="form-group"><label>Role Name</label><input id="wrName" placeholder="e.g. Supervisor"></div>
       <div class="form-group"><label>Hierarchy Level</label><input id="wrHier" type="number" value="10" min="1" max="999"></div>
       <div class="form-group"><label>Permissions</label>
-        <div style="display:grid;gap:10px;margin-top:8px">
+        <div style="display:grid;gap:12px;margin-top:8px">
           ${PERM_GROUPS.map(g=>`
-            <div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px">
-              <b style="font-size:12px;color:${g.color}">${g.label}</b>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
-                ${g.perms.map(p=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.03)">
-                  <input type="checkbox" value="${p}" class="wr-perm" style="width:auto;padding:0;margin:0"> ${p.replace(/_/g,' ')}
-                </label>`).join('')}
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <i class="ti ${g.icon}" style="color:${g.color};font-size:16px"></i>
+                <b style="font-size:13px;color:${g.color}">${g.label}</b>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                ${g.perms.map(p=>`
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.03);transition:.15s" onmouseover="this.style.background='rgba(255,255,255,.07)'" onmouseout="this.style.background='rgba(255,255,255,.03)'">
+                    <input type="checkbox" value="${p}" class="wr-perm" style="width:auto;padding:0;margin:0">
+                    <span style="flex:1">${p.replace(/_/g,' ')}</span>
+                    <span style="width:8px;height:8px;border-radius:50%;background:${PERM_COLOR[p]||'#8fa0bd'};flex-shrink:0"></span>
+                  </label>`).join('')}
               </div>
             </div>`).join('')}
         </div>
@@ -2510,23 +2558,30 @@
   };
 
   window.editWebsiteRole = (id) => {
+    // ✅ FIX 7: Match id by string comparison too
     const roles = (store.adminRoles||[]);
-    const role = roles.find(r=>r.id===id);
-    if(!role){ toast('Role not found','#ff5a67'); return; }
+    const role = roles.find(r => r.id === id || String(r.id) === String(id));
+    if(!role){ toast('Role not found — try refreshing','#ff5a67'); return; }
     if(!checkProtectedAccess(role, 'edit')) return;
     qs('#modalTitle').textContent = 'Edit Website Role';
     qs('#modalBody').innerHTML = `
       <div class="form-group"><label>Role Name</label><input id="wrEditName" value="${esc(role.name||'')}"></div>
       <div class="form-group"><label>Hierarchy Level</label><input id="wrEditHier" type="number" value="${role.hierarchy||10}" min="1" max="999"></div>
       <div class="form-group"><label>Permissions</label>
-        <div style="display:grid;gap:10px;margin-top:8px">
+        <div style="display:grid;gap:12px;margin-top:8px">
           ${PERM_GROUPS.map(g=>`
-            <div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px">
-              <b style="font-size:12px;color:${g.color}">${g.label}</b>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
-                ${g.perms.map(p=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.03)">
-                  <input type="checkbox" value="${p}" class="wr-edit-perm" ${(role.permissions||[]).includes(p)?'checked':''} style="width:auto;padding:0;margin:0"> ${p.replace(/_/g,' ')}
-                </label>`).join('')}
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <i class="ti ${g.icon}" style="color:${g.color};font-size:16px"></i>
+                <b style="font-size:13px;color:${g.color}">${g.label}</b>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                ${g.perms.map(p=>`
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.03);transition:.15s" onmouseover="this.style.background='rgba(255,255,255,.07)'" onmouseout="this.style.background='rgba(255,255,255,.03)'">
+                    <input type="checkbox" value="${p}" class="wr-edit-perm" ${(role.permissions||[]).includes(p)?'checked':''} style="width:auto;padding:0;margin:0">
+                    <span style="flex:1">${p.replace(/_/g,' ')}</span>
+                    <span style="width:8px;height:8px;border-radius:50%;background:${PERM_COLOR[p]||'#8fa0bd'};flex-shrink:0"></span>
+                  </label>`).join('')}
               </div>
             </div>`).join('')}
         </div>
@@ -2536,9 +2591,9 @@
       if(!name){ toast('Name required','#ff5a67'); return; }
       const permissions = [...document.querySelectorAll('.wr-edit-perm:checked')].map(c=>c.value);
       const hierarchy = parseInt(qs('#wrEditHier').value)||10;
-      const r = await api('PUT','/api/website-roles',{ id, name, permissions, hierarchy });
+      const r = await api('PUT','/api/website-roles',{ id: role.id, name, permissions, hierarchy });
       if(r.ok){
-        const idx=(store.adminRoles||[]).findIndex(x=>x.id===id);
+        const idx=(store.adminRoles||[]).findIndex(x=>String(x.id)===String(role.id));
         if(idx!==-1) store.adminRoles[idx]={...store.adminRoles[idx],name,permissions,hierarchy};
         renderWebsiteRoles(); closeModal(); toast('Role updated ✓');
       } else toast('Error: '+(r.reason||'failed'),'#ff5a67');
@@ -2602,14 +2657,21 @@
     };
     qs('#modalConfirmBtn').onclick = async () => {
       if(!selectedUserId){ toast('Select a member first','#f3c75a'); return; }
-      // Get current role
-      const role = (store.adminRoles||[]).find(r=>r.id===roleId);
-      if(!role){ toast('Role not found','#ff5a67'); return; }
+      // ✅ FIX 7: Get role from adminRoles by numeric OR string id match
+      const numId = typeof roleId === 'string' ? parseInt(roleId) : roleId;
+      let role = (store.adminRoles||[]).find(r => r.id === numId || r.id === roleId || String(r.id) === String(roleId));
+      if(!role){
+        // Try fresh fetch from server
+        const freshRoles = await api('GET', '/api/admin-roles');
+        if(freshRoles.ok) store.adminRoles = freshRoles.data;
+        role = (store.adminRoles||[]).find(r => String(r.id) === String(roleId));
+      }
+      if(!role){ toast('Role not found — try refreshing the page','#ff5a67'); return; }
       const members = [...(role.members||[])];
       if(members.includes(selectedUserId)){ toast('Already a member','#f3c75a'); return; }
       members.push(selectedUserId);
-      const r = await api('PUT','/api/admin-roles',{ id: roleId, name: role.name, permissions: role.permissions, members });
-      if(r.ok){ const idx=(store.adminRoles||[]).findIndex(x=>x.id===roleId); if(idx!==-1) store.adminRoles[idx]=r.data; renderWebsiteRoles(); closeModal(); toast('Member assigned ✓','#2ecc71'); }
+      const r = await api('PUT','/api/admin-roles',{ id: role.id, name: role.name, permissions: role.permissions, members });
+      if(r.ok){ const idx=(store.adminRoles||[]).findIndex(x=>String(x.id)===String(role.id)); if(idx!==-1) store.adminRoles[idx]=r.data; renderWebsiteRoles(); closeModal(); toast('Member assigned ✓','#2ecc71'); }
       else toast('Error: '+(r.reason||'failed'),'#ff5a67');
     };
     openModal();
@@ -2739,6 +2801,8 @@
     if(activePage && PAGE_RENDERERS[activePage]) PAGE_RENDERERS[activePage]();
     toast(`Language: ${LANGUAGES.find(l=>l.code===code)?.name || code}`, '#2f7cff');
   }
+  // ✅ FIX: Expose setLanguage globally so inline onclick and other scripts can call it
+  window.setLanguage = setLanguage;
 
   window.toggleLangDropdown = () => {
     const dd = document.getElementById('langDropdown');
@@ -2856,6 +2920,27 @@
       await loadAllData();
       navigate('dashboard');
       console.log('[Init] ✅ Redirecting to dashboard complete');
+
+      // ✅ FIX 8: Register/update current user in Discord Users list after login
+      if(currentUser && accessToken){
+        try {
+          await fetch(CFG.WORKER_URL + '/api/users/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
+            body: JSON.stringify({
+              id: currentUser.id,
+              username: currentUser.username,
+              avatar: currentUser.avatar || null,
+              isAdmin: isAdmin,
+              isOwner: isOwner,
+              internalRank: currentUser.internalRank || (isOwner ? 'ownership' : isAdmin ? 'Admin' : 'Officer'),
+            })
+          });
+          // Refresh users list in store
+          const freshData = await api('GET', '/api/data');
+          if(freshData.ok && freshData.users) store.users = freshData.users;
+        } catch(e) { console.warn('[Init] Register/refresh users failed (non-fatal):', e.message); }
+      }
     } else {
       console.log('[Init] No session — showing login page');
     }
