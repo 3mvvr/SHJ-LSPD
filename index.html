@@ -2097,7 +2097,7 @@
     qs('#modalTitle').textContent = '⚠️ Reset Database';
     qs('#modalBody').innerHTML = `<div style="text-align:center;padding:8px 0"><div style="font-size:48px;margin-bottom:12px">💥</div><p style="font-size:15px;font-weight:700;color:#ff5a67;margin-bottom:8px">DANGER: Reset ALL Database!</p><p style="color:#8fa0bd;font-size:13px">This will permanently delete ALL data and reset to defaults. This CANNOT be undone!</p></div>`;
     qs('#modalConfirmBtn').className = 'btn btn-danger';
-    qs('#modalConfirmBtn').textContent = '💥 Reset Everything';
+    qs('#modalConfirmBtn').textContent = '💥 Confirmed';
     qs('#modalConfirmBtn').onclick = async () => {
       const r = await api('POST','/api/database/reset');
       if(r.ok){ await loadAllData(); navigate('dashboard'); closeModal(); toast('Database reset ✓','#f3c75a'); }
