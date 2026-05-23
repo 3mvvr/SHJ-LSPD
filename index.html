@@ -1926,8 +1926,12 @@
       return selectedMembers.map(mid => {
         const u = (store.users||[]).find(x=>x.id===mid);
         const display = getNick(mid, u?.username || mid);
+        const initial = esc((display[0] || '?').toUpperCase());
+        const avatarHtml = u?.avatar
+          ? '<img src="' + esc(u.avatar) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover">'
+          : '<div style="width:28px;height:28px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:11px;font-weight:700">' + initial + '</div>';
         return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:10px;margin-bottom:6px" data-member="${esc(mid)}">
-          ${u?.avatar?`<img src="${esc(u.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`:'<div style="width:28px;height:28px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:11px;font-weight:700">${esc((display)[0]?.toUpperCase()||'?')}</div>'}
+          ${avatarHtml}
           <div style="flex:1">
             <div style="font-size:13px;font-weight:600">${esc(display)}</div>
             <div style="font-size:11px;color:#53617a">${esc(mid)}</div>
@@ -1979,8 +1983,12 @@
       if(list) list.innerHTML = window._selectedAdminMembers.map(m=>{
         const u=(store.users||[]).find(x=>x.id===m);
         const display=getNick(m,u?.username||m);
+        const initial2 = esc((display[0]||'?').toUpperCase());
+        const av2 = u?.avatar
+          ? '<img src="'+esc(u.avatar)+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover">'
+          : '<div style="width:28px;height:28px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:11px;font-weight:700">'+initial2+'</div>';
         return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(47,124,255,.08);border:1px solid rgba(47,124,255,.2);border-radius:10px;margin-bottom:6px" data-member="${esc(m)}">
-          ${u?.avatar?`<img src="${esc(u.avatar)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`:'<div style="width:28px;height:28px;border-radius:50%;background:#1b2942;display:grid;place-items:center;font-size:11px;font-weight:700">'+esc(display[0]?.toUpperCase()||'?')+'</div>'}
+          ${av2}
           <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(display)}</div><div style="font-size:11px;color:#53617a">${esc(m)}</div></div>
           <button class="btn btn-sm btn-danger" style="padding:4px 8px" onclick="window._removeAdminMember('${esc(m)}')"><i class="ti ti-x"></i></button>
         </div>`;
