@@ -382,83 +382,6 @@
   }
   function fmtTime(ts){ return ts ? new Date(ts).toLocaleString('en-US') : '-'; }
 
-  // ═══════════════════════════ DRAG & DROP ENGINE ═══════════════════════════
-  function initDnD(tableBodyId, collection, onReorder) {
-    const tbody = document.getElementById(tableBodyId);
-    if (!tbody) return;
-    let dragged = null;
-
-    // ✅ FIX 5: Set draggable on rows with data-id attribute
-    tbody.querySelectorAll('tr[data-id]').forEach(row => {
-      row.setAttribute('draggable', 'true');
-      // Prevent text selection during drag
-      row.style.userSelect = 'none';
-
-      row.addEventListener('dragstart', e => {
-        dragged = row;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', row.dataset.id);
-        setTimeout(() => row.classList.add('dragging'), 0);
-      });
-
-      row.addEventListener('dragend', () => {
-        if(dragged) dragged.classList.remove('dragging');
-        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
-        dragged = null;
-      });
-
-      row.addEventListener('dragover', e => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        if (!dragged || row === dragged) return;
-        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
-        row.classList.add('drag-over');
-      });
-
-      row.addEventListener('dragleave', e => {
-        if(!row.contains(e.relatedTarget)) row.classList.remove('drag-over');
-      });
-
-      row.addEventListener('drop', async e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!dragged || dragged === row) return;
-        row.classList.remove('drag-over');
-        dragged.classList.remove('dragging');
-
-        // Determine insert position
-        const rect = row.getBoundingClientRect();
-        const insertBefore = e.clientY < rect.top + rect.height / 2;
-
-        if (insertBefore) {
-          tbody.insertBefore(dragged, row);
-        } else {
-          const next = row.nextElementSibling;
-          if (next) tbody.insertBefore(dragged, next);
-          else tbody.appendChild(dragged);
-        }
-
-        const rows = [...tbody.querySelectorAll('tr[data-id]')];
-        const newOrder = rows.map(r => Number(r.dataset.id));
-        const endpoint = collection === 'ranks' ? '/api/ranks/reorder' : '/api/reorder';
-        const body = collection === 'ranks' ? { order: newOrder } : { collection, order: newOrder };
-        const res = await api('POST', endpoint, body);
-        if (res.ok) {
-          if (collection === 'ranks') store.ranks = res.data;
-          else if (store[collection]) store[collection] = res.data;
-          toast('Order saved ✓', '#2ecc71');
-        } else {
-          toast('Reorder failed', '#ff5a67');
-          if (onReorder) onReorder();
-        }
-        dragged = null;
-      });
-    });
-
-    // Also allow drop on tbody itself (for empty space at bottom)
-    tbody.addEventListener('dragover', e => e.preventDefault());
-  }
-
   // ═══════════════════════════ API ENGINE ══════════════════════════
   async function api(method, path, body=null){
     const opts = { method, headers: { 'Content-Type':'application/json' } };
@@ -678,8 +601,80 @@
     store._logoUrl = logoUrl;
   }
 
-  function openModal(){ qs('#globalModal').classList.add('open'); }
-  window.closeModal = () => qs('#globalModal').classList.remove('open');
+  // ═══════════════════ GLOBAL CONFIRM COOLDOWN ═══════════════════
+  // Prevents double-submit, spam, accidental duplicate requests
+  let _confirmCooldown = false;
+  let _confirmTimer = null;
+
+  function armConfirmBtn() {
+    const btn = qs('#modalConfirmBtn');
+    if (!btn) return;
+    _confirmCooldown = false;
+    btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.position = 'relative';
+    // remove old countdown indicator if any
+    const old = btn.querySelector('.confirm-cd');
+    if (old) old.remove();
+  }
+
+  function lockConfirmBtn(seconds = 5) {
+    const btn = qs('#modalConfirmBtn');
+    if (!btn) return;
+    if (_confirmCooldown) return;
+    _confirmCooldown = true;
+    const origOnclick = btn.onclick;
+    const origText = btn.innerHTML;
+    let remaining = seconds;
+
+    const cd = document.createElement('span');
+    cd.className = 'confirm-cd';
+    cd.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:inherit;border-radius:inherit;font-size:inherit;font-weight:700;gap:6px';
+    cd.innerHTML = `<span class="spinner"></span> ${remaining}s`;
+    btn.style.position = 'relative';
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.appendChild(cd);
+
+    _confirmTimer = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(_confirmTimer);
+        _confirmCooldown = false;
+        btn.disabled = false;
+        btn.style.opacity = '';
+        cd.remove();
+      } else {
+        cd.innerHTML = `<span class="spinner"></span> ${remaining}s`;
+      }
+    }, 1000);
+  }
+
+  // Patch confirm button — wrap onclick to add cooldown
+  function patchConfirmWithCooldown() {
+    const btn = qs('#modalConfirmBtn');
+    if (!btn || btn._cdPatched) return;
+    btn._cdPatched = true;
+    const origOnclick = btn.onclick;
+    btn.addEventListener('click', function(e) {
+      if (_confirmCooldown) { e.stopImmediatePropagation(); return; }
+      lockConfirmBtn(5);
+    }, true);
+  }
+
+  function openModal(){
+    qs('#globalModal').classList.add('open');
+    armConfirmBtn();
+    // patch after a tick so the caller can set onclick first
+    setTimeout(patchConfirmWithCooldown, 0);
+  }
+  window.closeModal = () => {
+    qs('#globalModal').classList.remove('open');
+    clearInterval(_confirmTimer);
+    _confirmCooldown = false;
+    const btn = qs('#modalConfirmBtn');
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; const cd = btn.querySelector('.confirm-cd'); if(cd) cd.remove(); btn._cdPatched = false; }
+  };
 
   // ═══════════════════════════ PAGES ROUTING ═══════════════════════════
   const PAGE_RENDERERS = {
@@ -871,7 +866,88 @@
     initDnD('ranksTbody', 'ranks', renderRanks);
   }
 
-  // ── Div-based DnD (for laws etc.) ──
+  // ═══════════════════════ UNIFIED REORDER SYSTEM ═══════════════════════
+  // Works for both <table tbody> and <div> containers.
+  // Usage: initDnD(containerId, collectionName, rerenderFn)
+  //        initDnDDiv(containerId, collectionName, rerenderFn)  ← same engine now
+
+  function initDnD(containerId, collection, onReorder) {
+    const tbody = document.getElementById(containerId);
+    if (!tbody) return;
+    let dragSrc = null;
+
+    const getRows = () => [...tbody.querySelectorAll('[data-id]')];
+
+    getRows().forEach(row => {
+      const handle = row.querySelector('.drag-handle');
+      if (handle) {
+        handle.addEventListener('mousedown', () => { row.setAttribute('draggable', 'true'); });
+        handle.addEventListener('mouseleave', () => { if (!dragSrc) row.setAttribute('draggable', 'false'); });
+      } else {
+        row.setAttribute('draggable', 'true');
+      }
+
+      row.addEventListener('dragstart', e => {
+        dragSrc = row;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', row.dataset.id);
+        requestAnimationFrame(() => row.classList.add('dragging'));
+      });
+
+      row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        row.setAttribute('draggable', 'false');
+        tbody.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
+        dragSrc = null;
+      });
+
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragSrc && row !== dragSrc) {
+          tbody.querySelectorAll('[data-id]').forEach(r => r.classList.remove('drag-over'));
+          row.classList.add('drag-over');
+        }
+      });
+
+      row.addEventListener('dragleave', e => {
+        if (!row.contains(e.relatedTarget)) row.classList.remove('drag-over');
+      });
+
+      row.addEventListener('drop', async e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!dragSrc || dragSrc === row) { row.classList.remove('drag-over'); return; }
+
+        row.classList.remove('drag-over');
+        dragSrc.classList.remove('dragging');
+
+        const rect = row.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        if (before) tbody.insertBefore(dragSrc, row);
+        else {
+          const next = row.nextElementSibling;
+          if (next) tbody.insertBefore(dragSrc, next);
+          else tbody.appendChild(dragSrc);
+        }
+
+        const newOrder = getRows().map(r => Number(r.dataset.id));
+        const res = await api('POST', '/api/reorder', { collection, order: newOrder });
+        if (res.ok) {
+          if (store[collection]) store[collection] = res.data;
+          toast('Order saved ✓', '#2ecc71');
+        } else {
+          toast('Reorder failed', '#ff5a67');
+          if (onReorder) onReorder();
+        }
+        dragSrc = null;
+      });
+    });
+
+    tbody.addEventListener('dragover', e => e.preventDefault());
+  }
+
+  // ── Div-based DnD (for laws etc.) — uses same engine ──
   function initDnDDiv(containerId, collection, onReorder) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -2030,6 +2106,28 @@
               <div style="font-size:11px;color:#53617a;margin-top:4px">Shown below site name in sidebar</div>
             </div>
 
+            <!-- Login Page Controls -->
+            <div class="form-group" style="margin:0;grid-column:1/-1">
+              <label><i class="ti ti-login" style="color:#e67e22"></i> Login Page Title</label>
+              <input id="brandLoginTitle" value="${esc(branding.loginTitle||'SHJ LSPD')}" placeholder="SHJ LSPD">
+              <div style="font-size:11px;color:#53617a;margin-top:4px">Main heading shown on the login page</div>
+            </div>
+            <div class="form-group" style="margin:0;grid-column:1/-1">
+              <label><i class="ti ti-subtask" style="color:#8fa0bd"></i> Login Page Subtitle</label>
+              <input id="brandLoginSub" value="${esc(branding.loginSub||'Complete Police Management System')}" placeholder="Complete Police Management System">
+              <div style="font-size:11px;color:#53617a;margin-top:4px">Subtitle shown below the heading on login page</div>
+            </div>
+            <div class="form-group" style="margin:0;grid-column:1/-1">
+              <label><i class="ti ti-photo-up" style="color:#2f7cff"></i> Login Page Header Image URL</label>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="flex:1">
+                  <input id="brandLoginHeroImg" value="${esc(branding.loginHeroImg||'')}" placeholder="https://example.com/hero.png">
+                  <div style="font-size:11px;color:#53617a;margin-top:4px">Replaces the default shield icon on login page (PNG/JPG/SVG)</div>
+                </div>
+                ${branding.loginHeroImg?`<div style="width:60px;height:60px;border-radius:50%;border:2px solid #2f7cff;overflow:hidden;flex-shrink:0"><img src="${esc(branding.loginHeroImg)}" style="width:100%;height:100%;object-fit:contain"></div>`:''}
+              </div>
+            </div>
+
             <!-- Favicon -->
             <div class="form-group" style="margin:0">
               <label><i class="ti ti-browser" style="color:#f3c75a"></i> Favicon URL (Browser Tab Icon)</label>
@@ -2113,19 +2211,30 @@
   }
 
   window.saveBranding = async () => {
-    const siteName  = qs('#brandSiteName')?.value?.trim() || 'SHJ LSPD';
-    const subTitle  = qs('#brandSubTitle')?.value?.trim() || 'Command Center';
-    const favicon   = qs('#brandFavicon')?.value?.trim() || '';
-    const loginBg   = qs('#brandLoginBg')?.value?.trim() || '';
-    const logoUrl   = qs('#logoUrl')?.value?.trim() || '';
+    const siteName    = qs('#brandSiteName')?.value?.trim() || 'SHJ LSPD';
+    const subTitle    = qs('#brandSubTitle')?.value?.trim() || 'Command Center';
+    const favicon     = qs('#brandFavicon')?.value?.trim() || '';
+    const loginBg     = qs('#brandLoginBg')?.value?.trim() || '';
+    const logoUrl     = qs('#logoUrl')?.value?.trim() || '';
+    const loginTitle  = qs('#brandLoginTitle')?.value?.trim() || 'SHJ LSPD';
+    const loginSub    = qs('#brandLoginSub')?.value?.trim() || 'Complete Police Management System';
+    const loginHeroImg= qs('#brandLoginHeroImg')?.value?.trim() || '';
 
     // Apply immediately to UI
     const brandEl = qs('.brand h1');
     const brandP  = qs('.brand p');
     const loginH1 = qs('#loginContainer h1');
+    const loginSubEl = qs('#loginContainer p[data-i18n="login_sub"]');
     if(brandEl) brandEl.textContent = siteName;
     if(brandP)  brandP.textContent  = subTitle;
-    if(loginH1) loginH1.textContent = siteName;
+    if(loginH1) loginH1.textContent = loginTitle;
+    if(loginSubEl) loginSubEl.textContent = loginSub;
+
+    // Apply login hero image
+    const loginIcon = qs('#loginContainer .login-card > div:first-child');
+    if(loginIcon && loginHeroImg){
+      loginIcon.innerHTML = `<img src="${esc(loginHeroImg)}" style="width:100%;height:100%;object-fit:contain;border-radius:50%">`;
+    }
 
     // Apply favicon
     if(favicon){
@@ -2146,7 +2255,7 @@
       applyLogo(logoUrl);
     }
 
-    store._branding = { siteName, subTitle, favicon, loginBg };
+    store._branding = { siteName, subTitle, favicon, loginBg, loginTitle, loginSub, loginHeroImg };
     localStorage.setItem('lspd_branding', JSON.stringify(store._branding));
     // Also persist to KV for server-wide sync (non-blocking)
     api('PUT', '/api/branding', store._branding).catch(()=>{});
@@ -2172,7 +2281,11 @@
   function _applyBrandingObj(b){
     if(!b) return;
     store._branding = b;
-    if(b.siteName){ const el=qs('.brand h1'); if(el) el.textContent=b.siteName; const lh=qs('#loginContainer h1'); if(lh) lh.textContent=b.siteName; document.title=b.siteName; }
+    if(b.siteName){ const el=qs('.brand h1'); if(el) el.textContent=b.siteName; document.title=b.siteName; }
+    if(b.loginTitle){ const lh=qs('#loginContainer h1'); if(lh) lh.textContent=b.loginTitle; else if(b.siteName){ const lh2=qs('#loginContainer h1'); if(lh2) lh2.textContent=b.siteName; } }
+    else if(b.siteName){ const lh=qs('#loginContainer h1'); if(lh) lh.textContent=b.siteName; }
+    if(b.loginSub){ const ls=qs('#loginContainer p[data-i18n="login_sub"]'); if(ls) ls.textContent=b.loginSub; }
+    if(b.loginHeroImg){ const li=qs('#loginContainer .login-card > div:first-child'); if(li) li.innerHTML=`<img src="${esc(b.loginHeroImg)}" style="width:100%;height:100%;object-fit:contain;border-radius:50%">`; }
     if(b.subTitle){ const el=qs('.brand p'); if(el) el.textContent=b.subTitle; }
     if(b.favicon){ let lnk=document.querySelector("link[rel~='icon']"); if(!lnk){lnk=document.createElement('link');lnk.rel='icon';document.head.appendChild(lnk);} lnk.href=b.favicon; }
     if(b.loginBg){ const lc=qs('#loginContainer'); if(lc){lc.style.backgroundImage=`url('${b.loginBg}')`;lc.style.backgroundSize='cover';lc.style.backgroundPosition='center';} }
