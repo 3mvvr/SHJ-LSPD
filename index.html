@@ -624,14 +624,14 @@ input:checked+.slider-toggle:before{transform:translateX(16px);background:var(--
 <div class="card-header">
 <div class="card-title"><div class="card-title-dot"></div>اللاعبون المتصلون — <span style="color:var(--accent-green)" id="players-count">47</span> لاعب</div>
 <div style="display:flex;gap:8px;align-items:center">
-<select class="form-input" style="padding:5px 10px;font-size:12px;width:auto">
-<option>جميع الوظائف</option>
-<option>شرطة</option>
-<option>إسعاف</option>
-<option>ميكانيك</option>
-<option>مدني</option>
+<select id="inp-job-filter" name="jobFilter" class="form-input" style="padding:5px 10px;font-size:12px;width:auto">
+<option value="">جميع الوظائف</option>
+<option value="شرطة">شرطة</option>
+<option value="إسعاف">إسعاف</option>
+<option value="ميكانيك">ميكانيك</option>
+<option value="مدني">مدني</option>
 </select>
-<input class="form-input" type="text" placeholder="بحث..." style="width:180px;padding:5px 10px;font-size:12px">
+<input id="inp-players-filter" name="playersFilter" class="form-input" type="text" placeholder="بحث..." style="width:180px;padding:5px 10px;font-size:12px">
 </div>
 </div>
 <div class="table-wrap">
@@ -739,7 +739,7 @@ input:checked+.slider-toggle:before{transform:translateX(16px);background:var(--
 <div class="card-title"><div class="card-title-dot" style="background:var(--accent3)"></div>إدارة الأعضاء</div>
 </div>
 <div class="card-body">
-<div class="search-bar" style="margin-bottom:12px"><i class="fas fa-search search-icon"></i><input class="search-input" placeholder="بحث بالاسم أو ID..."></div>
+<div class="search-bar" style="margin-bottom:12px"><i class="fas fa-search search-icon"></i><input id="inp-players-search" name="playersSearch" class="search-input" placeholder="بحث بالاسم أو ID..."></div>
 <div id="discord-members"></div>
 </div>
 </div>
@@ -758,7 +758,7 @@ input:checked+.slider-toggle:before{transform:translateX(16px);background:var(--
 <div class="page-breadcrumb">THETA / SETTINGS</div>
 </div>
 <div class="page-actions">
-<button class="btn btn-primary"><i class="fas fa-save"></i> حفظ التغييرات</button>
+<button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> حفظ التغييرات</button>
 </div>
 </div>
 <div class="tabs">
@@ -773,11 +773,11 @@ input:checked+.slider-toggle:before{transform:translateX(16px);background:var(--
 <div class="card-header"><div class="card-title"><i class="fas fa-cog" style="color:var(--accent)"></i> إعدادات الموقع</div></div>
 <div class="card-body">
 <div class="form-grid">
-<div class="form-group"><label class="form-label">اسم الموقع</label><input class="form-input" value="THETA RP Server"></div>
-<div class="form-group"><label class="form-label">النطاق</label><input class="form-input" value="theta-rp.com"></div>
-<div class="form-group"><label class="form-label">لوجو</label><input class="form-input" type="file"></div>
-<div class="form-group"><label class="form-label">الأيقونة</label><input class="form-input" type="file"></div>
-<div class="form-group" style="grid-column:1/-1"><label class="form-label">خلفية تسجيل الدخول</label><input class="form-input" value="https://..."></div>
+<div class="form-group"><label class="form-label" for="inp-siteName">اسم الموقع</label><input id="inp-siteName" name="siteName" class="form-input" value="THETA RP Server" autocomplete="off"></div>
+<div class="form-group"><label class="form-label" for="inp-domain">النطاق</label><input id="inp-domain" name="domain" class="form-input" value="theta-rp.com" autocomplete="off"></div>
+<div class="form-group"><label class="form-label" for="inp-siteLogo">لوجو (رابط)</label><input id="inp-siteLogo" name="siteLogo" class="form-input" placeholder="https://..." autocomplete="off"></div>
+<div class="form-group"><label class="form-label" for="inp-siteFavicon">الأيقونة (رابط)</label><input id="inp-siteFavicon" name="siteFavicon" class="form-input" placeholder="https://..." autocomplete="off"></div>
+<div class="form-group" style="grid-column:1/-1"><label class="form-label" for="inp-loginBg">خلفية تسجيل الدخول</label><input id="inp-loginBg" name="loginBackground" class="form-input" placeholder="https://..." autocomplete="off"></div>
 </div>
 </div>
 </div>
@@ -785,14 +785,14 @@ input:checked+.slider-toggle:before{transform:translateX(16px);background:var(--
 <div class="card-header"><div class="card-title"><i class="fab fa-discord" style="color:var(--accent3)"></i> إعدادات Discord</div></div>
 <div class="card-body">
 <div class="form-grid">
-<div class="form-group"><label class="form-label">Bot Token</label><input class="form-input" type="password" value="MTIx..."></div>
-<div class="form-group"><label class="form-label">Guild ID</label><input class="form-input" value="1234567890"></div>
-<div class="form-group"><label class="form-label">Client ID</label><input class="form-input" value="9876543210"></div>
-<div class="form-group"><label class="form-label">Client Secret</label><input class="form-input" type="password" value="secret..."></div>
+<div class="form-group"><label class="form-label" for="inp-botToken">Bot Token</label><input id="inp-botToken" name="botToken" class="form-input" type="password" placeholder="Bot Token..." autocomplete="new-password"></div>
+<div class="form-group"><label class="form-label" for="inp-guildId">Guild ID</label><input id="inp-guildId" name="guildId" class="form-input" value="1234567890" autocomplete="off"></div>
+<div class="form-group"><label class="form-label" for="inp-clientId">Client ID</label><input id="inp-clientId" name="clientId" class="form-input" value="9876543210" autocomplete="off"></div>
+<div class="form-group"><label class="form-label" for="inp-clientSecret">Client Secret</label><input id="inp-clientSecret" name="clientSecret" class="form-input" type="password" placeholder="Client Secret..." autocomplete="new-password"></div>
 </div>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:10px;background:var(--bg-card2);border-radius:6px;border:1px solid var(--border)">
 <span style="font-size:13px;color:var(--text-secondary)">مزامنة الأدوار التلقائية</span>
-<label class="toggle"><input type="checkbox" checked><span class="slider-toggle"></span></label>
+<label class="toggle"><input type="checkbox" id="inp-autoSync" name="autoSync" checked><span class="slider-toggle"></span></label>
 </div>
 </div>
 </div>
@@ -828,7 +828,7 @@ input:checked+.slider-toggle:before{transform:translateX(16px);background:var(--
 <div class="page-header">
 <div><div class="page-title">إدارة <span>المستخدمين</span></div><div class="page-breadcrumb">THETA / USERS</div></div>
 </div>
-<div class="search-bar"><i class="fas fa-search search-icon"></i><input class="search-input" placeholder="بحث بالاسم أو Discord ID..."></div>
+<div class="search-bar"><i class="fas fa-search search-icon"></i><input id="inp-users-search" name="usersSearch" class="search-input" placeholder="بحث بالاسم أو Discord ID..."></div>
 <div class="card">
 <div class="table-wrap">
 <table>
@@ -1391,9 +1391,9 @@ g.innerHTML=webhookCategories.map((w,i)=>`
 <div style="width:32px;height:32px;border-radius:8px;background:rgba(0,212,255,0.1);display:flex;align-items:center;justify-content:center;color:var(--accent)"><i class="fas fa-link"></i></div>
 <span style="font-size:13px;font-weight:600">${w}</span>
 </div>
-<label class="toggle"><input type="checkbox" ${i<8?'checked':''}><span class="slider-toggle"></span></label>
+<label class="toggle"><input type="checkbox" id="webhook-toggle-${i}" name="webhookEnabled_${i}" ${i<8?'checked':''}><span class="slider-toggle"></span></label>
 </div>
-<input class="form-input" value="https://discord.com/api/webhooks/..." style="font-size:11px;padding:6px 10px;font-family:'Share Tech Mono',monospace">
+<input id="webhook-url-${i}" name="webhookUrl_${i}" class="form-input" value="https://discord.com/api/webhooks/..." style="font-size:11px;padding:6px 10px;font-family:'Share Tech Mono',monospace">
 <div style="display:flex;gap:6px;margin-top:8px">
 <button class="btn btn-ghost" style="flex:1;padding:5px;font-size:11px;justify-content:center"><i class="fas fa-save"></i> حفظ</button>
 <button class="btn btn-primary" style="padding:5px 10px;font-size:11px"><i class="fas fa-paper-plane"></i> اختبار</button>
@@ -1576,9 +1576,97 @@ if(gc)gc.style.strokeDashoffset=offset;
 }
 updateGauge();
 
+// ─── SETTINGS SAVE / LOAD ───────────────────────────────────────
+async function saveSettings(){
+  const btn = document.querySelector('[onclick="saveSettings()"]');
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> جاري الحفظ...';}
+
+  const sitePayload = {
+    siteName:        document.getElementById('inp-siteName')?.value?.trim()   || '',
+    domain:          document.getElementById('inp-domain')?.value?.trim()     || '',
+    siteLogo:        document.getElementById('inp-siteLogo')?.value?.trim()   || '',
+    siteFavicon:     document.getElementById('inp-siteFavicon')?.value?.trim()|| '',
+    loginBackground: document.getElementById('inp-loginBg')?.value?.trim()    || '',
+  };
+
+  const discordPayload = {
+    guildId:      document.getElementById('inp-guildId')?.value?.trim()      || '',
+    clientId:     document.getElementById('inp-clientId')?.value?.trim()     || '',
+    autoSync:     document.getElementById('inp-autoSync')?.checked ?? true,
+  };
+  const botToken      = document.getElementById('inp-botToken')?.value?.trim();
+  const clientSecret  = document.getElementById('inp-clientSecret')?.value?.trim();
+  if(botToken && !botToken.includes('*'))   discordPayload.botToken     = botToken;
+  if(clientSecret && !clientSecret.includes('*')) discordPayload.clientSecret = clientSecret;
+
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch('/api/settings/site', {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(sitePayload),
+      }),
+      fetch('/api/settings/discord', {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(discordPayload),
+      }),
+    ]);
+
+    const ok = r1.ok && r2.ok;
+    showToast(ok ? 'تم حفظ الإعدادات بنجاح ✓' : 'خطأ أثناء الحفظ — تحقق من الاتصال', ok ? 'success' : 'error');
+  } catch(e) {
+    // Offline / dev mode — save to localStorage as fallback
+    localStorage.setItem('theta_settings_site',    JSON.stringify(sitePayload));
+    localStorage.setItem('theta_settings_discord', JSON.stringify(discordPayload));
+    showToast('حُفظ محلياً (وضع أوفلاين)', 'warn');
+  } finally {
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i> حفظ التغييرات';}
+  }
+}
+
+async function loadSettings(){
+  // Try API first, fallback to localStorage
+  try {
+    const res = await fetch('/api/settings/site');
+    if(res.ok){
+      const {data} = await res.json();
+      if(data.siteName)        { const el=document.getElementById('inp-siteName');        if(el) el.value=data.siteName; }
+      if(data.domain)          { const el=document.getElementById('inp-domain');          if(el) el.value=data.domain; }
+      if(data.siteLogo)        { const el=document.getElementById('inp-siteLogo');        if(el) el.value=data.siteLogo; }
+      if(data.siteFavicon)     { const el=document.getElementById('inp-siteFavicon');     if(el) el.value=data.siteFavicon; }
+      if(data.loginBackground) { const el=document.getElementById('inp-loginBg');         if(el) el.value=data.loginBackground; }
+    }
+  } catch(e) {
+    const saved = localStorage.getItem('theta_settings_site');
+    if(saved){
+      try {
+        const d = JSON.parse(saved);
+        if(d.siteName)        { const el=document.getElementById('inp-siteName');        if(el) el.value=d.siteName; }
+        if(d.domain)          { const el=document.getElementById('inp-domain');          if(el) el.value=d.domain; }
+        if(d.siteLogo)        { const el=document.getElementById('inp-siteLogo');        if(el) el.value=d.siteLogo; }
+        if(d.siteFavicon)     { const el=document.getElementById('inp-siteFavicon');     if(el) el.value=d.siteFavicon; }
+        if(d.loginBackground) { const el=document.getElementById('inp-loginBg');         if(el) el.value=d.loginBackground; }
+      } catch(_){}
+    }
+  }
+}
+
+function showToast(msg, type='success'){
+  const colors = {success:'var(--accent-green)', error:'var(--accent-red)', warn:'var(--accent-gold)'};
+  const t = document.createElement('div');
+  t.style.cssText=`position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid ${colors[type]||colors.success};color:${colors[type]||colors.success};padding:10px 22px;border-radius:8px;font-size:13px;font-family:'Tajawal',sans-serif;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,0.4);transition:opacity 0.4s`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),400);}, 2800);
+}
+
+// ─── END SETTINGS ────────────────────────────────────────────────
+
 // INIT
 initDashboard();
 startLog();
+loadSettings();
 
 // Dynamic stat counter
 let pCount=47;
